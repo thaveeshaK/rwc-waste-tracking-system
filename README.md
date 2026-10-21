@@ -1,8 +1,8 @@
 # RWC Waste Tracking System
 
-Implemented workflows are **normal Crate / Pallet** and **Salvage**: sign in, enter an operational record, review calculated weights, submit, and view saved records. Admins can correct and soft-delete submitted records. Other workflows, reporting, dashboards, and user management are not implemented.
+Implemented workflows are **normal Crate / Pallet**, **Salvage**, and **Pickup**: sign in, enter an operational record, review calculated weights, submit, and view saved records. Admins can correct and soft-delete submitted records. Other workflows, reporting, dashboards, and user management are not implemented.
 
-Requirements: [AGENTS.md](AGENTS.md) and the approved [SRS](docs/SRS-%20Waste%20Tracking%20Operations%20System%20for%20Resource%20Work%20Cooperative.pdf), supplemented by the approved Crate/Pallet implementation decisions.
+Requirements: [AGENTS.md](AGENTS.md) and the approved [SRS](docs/SRS-%20Waste%20Tracking%20Operations%20System%20for%20Resource%20Work%20Cooperative.pdf), supplemented by the approved workflow decisions and source datasheets in `docs`.
 
 ## Local setup
 
@@ -87,13 +87,21 @@ Material definitions are shared through `material_category`; applicability is re
 
 E-waste is intentionally available in both Salvage directions. E-waste, Lead Acid Batteries, and Whitegoods / Large Appliances remain unavailable in normal Crate/Pallet.
 
+## Pickup records
+
+Choose **New Pickup**. Enter the operational date, one pickup location (up to 255 characters), the final net material weight, and a material percentage breakdown. Weight must be greater than 0 kg; zero and negative values are rejected. No container, tare, Delivery charge, or pickup-type field is used. Dates must be past or current in Australia/Hobart.
+
+Pickup has its own `PICKUP` applicability context mapped explicitly from [21. Pickup Datasheet.pdf](docs/21.%20Pickup%20Datasheet.pdf). Its thirteen categories reuse the existing definitions: Iron and Steel; Aluminium; Other Non-Ferrous Metals; Mixed Metals; Textiles; Mattresses; Timber; Bricks, Blocks and Pavers; Building and Demolition Material; Paper, Cardboard and Books; Plastics; Glass; Mixed Materials. E-waste, Lead Acid Batteries and Whitegoods / Large Appliances are excluded by both the reference API and write validation.
+
+Percentages must total exactly 100.00%. Material weights use the final net weight directly and are rounded separately with BigDecimal HALF_UP to two places, without redistribution. Review before confirming; final submission recalculates on the backend. Only positive-percentage rows are stored. Staff can create/view; Admins can correct/soft-delete, with version checks and individual account metadata. The existing in-memory retry and navigation protection applies across all three workflows.
+
 ## Data and calculation rules
 
-- Eight application tables: `app_user`, `container_type`, `material_category`, `material_category_applicability`, `crate_pallet_record`, `crate_pallet_material`, `salvage_record`, and `salvage_material`.
+- Ten application tables: `app_user`, `container_type`, `material_category`, `material_category_applicability`, `crate_pallet_record`, `crate_pallet_material`, `salvage_record`, `salvage_material`, `pickup_record`, and `pickup_material`.
 - Containers: Apple Crate 60 kg, Stillage Cage 50 kg, Plastic Pallet 6 kg, Pine Pallet 18 kg, Hardwood Pallet 30 kg.
-- The thirteen normal material categories remain restricted to Crate/Pallet. Three additional shared definitions and direction-specific applicability mappings support Salvage.
+- The thirteen normal material categories have independent Crate/Pallet and Pickup mappings. Three additional shared definitions and direction-specific applicability mappings support Salvage.
 - Weights use Java `BigDecimal` and PostgreSQL `NUMERIC(10,2)`; percentages use `NUMERIC(5,2)`. Inputs accept at most two decimal places.
-- Net weight is gross minus tare; gross cannot be below tare. Zero net weight is allowed.
+- For Crate/Pallet, net weight is gross minus tare; gross cannot be below tare, and zero net weight is allowed. Salvage accepts zero weights independently; Pickup final net weight must be greater than zero.
 - Material weight is `net * entered percentage / 100`, rounded independently to two decimals with `HALF_UP`. Rounding differences are not redistributed.
 - Dates are checked against the current date in `Australia/Hobart`; future dates are rejected.
 - Only positive-percentage breakdown rows are saved. Duplicate categories are rejected.
@@ -114,7 +122,7 @@ All operational endpoints require a session. Mutating requests also require the 
 | POST | `/api/auth/logout` | End the session |
 | GET | `/api/auth/me` | Account role and current Hobart operational date |
 | GET | `/api/container-types` | Active container types and tare values |
-| GET | `/api/material-categories?context=CRATE_PALLET` | Active applicable categories; context defaults to Crate/Pallet, or accepts SALVAGE_UP / SALVAGE_DOWN |
+| GET | `/api/material-categories?context=CRATE_PALLET` | Active applicable categories; context defaults to Crate/Pallet, or accepts SALVAGE_UP / SALVAGE_DOWN / PICKUP |
 | POST | `/api/crate-pallet-records/preview` | Validate and calculate without saving |
 | POST | `/api/crate-pallet-records` | Submit; 201 for creation, 200 for a matching retry |
 | GET | `/api/crate-pallet-records?from=YYYY-MM-DD&to=YYYY-MM-DD` | List non-deleted records; optional inclusive date filters |
@@ -130,11 +138,13 @@ Salvage input contains `recordDate`, `crew`, and separate `up` / `down` objects,
 
 Duplicate comparison includes the normalized crew, date, both times, both weights, and each direction's normalized positive-percentage rows. Raw calculated weights supplied by clients are ignored; final submission recalculates the accepted values. Both breakdowns and the parent are saved within one transaction.
 
+Pickup uses the same endpoint methods at `/api/pickup-records`, including nonpersistent POST `/preview` and Admin correction preview `?recordId={id}`. Requests contain `recordDate`, `pickupLocation`, `netWeight`, and `materials` (`materialCategoryId`, `percentage`). Final POST requires `submissionId`; Admin PUT requires `version`. Responses include IDs/version, calculated material rows and created/updated metadata, with decimal values as strings. List filtering accepts optional inclusive `from`/`to` dates. Reusing a submission UUID with changed location/date/weight/breakdown or another creator returns 409; identical retries return the existing record.
+
 ## Structure
 
-Backend packages under `au.org.resourcework.waste_tracking_api`: `auth`, `config`, `reference`, `cratepallet`, `salvage`, and `error`. Workflow controllers call services, which own transactions and call repositories, and use DTOs. Flyway SQL lives in `backend/src/main/resources/db/migration`; Hibernate validates rather than creates tables. V1/V2 are preserved, V3 adds the initial schema, V4 seeds reference data, V5 adds Crate/Pallet versioning, V6 adds category applicability, and V7 adds Salvage.
+Backend packages under `au.org.resourcework.waste_tracking_api`: `auth`, `config`, `reference`, `cratepallet`, `salvage`, `pickup`, and `error`. Workflow controllers call services, which own transactions and call repositories, and use DTOs. Flyway SQL lives in `backend/src/main/resources/db/migration`; Hibernate validates rather than creates tables. V1/V2 are preserved, V3 adds the initial schema, V4 seeds reference data, V5 adds Crate/Pallet versioning, V6 adds category applicability, V7 adds Salvage, and V8 adds Pickup and its explicit category mapping.
 
-Frontend: `api` for HTTP/CSRF handling; `features/auth`, `features/crate-pallet`, and `features/salvage`; workflow-qualified record types in `features/records`; shared decimal/date helpers in `utils`; `pages/RecordsPage.tsx`; and `styles`. Components use local React state and native fetch; no Redux or additional application framework is introduced.
+Frontend: `api` for HTTP/CSRF handling; `features/auth`, `features/crate-pallet`, `features/salvage`, and `features/pickup`; workflow-qualified record types in `features/records`; shared decimal/date helpers in `utils`; `pages/RecordsPage.tsx`; and `styles`. Components use local React state and native fetch; no Redux or additional application framework is introduced.
 
 ## Verification
 
@@ -155,7 +165,7 @@ The runner starts a loopback-only PostgreSQL instance on a free port, generates 
 
 Before Spring bean creation or Flyway migration, a test initializer verifies the database URL, name, account, address, port, and identity token and pins the connection properties again. Integration setup rechecks the actual datasource before modifying data. Teardown only runs after successful verification and rechecks isolation before its updates. Unit tests cover redirected connections, wrong identity tokens, property overrides, and teardown after failed setup.
 
-The runner executes 34 tests (14 unit tests and 20 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
+The runner executes 46 tests (18 unit tests and 28 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
 
 For the complete browser smoke test:
 
@@ -174,3 +184,5 @@ Set-Location frontend
 npm.cmd run build
 npm.cmd run lint
 ```
+
+Pickup regression tests cover positive-only weight, required location, exact totals, rounding, scoped category restrictions, retry/concurrent submission, stale correction, metadata/permissions, soft deletion, date filtering and transaction rollback. The browser suite exercises entry/review/edit, zero rejection, recovery after a lost submission response across workflow navigation, Admin corrections and stale versions, and lost-delete/404 reconciliation. Tablet entry/detail screenshots are saved alongside the existing workflow screenshots.

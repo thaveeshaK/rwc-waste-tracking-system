@@ -4,6 +4,7 @@ import { currentUser, logout } from './features/auth/api'
 import type { User } from './features/auth/api'
 import { LoginPage } from './features/auth/LoginPage'
 import { CratePalletPage } from './features/crate-pallet/CratePalletPage'
+import { PickupPage } from './features/pickup/PickupPage'
 import { SalvagePage } from './features/salvage/SalvagePage'
 import type { OperationalRecord, Workflow } from './features/records/types'
 import { RecordsPage } from './pages/RecordsPage'
@@ -112,6 +113,9 @@ function App() {
       <button disabled={busy || signingOut || (unresolved && entryWorkflow !== 'SALVAGE')}
         className={page === 'entry' && entryWorkflow === 'SALVAGE' && !editing ? 'nav-item active' : 'nav-item'}
         onClick={() => newRecord('SALVAGE')}>{unresolved && entryWorkflow === 'SALVAGE' ? 'Resume submission' : 'New Salvage'}</button>
+      <button disabled={busy || signingOut || (unresolved && entryWorkflow !== 'PICKUP')}
+        className={page === 'entry' && entryWorkflow === 'PICKUP' && !editing ? 'nav-item active' : 'nav-item'}
+        onClick={() => newRecord('PICKUP')}>{unresolved && entryWorkflow === 'PICKUP' ? 'Resume submission' : 'New Pickup'}</button>
     </nav>
       {error && <p className="notice error" role="alert">{error}</p>}
       {unresolved && <p className="notice" role="status">A submission is unresolved. Retry it or check Records. Its details stay in memory while you check.</p>}
@@ -120,9 +124,12 @@ function App() {
           editing={editing?.workflow === 'CRATE_PALLET' ? editing.record : undefined}
           onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
           onSaved={record => recordSaved({ workflow: 'CRATE_PALLET', record })} onCancel={showRecords} />
-          : <SalvagePage key={entryKey} editing={editing?.workflow === 'SALVAGE' ? editing.record : undefined}
+          : entryWorkflow === 'SALVAGE' ? <SalvagePage key={entryKey} editing={editing?.workflow === 'SALVAGE' ? editing.record : undefined}
             onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
-            onSaved={record => recordSaved({ workflow: 'SALVAGE', record })} onCancel={showRecords} />}
+            onSaved={record => recordSaved({ workflow: 'SALVAGE', record })} onCancel={showRecords} />
+          : <PickupPage key={entryKey} editing={editing?.workflow === 'PICKUP' ? editing.record : undefined}
+            onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
+            onSaved={record => recordSaved({ workflow: 'PICKUP', record })} onCancel={showRecords} />}
       </div>}
       {page === 'records' && <RecordsPage isAdmin={user.role === 'ADMIN'} saved={saved}
         workflow={recordWorkflow} onWorkflowChange={workflow => { setSaved(undefined); setRecordWorkflow(workflow) }}
