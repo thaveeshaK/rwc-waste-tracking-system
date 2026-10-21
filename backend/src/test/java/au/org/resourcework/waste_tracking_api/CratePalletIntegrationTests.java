@@ -15,6 +15,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import tools.jackson.databind.ObjectMapper;
@@ -27,6 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** Uses a dedicated PostgreSQL database, never an in-memory substitute. See scripts/test-backend.ps1. */
 @SpringBootTest(properties = {"debug=false", "logging.level.org.springframework=INFO", "logging.level.org.hibernate=INFO"})
 @EnabledIfEnvironmentVariable(named = "RUN_DB_TESTS", matches = "true")
+@ContextConfiguration(initializers = IsolatedTestDatabase.class)
 class CratePalletIntegrationTests {
     @Autowired WebApplicationContext context;
     @Autowired JdbcTemplate jdbc;
@@ -39,10 +41,13 @@ class CratePalletIntegrationTests {
     long container;
     long material;
     long otherMaterial;
+    private boolean isolationVerified;
 
     @BeforeEach
     void setup() throws Exception {
-        assertThat(jdbc.queryForObject("SELECT current_database()", String.class)).isEqualTo("rwc_slice_test");
+        isolationVerified = false;
+        verifyIsolation();
+        isolationVerified = true;
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
         jdbc.update("DELETE FROM crate_pallet_material");
         jdbc.update("DELETE FROM crate_pallet_record");
@@ -73,9 +78,17 @@ class CratePalletIntegrationTests {
     }
 
     @AfterEach
-    void restoreReferenceData() {
+    void restoreReferenceData() throws Exception {
+        if (!isolationVerified) return;
+        verifyIsolation();
         jdbc.update("UPDATE container_type SET active = true, tare_weight = 60 WHERE name = 'Apple Crate'");
         jdbc.update("UPDATE material_category SET active = true");
+    }
+
+    private void verifyIsolation() throws Exception {
+        try (var connection = Objects.requireNonNull(jdbc.getDataSource()).getConnection()) {
+            IsolatedTestDatabase.verify(connection, IsolatedTestDatabase.settings());
+        }
     }
 
     @Test
@@ -140,7 +153,7 @@ class CratePalletIntegrationTests {
                 .session(staff).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(input))
                 .andExpect(status().isForbidden());
         mvc.perform(put(path).session(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                .content(input.replace("160.00", "170.00"))).andExpect(status().isOk())
+                .content(withVersion(input.replace("160.00", "170.00"), id))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.netWeight").value("110.00"))
                 .andExpect(jsonPath("$.createdBy").value(System.getenv("INITIAL_STAFF_USERNAME")))
                 .andExpect(jsonPath("$.updatedBy").value(System.getenv("INITIAL_ADMIN_USERNAME")));
@@ -166,7 +179,7 @@ class CratePalletIntegrationTests {
         mvc.perform(get("/api/container-types").session(staff)).andExpect(jsonPath("$.length()").value(4));
         mvc.perform(get("/api/material-categories").session(staff)).andExpect(jsonPath("$.length()").value(12));
         mvc.perform(put("/api/crate-pallet-records/" + id).session(admin).with(csrf())
-                .contentType(MediaType.APPLICATION_JSON).content(input)).andExpect(status().isOk())
+                .contentType(MediaType.APPLICATION_JSON).content(withVersion(input, id))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.tareWeight").value("60.00"));
         mvc.perform(post("/api/crate-pallet-records").session(staff).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON).content(body(UUID.randomUUID()))).andExpect(status().isBadRequest());
@@ -175,7 +188,7 @@ class CratePalletIntegrationTests {
     @Test
     void concurrentRetriesProduceOneCompleteRecord() throws Exception {
         var input = new CratePalletRequest(UUID.randomUUID(), LocalDate.now(clock), container, new BigDecimal("160.00"),
-                List.of(new CratePalletRequest.MaterialInput(material, new BigDecimal("100.00"))));
+                List.of(new CratePalletRequest.MaterialInput(material, new BigDecimal("100.00"))), null);
         try (var executor = Executors.newFixedThreadPool(2)) {
             var gate = new CountDownLatch(1);
             Callable<CratePalletService.SubmissionResult> submit = () -> {
@@ -203,6 +216,35 @@ class CratePalletIntegrationTests {
     }
 
     private int count() { return jdbc.queryForObject("SELECT count(*) FROM crate_pallet_record", Integer.class); }
+
+    private String withVersion(String input, long id) throws Exception {
+        var body = json.readTree(input).deepCopy();
+        ((tools.jackson.databind.node.ObjectNode) body).put("version",
+                jdbc.queryForObject("SELECT version FROM crate_pallet_record WHERE id = ?", Long.class, id));
+        return json.writeValueAsString(body);
+    }
+
+    @Test
+    void staleAdminCorrectionReturnsConflictWithoutOverwritingTheNewerRecord() throws Exception {
+        var input = body(UUID.randomUUID());
+        var result = mvc.perform(post("/api/crate-pallet-records").session(staff).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(input)).andExpect(status().isCreated()).andReturn();
+        var original = json.readTree(result.getResponse().getContentAsString());
+        long id = original.path("id").asLong();
+        long version = original.path("version").asLong();
+        var staleInput = withVersion(input, id);
+        mvc.perform(put("/api/crate-pallet-records/" + id).session(admin).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(staleInput.replace("160.00", "170.00")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.version").value(version + 1));
+        mvc.perform(put("/api/crate-pallet-records/" + id).session(admin).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(staleInput.replace("160.00", "180.00")))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("record has changed")));
+        mvc.perform(get("/api/crate-pallet-records/" + id).session(admin))
+                .andExpect(jsonPath("$.grossWeight").value("170.00"))
+                .andExpect(jsonPath("$.version").value(version + 1));
+        mvc.perform(put("/api/crate-pallet-records/" + id).session(admin).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(input)).andExpect(status().isBadRequest());
+    }
 
     private String body(UUID submissionId) {
         return """

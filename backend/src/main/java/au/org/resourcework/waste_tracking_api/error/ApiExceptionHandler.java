@@ -1,6 +1,8 @@
 package au.org.resourcework.waste_tracking_api.error;
 
 import jakarta.validation.ConstraintViolationException;
+import jakarta.persistence.OptimisticLockException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.*;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -34,5 +36,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail conflict(DataIntegrityViolationException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The record conflicts with existing data. Refresh and try again.");
+    }
+
+    @ExceptionHandler({ObjectOptimisticLockingFailureException.class, OptimisticLockException.class})
+    public ProblemDetail staleRecord(Exception exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "This record has changed. Reload it from Records before correcting it.");
     }
 }

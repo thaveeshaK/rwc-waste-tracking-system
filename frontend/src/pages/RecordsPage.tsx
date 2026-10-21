@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { errorMessage } from '../api/client'
+import { ApiError, errorMessage } from '../api/client'
 import { deleteRecord, getRecord, getRecords } from '../features/crate-pallet/api'
 import { CratePalletReview } from '../features/crate-pallet/CratePalletReview'
 import type { CratePalletRecord } from '../features/crate-pallet/types'
 
-interface Props { isAdmin: boolean; saved?: CratePalletRecord; onEdit: (record: CratePalletRecord) => void }
+interface Props {
+  isAdmin: boolean
+  saved?: CratePalletRecord
+  onEdit: (record: CratePalletRecord) => void
+  onBusyChange: (busy: boolean) => void
+}
 
-export function RecordsPage({ isAdmin, saved, onEdit }: Props) {
+export function RecordsPage({ isAdmin, saved, onEdit, onBusyChange }: Props) {
   const [records, setRecords] = useState<CratePalletRecord[]>([])
   const [selected, setSelected] = useState<CratePalletRecord | null>(saved ?? null)
   const [from, setFrom] = useState('')
@@ -20,7 +25,12 @@ export function RecordsPage({ isAdmin, saved, onEdit }: Props) {
   const [filter, setFilter] = useState({ from: '', to: '', attempt: 0 })
   useEffect(() => {
     let cancelled = false
-    getRecords(filter.from, filter.to).then(records => { if (!cancelled) setRecords(records) })
+    getRecords(filter.from, filter.to).then(records => {
+      if (cancelled) return
+      setRecords(records)
+      setSelected(current => current ? records.find(record => record.id === current.id) ?? null : null)
+      setConfirmDelete(false)
+    })
       .catch(error => { if (!cancelled) setError(errorMessage(error)) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
@@ -39,12 +49,26 @@ export function RecordsPage({ isAdmin, saved, onEdit }: Props) {
   async function remove() {
     if (!selected?.id || busy) return
     setBusy(true); setError('')
+    onBusyChange(true)
+    const id = selected.id
+    function reconcile(message: string) {
+      setRecords(records => records.filter(record => record.id !== id))
+      setMessage(message)
+      setSelected(null)
+      setConfirmDelete(false)
+      setFilter(filter => ({ ...filter, attempt: filter.attempt + 1 }))
+    }
     try {
-      await deleteRecord(selected.id)
-      setRecords(records => records.filter(record => record.id !== selected.id))
-      setMessage(`Record #${selected.id} deleted.`); setSelected(null); setConfirmDelete(false)
-    } catch (error) { setError(errorMessage(error)) }
-    finally { setBusy(false) }
+      await deleteRecord(id)
+      reconcile(`Record #${id} deleted.`)
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        reconcile(`Record #${id} is already deleted or no longer available.`)
+      } else {
+        setError(`${errorMessage(error)} Retry deletion or refresh Records to check its current state.`)
+      }
+    }
+    finally { setBusy(false); onBusyChange(false) }
   }
   return <section aria-labelledby="records-heading">
     <div className="page-heading"><div><p className="eyebrow">CRATE / PALLET</p><h1 id="records-heading">Records</h1>
@@ -54,7 +78,7 @@ export function RecordsPage({ isAdmin, saved, onEdit }: Props) {
     <div className="panel"><form className="filter-bar" onSubmit={applyFilter}>
       <label>From<input type="date" value={from} onChange={event => setFrom(event.target.value)} /></label>
       <label>To<input type="date" min={from || undefined} value={to} onChange={event => setTo(event.target.value)} /></label>
-      <button className="secondary" disabled={loading}>Apply dates / refresh</button>
+      <button className="secondary" disabled={loading || busy}>Apply dates / refresh</button>
     </form>
       {loading ? <p role="status">Loading records…</p> : records.length === 0 ? <p>No records found.</p>
         : <div className="table-scroll"><table><caption className="sr-only">Submitted Crate/Pallet records</caption>

@@ -18,6 +18,9 @@ import lombok.Setter;
 public class CratePalletRecord {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @Version
+    @Column(nullable = false)
+    private Long version;
     @Column(nullable = false, unique = true)
     private UUID submissionId;
     @Column(nullable = false)

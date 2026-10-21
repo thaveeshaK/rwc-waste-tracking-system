@@ -7,7 +7,7 @@ import java.util.UUID;
 
 /** Decimal values are strings so the browser never needs binary floating-point calculations. */
 public record CratePalletResponse(
-        Long id, UUID submissionId, LocalDate recordDate,
+        Long id, Long version, UUID submissionId, LocalDate recordDate,
         Long containerTypeId, String containerTypeName,
         String grossWeight, String tareWeight, String netWeight,
         List<MaterialResponse> materials,

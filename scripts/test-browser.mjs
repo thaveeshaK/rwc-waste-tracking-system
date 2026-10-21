@@ -151,10 +151,16 @@ try {
   // Lose the first successful POST response, then retry through the actual UI.
   await evaluate(`window.__submissionIds = []; window.__lostResponse = false;
     window.__realFetch = window.fetch;
+    window.__submissionGate = new Promise(resolve => { window.__releaseSubmission = resolve; });
+    window.__submissionStarted = false;
     window.fetch = async (...args) => {
       const [url, init] = args;
       const submission = url === '/api/crate-pallet-records' && init?.method === 'POST';
-      if (submission) window.__submissionIds.push(JSON.parse(init.body).submissionId);
+      if (submission) {
+        window.__submissionIds.push(JSON.parse(init.body).submissionId);
+        window.__submissionStarted = true;
+        await window.__submissionGate;
+      }
       const response = await window.__realFetch(...args);
       if (submission && response.ok && !window.__lostResponse) {
         window.__lostResponse = true; throw new TypeError('Simulated lost response');
@@ -162,6 +168,19 @@ try {
       return response;
     };`)
   await click('Confirm and submit')
+  await until(() => evaluate('window.__submissionStarted'), 'submission paused before response')
+  for (const label of ['Records', 'New Crate / Pallet', 'Sign out']) {
+    assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(label)}).disabled`), true)
+  }
+  assert.equal(await evaluate(`(() => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event); return event.defaultPrevented;
+  })()`), true)
+  await evaluate('window.__releaseSubmission()')
+  await enabled('Retry submission')
+  await click('Check Records')
+  await hasText('Submitted records are read-only for Staff.')
+  await click('Resume submission')
   await enabled('Retry submission')
   await click('Retry submission')
   await hasText('saved successfully.')
@@ -172,6 +191,29 @@ try {
   const duplicateCount = await evaluate(`fetch('/api/crate-pallet-records').then(r => r.json()).then(rows => rows.filter(r => r.submissionId === ${JSON.stringify(ids[0])}).length)`)
   assert.equal(duplicateCount, 1)
   await screenshot('tablet-saved-record')
+
+  // A definitive ID/data conflict must not become an endless retry loop.
+  await click('New Crate / Pallet')
+  await until(() => evaluate("document.querySelector('select')?.options.length === 6"), 'conflict form references')
+  await fill('Container type', apple)
+  await fill('Gross weight', '161.00')
+  await fill('Timber', '100.00')
+  await click('Review record')
+  await hasText('Net material weight')
+  await evaluate(`window.fetch = async (url, init) => {
+    if (url === '/api/crate-pallet-records' && init?.method === 'POST') {
+      const body = JSON.parse(init.body);
+      body.submissionId = ${JSON.stringify(ids[0])};
+      init = { ...init, body: JSON.stringify(body) };
+    }
+    return window.__realFetch(url, init);
+  };`)
+  await click('Confirm and submit')
+  await hasText('Conflict:')
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Retry submission')"), false)
+  assert.equal(await evaluate("document.body.textContent.includes('A submission is unresolved.')"), false)
+  await click('Back to Records')
+  await evaluate('window.fetch = window.__realFetch')
   await click('Sign out')
   await hasText('Sign in')
   await fill('Username', process.env.INITIAL_ADMIN_USERNAME)
@@ -189,11 +231,55 @@ try {
   await click('Confirm correction')
   await hasText('saved successfully.')
   assert.ok(await evaluate("document.querySelector('.net-weight dd').textContent.includes('110.00 kg')"))
+  // Lose a successful delete response. Its retry receives 404 and must clear stale details/list rows.
+  await evaluate(`window.__lostDeleteResponse = false;
+    window.fetch = async (...args) => {
+      const response = await window.__realFetch(...args);
+      if (args[1]?.method === 'DELETE' && response.ok && !window.__lostDeleteResponse) {
+        window.__lostDeleteResponse = true; throw new TypeError('Simulated lost delete response');
+      }
+      return response;
+    };`)
   await click('Delete record')
   await click('Confirm deletion')
-  await hasText('Record #' + savedId + ' deleted.')
+  await hasText('Simulated lost delete response')
+  await enabled('Confirm deletion')
+  await click('Confirm deletion')
+  await hasText('Record #' + savedId + ' is already deleted or no longer available.')
   assert.equal(await evaluate(`[...document.querySelectorAll('tbody button')].some(b => b.textContent === '#${savedId}')`), false)
-  console.log('PASS: browser login, percentage validation, review/correction, lost-response retry with the same UUID, Records, Staff permissions, Admin correction, soft deletion, and tablet layout.')
+  assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
+  await evaluate('window.fetch = window.__realFetch')
+
+  // A record removed by another request must also disappear from selected details on refresh.
+  const refreshId = await evaluate(`(async () => {
+    const token = await fetch('/api/auth/csrf').then(r => r.json());
+    const user = await fetch('/api/auth/me').then(r => r.json());
+    const materials = await fetch('/api/material-categories').then(r => r.json());
+    const response = await fetch('/api/crate-pallet-records', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', [token.headerName]: token.token },
+      body: JSON.stringify({ submissionId: crypto.randomUUID(), recordDate: user.operationalDate,
+        containerTypeId: Number(${JSON.stringify(apple)}), grossWeight: '160.00',
+        materials: [{ materialCategoryId: materials.find(m => m.name === 'Timber').id, percentage: '100.00' }] })
+    });
+    if (!response.ok) throw new Error('Refresh fixture creation failed');
+    return (await response.json()).id;
+  })()`)
+  await enabled('Apply dates / refresh')
+  await click('Apply dates / refresh')
+  const remainingId = '#' + refreshId
+  await enabled(remainingId)
+  await click(remainingId)
+  await hasText('Correct record')
+  await evaluate(`(async () => {
+    const token = await fetch('/api/auth/csrf').then(r => r.json());
+    const response = await fetch('/api/crate-pallet-records/${remainingId.slice(1)}', {
+      method: 'DELETE', headers: { [token.headerName]: token.token }
+    });
+    if (!response.ok) throw new Error('External deletion failed');
+  })()`)
+  await click('Apply dates / refresh')
+  await until(() => evaluate("document.querySelector('.detail-panel') === null"), 'selected deleted record cleared after refresh')
+  console.log('PASS: login/CSRF, validation/review, active-submission navigation/logout guards, retry UUID retained across Records navigation, definitive conflict handling, Admin correction, lost-delete/404 reconciliation, selected-detail refresh, and tablet layout.')
   console.log('Screenshots and logs: ' + output)
 } catch (error) {
   console.error(error)

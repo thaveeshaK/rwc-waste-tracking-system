@@ -12,7 +12,8 @@ public record CratePalletRequest(
         @NotNull LocalDate recordDate,
         @NotNull @Positive Long containerTypeId,
         @NotNull @DecimalMin("0") @Digits(integer = 8, fraction = 2) BigDecimal grossWeight,
-        @NotEmpty List<@NotNull @Valid MaterialInput> materials) {
+        @NotEmpty List<@NotNull @Valid MaterialInput> materials,
+        @PositiveOrZero Long version) {
     public record MaterialInput(
             @NotNull @Positive Long materialCategoryId,
             @NotNull @DecimalMin("0") @DecimalMax("100") @Digits(integer = 3, fraction = 2)

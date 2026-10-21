@@ -2,6 +2,7 @@ export interface ContainerType { id: number; name: string; tareWeight: string }
 export interface MaterialCategory { id: number; name: string }
 export interface MaterialInput { materialCategoryId: number; percentage: string }
 export interface CratePalletInput {
+  version?: number
   submissionId: string
   recordDate: string
   containerTypeId: number
@@ -10,6 +11,7 @@ export interface CratePalletInput {
 }
 export interface MaterialResult extends MaterialInput { name: string; materialWeight: string }
 export interface CratePalletRecord {
+  version: number | null
   id: number | null
   submissionId: string | null
   recordDate: string

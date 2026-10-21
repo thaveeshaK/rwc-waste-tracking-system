@@ -56,7 +56,11 @@ For deployment, serve the frontend and `/api` from the same origin through HTTPS
 5. Successful submission opens **Records** with the saved record. Filter by date and select a record number to see its breakdown.
 6. Admins can choose **Correct record**, review the correction, and confirm. **Delete record** requires a confirmation and hides the record while retaining database traceability. Staff cannot edit or delete submitted records.
 
-If a submission response is lost, use **Retry submission**. It reuses the same UUID and payload; the database returns the original record rather than inserting a duplicate. Check Records before starting another entry if the outcome is uncertain. Unsaved form data and retry state are held in page memory and are lost on reload or navigation; there are no persistent drafts.
+While submitting, navigation, logout, and starting another record are disabled. If a response is lost, use **Retry submission**: it reuses the same UUID and payload. You can also check Records and choose **Resume submission** to return to the unresolved request; its state stays in application memory. Another record cannot replace it while unresolved, and logout is disabled until the outcome is resolved. Reloading or closing the page prompts a browser warning but still discards state if you choose to leave. There are no persistent drafts or browser-storage copies.
+
+A submission-ID/data conflict (HTTP 409) is a definite rejection, not a transport failure: open Records to inspect the existing record instead of repeatedly retrying. Admin corrections also return 409 when their version is stale; reload the record before making another correction. Session-expiration recovery remains outside this change.
+
+If a delete response is lost, retry deletion or refresh Records. A not-found response reconciles the list and clears selected details. Refresh also replaces selected details with the current record or clears them if that record is no longer listed.
 
 If the system is unavailable, use the existing paper forms. An authorized Admin can enter them later using the original operational dates.
 
@@ -72,6 +76,7 @@ If the system is unavailable, use the existing paper forms. An authorized Admin 
 - Only positive-percentage breakdown rows are saved. Duplicate categories are rejected.
 - Final submission recalculates all values instead of trusting frontend-calculated fields. The record and breakdown are saved atomically.
 - `submission_id` is a unique UUID. Matching retries by the same creator return the existing record; reuse with different data, by another account, or after deletion returns HTTP 409.
+- Records carry a numeric JPA optimistic-locking `version`. Corrections must submit the version read from the saved record. Stale versions return HTTP 409 without overwriting newer changes; missing correction versions return HTTP 400.
 - Creation and latest-update user/timestamps are stored on the record. Deletion sets `deleted_at` and `deleted_by`; ordinary reads exclude deleted records. Intermediate edit history and JSON snapshots are not stored.
 - Reference rows have `active` flags and are not physically removed while referenced. New entries use active references. Existing records retain their stored tare; an Admin correction keeps that tare when the container is unchanged and may retain previously used inactive references.
 
@@ -94,30 +99,34 @@ All operational endpoints require a session. Mutating requests also require the 
 | PUT | `/api/crate-pallet-records/{id}` | Admin correction |
 | DELETE | `/api/crate-pallet-records/{id}` | Admin soft deletion |
 
-Preview accepts optional `?recordId={id}` for an Admin correction, preserving historical tare/reference behavior. The body for preview/submission/correction has `recordDate`, `containerTypeId`, `grossWeight`, and `materials` (`materialCategoryId`, `percentage`). Final POST additionally requires `submissionId`. No record status or draft endpoints exist.
+Preview accepts optional `?recordId={id}` for an Admin correction, preserving historical tare/reference behavior. The body for preview/submission/correction has `recordDate`, `containerTypeId`, `grossWeight`, and `materials` (`materialCategoryId`, `percentage`). Final POST additionally requires `submissionId`. Admin edit-preview and PUT correction additionally require `version` from a saved-record response. No record status or draft endpoints exist.
 
 ## Structure
 
-Backend packages under `au.org.resourcework.waste_tracking_api`: `auth`, `config`, `reference`, `cratepallet` (with `dto`), and `error`. Workflow controllers call services, which own transactions and call repositories. Flyway SQL lives in `backend/src/main/resources/db/migration`; Hibernate validates rather than creates tables. V1/V2 are preserved, V3 adds the schema, and V4 seeds reference data.
+Backend packages under `au.org.resourcework.waste_tracking_api`: `auth`, `config`, `reference`, `cratepallet` (with `dto`), and `error`. Workflow controllers call services, which own transactions and call repositories. Flyway SQL lives in `backend/src/main/resources/db/migration`; Hibernate validates rather than creates tables. V1/V2 are preserved, V3 adds the schema, V4 seeds reference data, and V5 adds the record version.
 
 Frontend: `api` for HTTP/CSRF handling, `features/auth`, `features/crate-pallet`, `pages/RecordsPage.tsx`, and `styles`. Components use local React state and native fetch; no Redux or additional application framework is introduced.
 
 ## Verification
 
-Run the default backend calculation tests without a database:
+Run the backend calculation and isolation-guard unit tests without a database:
 
 ```powershell
 Set-Location backend
 mvn.cmd verify
 ```
 
-The PostgreSQL integration tests are explicitly gated behind `RUN_DB_TESTS=true` and require the dedicated `rwc_slice_test` database. They delete test records; **do not point them at an operational database**. Use the isolated runner from the repository root:
+The PostgreSQL integration tests are explicitly gated behind `RUN_DB_TESTS=true` and require runner-supplied `RWC_TEST_DB_*` settings for a verified temporary `rwc_slice_test` database. They delete test records; use the isolated runner from the repository root:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-backend.ps1
 ```
 
-The runner starts a separate loopback-only PostgreSQL instance on a free port, generates temporary database/account credentials, runs all ten tests and packages the backend, then stops PostgreSQL and restores environment variables. It never connects to your configured operational database. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
+The runner starts a loopback-only PostgreSQL instance on a free port, generates temporary credentials, and marks the database with a unique per-run identity token. It removes inherited `SPRING_*` settings and JVM/Maven property injection, loads only the classpath application configuration, and explicitly pins datasource, Hikari, and Flyway URLs/credentials/schema to the temporary database. Original environment values are restored afterward.
+
+Before Spring bean creation or Flyway migration, a test initializer verifies the database URL, name, account, address, port, and identity token and pins the connection properties again. Integration setup rechecks the actual datasource before modifying data. Teardown only runs after successful verification and rechecks isolation before its updates. Unit tests cover redirected connections, wrong identity tokens, property overrides, and teardown after failed setup.
+
+The runner executes 16 tests (9 unit tests and 7 integration tests), packages the backend, and stops PostgreSQL. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
 
 For the complete browser smoke test:
 
@@ -125,7 +134,7 @@ For the complete browser smoke test:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-backend.ps1 -Browser
 ```
 
-This also builds/lints the frontend and launches temporary backend, Vite preview, and headless Chrome processes. It tests actual session/CSRF login, percentage validation, review, a lost POST response and retry with the same UUID, saved Records, Staff read-only access, Admin correction/deletion, and tablet layout. It uses Node APIs and Chrome DevTools without adding a test framework. Set `CHROME_PATH` if Chrome/Edge is installed elsewhere. Screenshots/logs are under ignored `backend/target/browser-test-*`. Test processes are stopped afterward.
+This also builds/lints the frontend and launches temporary backend, Vite preview, and headless Chrome processes. It tests session/CSRF login, percentage validation, review, navigation/logout guards during submission, retaining the retry UUID across a Records visit, definitive conflict handling, Staff read-only access, Admin correction, lost-delete-response/404 reconciliation, selected-detail refresh, and tablet layout. It uses the existing Node/Chrome DevTools smoke runner without adding a framework. Set `CHROME_PATH` if Chrome/Edge is installed elsewhere. Screenshots/logs are under ignored `backend/target/browser-test-*`. Test processes are stopped afterward.
 
 Frontend checks separately:
 

@@ -6,13 +6,20 @@ import { CratePalletForm } from './CratePalletForm'
 import { CratePalletReview } from './CratePalletReview'
 import type { ContainerType, CratePalletInput, CratePalletRecord, MaterialCategory } from './types'
 
-interface Props { editing?: CratePalletRecord; onSaved: (record: CratePalletRecord) => void; onCancel: () => void }
+interface Props {
+  editing?: CratePalletRecord
+  onSaved: (record: CratePalletRecord) => void
+  onCancel: () => void
+  onBusyChange: (busy: boolean) => void
+  onUnresolvedChange: (unresolved: boolean) => void
+}
 
-export function CratePalletPage({ editing, onSaved, onCancel }: Props) {
+export function CratePalletPage({ editing, onSaved, onCancel, onBusyChange, onUnresolvedChange }: Props) {
   const [containers, setContainers] = useState<ContainerType[]>([])
   const [materials, setMaterials] = useState<MaterialCategory[]>([])
   const [input, setInput] = useState<CratePalletInput>(() => ({
     submissionId: editing?.submissionId ?? crypto.randomUUID(),
+    version: editing?.version ?? undefined,
     recordDate: editing?.recordDate ?? operationalDate(), containerTypeId: editing?.containerTypeId ?? 0,
     grossWeight: editing?.grossWeight ?? '', materials: [],
   }))
@@ -21,6 +28,7 @@ export function CratePalletPage({ editing, onSaved, onCancel }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [uncertain, setUncertain] = useState(false)
+  const [conflict, setConflict] = useState(false)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const submitting = useRef(false)
   const pendingInput = useRef<CratePalletInput | null>(null)
@@ -51,27 +59,42 @@ export function CratePalletPage({ editing, onSaved, onCancel }: Props) {
 
   async function calculate() {
     setBusy(true); setError('')
+    onBusyChange(true)
     try { setReview(await previewRecord(input, editing?.id ?? undefined)) }
-    catch (error) { setError(errorMessage(error)) }
-    finally { setBusy(false) }
+    catch (error) {
+      setError(errorMessage(error))
+      if (error instanceof ApiError && error.status === 409) setConflict(true)
+    }
+    finally { setBusy(false); onBusyChange(false) }
   }
 
   async function save() {
     if (submitting.current) return
     submitting.current = true
     setBusy(true); setError('')
+    onBusyChange(true)
     pendingInput.current ??= input
     try {
       const payload = pendingInput.current
       const saved = editing?.id ? await updateRecord(editing.id, payload) : await submitRecord(payload)
+      onUnresolvedChange(false)
       onSaved(saved)
     } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        setConflict(true)
+        setUncertain(false)
+        pendingInput.current = null
+        onUnresolvedChange(false)
+        setError(`Conflict: ${errorMessage(error)} Open Records to check the saved record before continuing.`)
+        return
+      }
       // Preserve both payload and UUID when a response may have been lost.
-      const unknownOutcome = !(error instanceof ApiError) || error.status >= 500 || error.status === 409
+      const unknownOutcome = uncertain || !(error instanceof ApiError) || error.status >= 500
       setUncertain(unknownOutcome)
+      onUnresolvedChange(unknownOutcome)
       if (!unknownOutcome) pendingInput.current = null
       setError(`${errorMessage(error)}${unknownOutcome ? ' Retry this submission or check Records before starting another.' : ''}`)
-    } finally { submitting.current = false; setBusy(false) }
+    } finally { submitting.current = false; setBusy(false); onBusyChange(false) }
   }
 
   return <section aria-labelledby="entry-heading">
@@ -83,6 +106,7 @@ export function CratePalletPage({ editing, onSaved, onCancel }: Props) {
       {error && <p className="notice error" role="alert">{error}</p>}
       {loading ? <p role="status">Loading container types and materials…</p> : materials.length === 0 || containers.length === 0
         ? <div><p>Reference data could not be loaded.</p><button onClick={() => { setLoading(true); setError(''); setLoadAttempt(loadAttempt + 1) }}>Retry</button></div>
+        : conflict ? <p>Open Records and reload the record. This request will not be retried automatically.</p>
         : review ? <><CratePalletReview record={review} />
           <div className="actions"><button disabled={busy} onClick={save}>{busy ? 'Saving…' : uncertain ? 'Retry submission' : editing ? 'Confirm correction' : 'Confirm and submit'}</button>
             <button className="secondary" disabled={busy || uncertain} onClick={() => { setReview(null); setError('') }}>Back to edit</button>

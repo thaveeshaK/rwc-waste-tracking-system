@@ -40,7 +40,11 @@ public class CratePalletService {
 
     @PreAuthorize("hasRole('ADMIN')")
     public CratePalletResponse previewEdit(Long id, CratePalletRequest input) {
-        return response(calculate(input, active(id)));
+        var saved = active(id);
+        checkVersion(input, saved);
+        var calculated = calculate(input, saved);
+        calculated.setVersion(saved.getVersion());
+        return response(calculated);
     }
 
     @Transactional
@@ -73,7 +77,8 @@ public class CratePalletService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public CratePalletResponse update(Long id, CratePalletRequest input, String username) {
-        var saved = records.lockActiveById(id).orElseThrow(CratePalletService::notFound);
+        var saved = active(id);
+        checkVersion(input, saved);
         var calculated = calculate(input, saved);
         saved.setRecordDate(calculated.getRecordDate());
         saved.setContainerType(calculated.getContainerType());
@@ -163,7 +168,7 @@ public class CratePalletService {
                 .sorted(Comparator.comparing(m -> m.getCategory().getId()))
                 .map(m -> new CratePalletResponse.MaterialResponse(m.getCategory().getId(), m.getCategory().getName(),
                         m.getPercentage().toPlainString(), m.getMaterialWeight().toPlainString())).toList();
-        return new CratePalletResponse(record.getId(), record.getSubmissionId(), record.getRecordDate(),
+        return new CratePalletResponse(record.getId(), record.getVersion(), record.getSubmissionId(), record.getRecordDate(),
                 record.getContainerType().getId(), record.getContainerType().getName(),
                 record.getGrossWeight().toPlainString(), record.getTareWeight().toPlainString(),
                 record.getNetWeight().toPlainString(), materials,
@@ -173,6 +178,14 @@ public class CratePalletService {
 
     private static void badRequest(String message) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    }
+
+    private static void checkVersion(CratePalletRequest input, CratePalletRecord saved) {
+        if (input.version() == null) badRequest("The record version is required for a correction.");
+        if (!saved.getVersion().equals(input.version())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This record has changed. Reload it from Records before correcting it.");
+        }
     }
 
     private static ResponseStatusException notFound() {
