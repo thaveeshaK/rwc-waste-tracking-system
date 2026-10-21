@@ -11,7 +11,8 @@ public class ReferenceController {
     public ReferenceController(ReferenceService service) { this.service = service; }
 
     @GetMapping("/container-types")
-    public List<ReferenceService.ContainerResponse> containers() { return service.containers(); }
+    public List<ReferenceService.ContainerResponse> containers(
+            @RequestParam(defaultValue = "CRATE_PALLET") ContainerContext context) { return service.containers(context); }
 
     @GetMapping("/material-categories")
     public List<ReferenceService.MaterialResponse> materials(

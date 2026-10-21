@@ -1,3 +1,4 @@
+import { ElectricalCratePalletPage } from './features/electrical-crate-pallet/ElectricalCratePalletPage'
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, errorMessage } from './api/client'
 import { currentUser, logout } from './features/auth/api'
@@ -116,6 +117,9 @@ function App() {
       <button disabled={busy || signingOut || (unresolved && entryWorkflow !== 'PICKUP')}
         className={page === 'entry' && entryWorkflow === 'PICKUP' && !editing ? 'nav-item active' : 'nav-item'}
         onClick={() => newRecord('PICKUP')}>{unresolved && entryWorkflow === 'PICKUP' ? 'Resume submission' : 'New Pickup'}</button>
+      <button disabled={busy || signingOut || (unresolved && entryWorkflow !== 'ELECTRICAL_CRATE_PALLET')}
+        className={page === 'entry' && entryWorkflow === 'ELECTRICAL_CRATE_PALLET' && !editing ? 'nav-item active' : 'nav-item'}
+        onClick={() => newRecord('ELECTRICAL_CRATE_PALLET')}>{unresolved && entryWorkflow === 'ELECTRICAL_CRATE_PALLET' ? 'Resume submission' : 'New Electrical Crate / Pallet'}</button>
     </nav>
       {error && <p className="notice error" role="alert">{error}</p>}
       {unresolved && <p className="notice" role="status">A submission is unresolved. Retry it or check Records. Its details stay in memory while you check.</p>}
@@ -127,9 +131,12 @@ function App() {
           : entryWorkflow === 'SALVAGE' ? <SalvagePage key={entryKey} editing={editing?.workflow === 'SALVAGE' ? editing.record : undefined}
             onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
             onSaved={record => recordSaved({ workflow: 'SALVAGE', record })} onCancel={showRecords} />
-          : <PickupPage key={entryKey} editing={editing?.workflow === 'PICKUP' ? editing.record : undefined}
+          : entryWorkflow === 'PICKUP' ? <PickupPage key={entryKey} editing={editing?.workflow === 'PICKUP' ? editing.record : undefined}
             onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
-            onSaved={record => recordSaved({ workflow: 'PICKUP', record })} onCancel={showRecords} />}
+            onSaved={record => recordSaved({ workflow: 'PICKUP', record })} onCancel={showRecords} />
+          : <ElectricalCratePalletPage key={entryKey} editing={editing?.workflow === 'ELECTRICAL_CRATE_PALLET' ? editing.record : undefined}
+            onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
+            onSaved={record => recordSaved({ workflow: 'ELECTRICAL_CRATE_PALLET', record })} onCancel={showRecords} />}
       </div>}
       {page === 'records' && <RecordsPage isAdmin={user.role === 'ADMIN'} saved={saved}
         workflow={recordWorkflow} onWorkflowChange={workflow => { setSaved(undefined); setRecordWorkflow(workflow) }}

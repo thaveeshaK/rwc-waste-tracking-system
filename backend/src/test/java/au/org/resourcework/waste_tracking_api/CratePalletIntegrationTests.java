@@ -64,7 +64,7 @@ class CratePalletIntegrationTests {
     @Test
     void migratesApprovedReferenceDataAndSecuresEndpoints() throws Exception {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM container_type", Integer.class)).isEqualTo(5);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM material_category", Integer.class)).isEqualTo(16);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM material_category", Integer.class)).isEqualTo(18);
         mvc.perform(get("/api/material-categories").session(staff))
                 .andExpect(jsonPath("$.length()").value(13))
                 .andExpect(jsonPath("$[?(@.name == 'E-waste')]").isEmpty());

@@ -15,8 +15,8 @@ public class ReferenceService {
         this.materials = materials;
     }
 
-    public List<ContainerResponse> containers() {
-        return containers.findByActiveTrueOrderByIdAsc().stream()
+    public List<ContainerResponse> containers(ContainerContext context) {
+        return containers.findAvailable(context.name()).stream()
                 .map(c -> new ContainerResponse(c.getId(), c.getName(), c.getTareWeight().toPlainString())).toList();
     }
 

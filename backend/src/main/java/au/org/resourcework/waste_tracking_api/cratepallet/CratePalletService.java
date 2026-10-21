@@ -108,8 +108,9 @@ public class CratePalletService {
     private CratePalletRecord calculate(CratePalletRequest input, CratePalletRecord previous) {
         var container = containers.findById(input.containerTypeId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown container type."));
+        if (!containers.belongsToContext(container.getId(), ContainerContext.CRATE_PALLET.name())) badRequest("This container is not allowed in Crate/Pallet.");
         boolean sameContainer = previous != null && previous.getContainerType().getId().equals(container.getId());
-        if (!container.isActive() && !sameContainer) badRequest("The selected container type is inactive.");
+        if (!containers.isAvailable(container.getId(), ContainerContext.CRATE_PALLET.name()) && !sameContainer) badRequest("The selected container type is inactive.");
         var tare = sameContainer ? previous.getTareWeight() : container.getTareWeight();
         var net = calculator.net(input.recordDate(), input.grossWeight(), tare,
                 input.materials().stream().map(CratePalletRequest.MaterialInput::percentage).toList());

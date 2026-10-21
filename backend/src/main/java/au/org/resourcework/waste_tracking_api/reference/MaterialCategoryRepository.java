@@ -27,4 +27,10 @@ public interface MaterialCategoryRepository extends JpaRepository<MaterialCatego
         WHERE m.id = :id AND a.context = :context AND a.active AND m.active)
         """, nativeQuery = true)
     boolean isAvailable(@Param("id") Long id, @Param("context") String context);
+
+    @Query(value = """
+        SELECT m.* FROM material_category m JOIN material_category_applicability a ON a.material_category_id = m.id
+        WHERE a.context = :context ORDER BY m.id
+        """, nativeQuery = true)
+    List<MaterialCategory> findForContext(@Param("context") String context);
 }

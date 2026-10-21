@@ -28,7 +28,7 @@ legend { width: 100%; font-size: 1.15rem; font-weight: 700; border-bottom: 1px s
 .account { font-size: .9rem; }
 .role-badge { display: inline-block; background: #e8eee7; padding: .1rem .45rem; margin-left: .3rem; border-radius: 4px; font-size: .75rem; }
 .app-shell { max-width: 1150px; margin: auto; padding: 0 2rem; }
-nav { display: flex; gap: 1.5rem; border-bottom: 1px solid #dce3d9; margin-bottom: 2rem; }
+nav { display: flex; flex-wrap: wrap; gap: 1.5rem; border-bottom: 1px solid #dce3d9; margin-bottom: 2rem; }
 button.nav-item { border: 0; border-radius: 0; background: none; color: #607164; padding: 1.1rem .2rem; border-bottom: 3px solid transparent; }
 button.nav-item.active { color: #245c43; border-bottom-color: #245c43; }
 .page-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin: 1rem 0 1.6rem; }
