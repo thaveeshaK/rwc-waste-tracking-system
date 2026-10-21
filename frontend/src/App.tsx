@@ -4,7 +4,8 @@ import { currentUser, logout } from './features/auth/api'
 import type { User } from './features/auth/api'
 import { LoginPage } from './features/auth/LoginPage'
 import { CratePalletPage } from './features/crate-pallet/CratePalletPage'
-import type { CratePalletRecord } from './features/crate-pallet/types'
+import { SalvagePage } from './features/salvage/SalvagePage'
+import type { OperationalRecord, Workflow } from './features/records/types'
 import { RecordsPage } from './pages/RecordsPage'
 
 function App() {
@@ -12,10 +13,12 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [page, setPage] = useState<'entry' | 'records'>('records')
-  const [editing, setEditing] = useState<CratePalletRecord | undefined>()
-  const [saved, setSaved] = useState<CratePalletRecord | undefined>()
+  const [editing, setEditing] = useState<OperationalRecord | undefined>()
+  const [saved, setSaved] = useState<OperationalRecord | undefined>()
   const [entryKey, setEntryKey] = useState(0)
   const [hasEntry, setHasEntry] = useState(false)
+  const [entryWorkflow, setEntryWorkflow] = useState<Workflow>('CRATE_PALLET')
+  const [recordWorkflow, setRecordWorkflow] = useState<Workflow>('CRATE_PALLET')
   const [signingOut, setSigningOut] = useState(false)
   const [busy, setBusy] = useState(false)
   const [unresolved, setUnresolved] = useState(false)
@@ -53,16 +56,18 @@ function App() {
 
   function showRecords() {
     if (busyRef.current) return
+    if (hasEntry) setRecordWorkflow(entryWorkflow)
     setPage('records')
     setSaved(undefined)
   }
 
-  function newRecord() {
+  function newRecord(workflow: Workflow) {
     if (busyRef.current) return
     setError('')
     if (!unresolvedRef.current) {
       setEditing(undefined)
       setSaved(undefined)
+      setEntryWorkflow(workflow)
       setEntryKey(key => key + 1)
       setHasEntry(true)
     }
@@ -84,6 +89,14 @@ function App() {
     finally { setSigningOut(false) }
   }
 
+  function recordSaved(record: OperationalRecord) {
+    setSaved(record)
+    setRecordWorkflow(record.workflow)
+    setEditing(undefined)
+    setHasEntry(false)
+    setPage('records')
+  }
+
   if (loading) return <main className="app-shell"><p role="status">Loading waste tracking...</p></main>
   if (!user) return <>{error && <p className="notice error" role="alert">{error}</p>}<LoginPage onLogin={user => { setError(''); setUser(user) }} /></>
   return <><header className="app-header"><div className="header-inner">
@@ -91,21 +104,28 @@ function App() {
     <div className="account"><span>{user.username} <span className="role-badge">{user.role === 'ADMIN' ? 'Admin' : 'Staff'}</span></span>
       <button className="secondary" disabled={signingOut || busy || unresolved} onClick={signOut}>{signingOut ? 'Signing out...' : 'Sign out'}</button></div>
   </div></header>
-    <main className="app-shell"><nav aria-label="Main navigation">
+    <main className="app-shell" inert={signingOut}><nav aria-label="Main navigation">
       <button disabled={busy || signingOut} className={page === 'records' ? 'nav-item active' : 'nav-item'} onClick={showRecords}>Records</button>
-      <button disabled={busy || signingOut} className={page === 'entry' && !editing ? 'nav-item active' : 'nav-item'} onClick={newRecord}>{unresolved ? 'Resume submission' : 'New Crate / Pallet'}</button>
+      <button disabled={busy || signingOut || (unresolved && entryWorkflow !== 'CRATE_PALLET')}
+        className={page === 'entry' && entryWorkflow === 'CRATE_PALLET' && !editing ? 'nav-item active' : 'nav-item'}
+        onClick={() => newRecord('CRATE_PALLET')}>{unresolved && entryWorkflow === 'CRATE_PALLET' ? 'Resume submission' : 'New Crate / Pallet'}</button>
+      <button disabled={busy || signingOut || (unresolved && entryWorkflow !== 'SALVAGE')}
+        className={page === 'entry' && entryWorkflow === 'SALVAGE' && !editing ? 'nav-item active' : 'nav-item'}
+        onClick={() => newRecord('SALVAGE')}>{unresolved && entryWorkflow === 'SALVAGE' ? 'Resume submission' : 'New Salvage'}</button>
     </nav>
       {error && <p className="notice error" role="alert">{error}</p>}
       {unresolved && <p className="notice" role="status">A submission is unresolved. Retry it or check Records. Its details stay in memory while you check.</p>}
-      {hasEntry && <div hidden={page !== 'entry'}><CratePalletPage key={entryKey} editing={editing}
-        onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
-        onSaved={record => {
-          setSaved(record)
-          setEditing(undefined)
-          setHasEntry(false)
-          setPage('records')
-        }} onCancel={showRecords} /></div>}
+      {hasEntry && <div hidden={page !== 'entry'}>
+        {entryWorkflow === 'CRATE_PALLET' ? <CratePalletPage key={entryKey}
+          editing={editing?.workflow === 'CRATE_PALLET' ? editing.record : undefined}
+          onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
+          onSaved={record => recordSaved({ workflow: 'CRATE_PALLET', record })} onCancel={showRecords} />
+          : <SalvagePage key={entryKey} editing={editing?.workflow === 'SALVAGE' ? editing.record : undefined}
+            onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
+            onSaved={record => recordSaved({ workflow: 'SALVAGE', record })} onCancel={showRecords} />}
+      </div>}
       {page === 'records' && <RecordsPage isAdmin={user.role === 'ADMIN'} saved={saved}
+        workflow={recordWorkflow} onWorkflowChange={workflow => { setSaved(undefined); setRecordWorkflow(workflow) }}
         onBusyChange={activityChanged} onEdit={record => {
           if (busyRef.current) return
           if (unresolvedRef.current) {
@@ -113,6 +133,7 @@ function App() {
             return
           }
           setEditing(record)
+          setEntryWorkflow(record.workflow)
           setEntryKey(key => key + 1)
           setHasEntry(true)
           setPage('entry')

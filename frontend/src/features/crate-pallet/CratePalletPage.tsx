@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, errorMessage } from '../../api/client'
 import { getContainers, getMaterials, previewRecord, submitRecord, updateRecord } from './api'
-import { operationalDate } from './decimal'
+import { operationalDate } from '../../utils/decimal'
 import { CratePalletForm } from './CratePalletForm'
 import { CratePalletReview } from './CratePalletReview'
 import type { ContainerType, CratePalletInput, CratePalletRecord, MaterialCategory } from './types'

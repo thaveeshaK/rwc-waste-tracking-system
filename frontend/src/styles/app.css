@@ -65,6 +65,8 @@ th, td { padding: .75rem .7rem; border-bottom: 1px solid #e4e9e0; }
 .filter-bar { display: flex; align-items: end; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
 .filter-bar label { min-width: 170px; }
 .detail-panel { margin-top: 1.5rem; }
+.salvage-direction { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #dde4dd; }
+.salvage-direction .form-grid { margin-bottom: 1.2rem; }
 .detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .detail-heading h2 { margin: 0; }
 footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }

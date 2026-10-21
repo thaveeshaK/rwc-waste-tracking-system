@@ -124,9 +124,14 @@ public class CratePalletService {
             if (!seen.add(material.materialCategoryId())) badRequest("Each material category may appear only once.");
             var category = categories.findById(material.materialCategoryId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown material category."));
+            if (!categories.belongsToContext(category.getId(), MaterialContext.CRATE_PALLET.name())) {
+                badRequest("This material category is not allowed in Crate/Pallet.");
+            }
             boolean previouslyUsed = previous != null && previous.getMaterials().stream()
                     .anyMatch(m -> m.getCategory().getId().equals(category.getId()));
-            if (!category.isActive() && !previouslyUsed) badRequest("A selected material category is inactive.");
+            if (!categories.isAvailable(category.getId(), MaterialContext.CRATE_PALLET.name()) && !previouslyUsed) {
+                badRequest("A selected material category is inactive.");
+            }
             if (material.percentage().signum() > 0) {
                 result.getMaterials().add(new MaterialBreakdown(category, material.percentage().setScale(2),
                         calculator.materialWeight(net, material.percentage())));

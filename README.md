@@ -1,6 +1,6 @@
 # RWC Waste Tracking System
 
-The first implemented workflow is **normal Crate / Pallet**: sign in, enter a load, review calculated weights, submit, and view saved records. Admins can correct and soft-delete submitted records. Other workflows, reporting, dashboards, and user management are not implemented.
+Implemented workflows are **normal Crate / Pallet** and **Salvage**: sign in, enter an operational record, review calculated weights, submit, and view saved records. Admins can correct and soft-delete submitted records. Other workflows, reporting, dashboards, and user management are not implemented.
 
 Requirements: [AGENTS.md](AGENTS.md) and the approved [SRS](docs/SRS-%20Waste%20Tracking%20Operations%20System%20for%20Resource%20Work%20Cooperative.pdf), supplemented by the approved Crate/Pallet implementation decisions.
 
@@ -64,11 +64,34 @@ If a delete response is lost, retry deletion or refresh Records. A not-found res
 
 If the system is unavailable, use the existing paper forms. An authorized Admin can enter them later using the original operational dates.
 
+## Salvage trips
+
+Choose **New Salvage**. Enter one operational record date and one mandatory crew for the complete trip. Always enter Time Up, Kg Up, Time Down, and Kg Down. These are local operational times; Down may be earlier than or equal to Up. The date must be past or current in Australia/Hobart.
+
+Enter the final Kg Up (waste to landfill) and Kg Down (recovered material) supplied by the council weighbridge. Both weights are recorded independently, with no tare deduction, truck-weight difference calculation, or subtraction of one direction from the other. No digital dockets are stored.
+
+For each direction independently:
+
+- A positive weight requires a material breakdown totaling exactly 100.00%.
+- A zero weight still requires its time, hides the percentage inputs, and persists no material rows. Both weights may be zero.
+- Changing a positive weight to zero clears its percentages. An Admin correction also removes the old persisted rows. Changing back to positive requires a valid 100% breakdown.
+- Category weight is council weight multiplied by percentage divided by 100, rounded individually to two decimals with HALF_UP. Differences are not redistributed.
+
+Select **Review trip**, check both directions and the single crew, then confirm. The same version checks, duplicate-submission protection, in-memory recovery, navigation guards, role permissions, and soft deletion apply. Records has a **Workflow** selector and inclusive From/To date filters. Record identities include the workflow, so equal numeric IDs in the two workflows remain separate.
+
+Material definitions are shared through `material_category`; applicability is restricted by `CRATE_PALLET`, `SALVAGE_UP`, and `SALVAGE_DOWN`. Both the definition and its applicability must be active for a new selection. The backend checks applicability on writes, including direct API submissions. A historical inactive category can be retained during correction in its original direction.
+
+| Salvage Up: waste to landfill (9) | Salvage Down: recovered material (14) |
+| --- | --- |
+| Iron and Steel; Timber; Textiles; Plastics; Paper, Cardboard and Books; Mattresses; E-waste; Glass; Mixed Materials | Iron and Steel; Aluminium; Other Non-Ferrous Metals; Mixed Metals; E-waste; Lead Acid Batteries; Timber; Bricks, Blocks and Pavers; Building and Demolition Material; Whitegoods / Large Appliances; Paper, Cardboard and Books; Plastics; Glass; Mixed Materials |
+
+E-waste is intentionally available in both Salvage directions. E-waste, Lead Acid Batteries, and Whitegoods / Large Appliances remain unavailable in normal Crate/Pallet.
+
 ## Data and calculation rules
 
-- Five application tables: `app_user`, `container_type`, `material_category`, `crate_pallet_record`, and `crate_pallet_material`.
+- Eight application tables: `app_user`, `container_type`, `material_category`, `material_category_applicability`, `crate_pallet_record`, `crate_pallet_material`, `salvage_record`, and `salvage_material`.
 - Containers: Apple Crate 60 kg, Stillage Cage 50 kg, Plastic Pallet 6 kg, Pine Pallet 18 kg, Hardwood Pallet 30 kg.
-- Thirteen normal material categories are seeded. E-waste and electrical-only categories are excluded.
+- The thirteen normal material categories remain restricted to Crate/Pallet. Three additional shared definitions and direction-specific applicability mappings support Salvage.
 - Weights use Java `BigDecimal` and PostgreSQL `NUMERIC(10,2)`; percentages use `NUMERIC(5,2)`. Inputs accept at most two decimal places.
 - Net weight is gross minus tare; gross cannot be below tare. Zero net weight is allowed.
 - Material weight is `net * entered percentage / 100`, rounded independently to two decimals with `HALF_UP`. Rounding differences are not redistributed.
@@ -91,7 +114,7 @@ All operational endpoints require a session. Mutating requests also require the 
 | POST | `/api/auth/logout` | End the session |
 | GET | `/api/auth/me` | Account role and current Hobart operational date |
 | GET | `/api/container-types` | Active container types and tare values |
-| GET | `/api/material-categories` | Active normal material categories |
+| GET | `/api/material-categories?context=CRATE_PALLET` | Active applicable categories; context defaults to Crate/Pallet, or accepts SALVAGE_UP / SALVAGE_DOWN |
 | POST | `/api/crate-pallet-records/preview` | Validate and calculate without saving |
 | POST | `/api/crate-pallet-records` | Submit; 201 for creation, 200 for a matching retry |
 | GET | `/api/crate-pallet-records?from=YYYY-MM-DD&to=YYYY-MM-DD` | List non-deleted records; optional inclusive date filters |
@@ -101,11 +124,17 @@ All operational endpoints require a session. Mutating requests also require the 
 
 Preview accepts optional `?recordId={id}` for an Admin correction, preserving historical tare/reference behavior. The body for preview/submission/correction has `recordDate`, `containerTypeId`, `grossWeight`, and `materials` (`materialCategoryId`, `percentage`). Final POST additionally requires `submissionId`. Admin edit-preview and PUT correction additionally require `version` from a saved-record response. No record status or draft endpoints exist.
 
+Salvage uses the same methods at `/api/salvage-records`: POST `/preview`, final POST, list GET with optional `from`/`to`, detail GET `/{id}`, Admin PUT `/{id}`, and Admin DELETE `/{id}`. Correction preview accepts `?recordId={id}` and requires `version`.
+
+Salvage input contains `recordDate`, `crew`, and separate `up` / `down` objects, each with `time`, `kg`, and optional `materials` (`materialCategoryId`, `percentage`). Final POST requires `submissionId`; corrections require `version`. A zero direction can omit materials or send an empty array. Stale submitted percentages for a zero direction are discarded rather than persisted. Both `time` values and both weights remain mandatory. Responses add IDs/version, category names/calculated material weights, and account/timestamp metadata; decimals are strings.
+
+Duplicate comparison includes the normalized crew, date, both times, both weights, and each direction's normalized positive-percentage rows. Raw calculated weights supplied by clients are ignored; final submission recalculates the accepted values. Both breakdowns and the parent are saved within one transaction.
+
 ## Structure
 
-Backend packages under `au.org.resourcework.waste_tracking_api`: `auth`, `config`, `reference`, `cratepallet` (with `dto`), and `error`. Workflow controllers call services, which own transactions and call repositories. Flyway SQL lives in `backend/src/main/resources/db/migration`; Hibernate validates rather than creates tables. V1/V2 are preserved, V3 adds the schema, V4 seeds reference data, and V5 adds the record version.
+Backend packages under `au.org.resourcework.waste_tracking_api`: `auth`, `config`, `reference`, `cratepallet`, `salvage`, and `error`. Workflow controllers call services, which own transactions and call repositories, and use DTOs. Flyway SQL lives in `backend/src/main/resources/db/migration`; Hibernate validates rather than creates tables. V1/V2 are preserved, V3 adds the initial schema, V4 seeds reference data, V5 adds Crate/Pallet versioning, V6 adds category applicability, and V7 adds Salvage.
 
-Frontend: `api` for HTTP/CSRF handling, `features/auth`, `features/crate-pallet`, `pages/RecordsPage.tsx`, and `styles`. Components use local React state and native fetch; no Redux or additional application framework is introduced.
+Frontend: `api` for HTTP/CSRF handling; `features/auth`, `features/crate-pallet`, and `features/salvage`; workflow-qualified record types in `features/records`; shared decimal/date helpers in `utils`; `pages/RecordsPage.tsx`; and `styles`. Components use local React state and native fetch; no Redux or additional application framework is introduced.
 
 ## Verification
 
@@ -126,7 +155,7 @@ The runner starts a loopback-only PostgreSQL instance on a free port, generates 
 
 Before Spring bean creation or Flyway migration, a test initializer verifies the database URL, name, account, address, port, and identity token and pins the connection properties again. Integration setup rechecks the actual datasource before modifying data. Teardown only runs after successful verification and rechecks isolation before its updates. Unit tests cover redirected connections, wrong identity tokens, property overrides, and teardown after failed setup.
 
-The runner executes 16 tests (9 unit tests and 7 integration tests), packages the backend, and stops PostgreSQL. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
+The runner executes 34 tests (14 unit tests and 20 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
 
 For the complete browser smoke test:
 
@@ -135,6 +164,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-backend.ps1
 ```
 
 This also builds/lints the frontend and launches temporary backend, Vite preview, and headless Chrome processes. It tests session/CSRF login, percentage validation, review, navigation/logout guards during submission, retaining the retry UUID across a Records visit, definitive conflict handling, Staff read-only access, Admin correction, lost-delete-response/404 reconciliation, selected-detail refresh, and tablet layout. It uses the existing Node/Chrome DevTools smoke runner without adding a framework. Set `CHROME_PATH` if Chrome/Edge is installed elsewhere. Screenshots/logs are under ignored `backend/target/browser-test-*`. Test processes are stopped afterward.
+
+The browser suite also exercises Salvage's distinct category sets, one crew, earlier Down times, all four zero/positive combinations with mandatory times, hidden zero-direction inputs, positive-to-zero and zero-to-positive corrections, stale-version recovery, and retry/navigation across workflow views.
 
 Frontend checks separately:
 

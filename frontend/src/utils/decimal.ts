@@ -1,5 +1,5 @@
 /** Sum percentage hundredths using integers, avoiding binary floating-point arithmetic. */
-export function percentageHundredths(value: string): bigint | null {
+export function decimalHundredths(value: string): bigint | null {
   if (!/^\d+(\.\d{1,2})?$/.test(value)) return null
   const [whole, fraction = ''] = value.split('.')
   return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'))
@@ -8,7 +8,7 @@ export function percentageHundredths(value: string): bigint | null {
 export function percentageTotal(values: string[]): string | null {
   let total = 0n
   for (const value of values) {
-    const amount = percentageHundredths(value)
+    const amount = decimalHundredths(value)
     if (amount === null || amount > 10000n) return null
     total += amount
   }

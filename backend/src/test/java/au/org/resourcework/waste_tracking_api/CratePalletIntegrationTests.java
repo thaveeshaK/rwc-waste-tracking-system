@@ -64,8 +64,10 @@ class CratePalletIntegrationTests {
     @Test
     void migratesApprovedReferenceDataAndSecuresEndpoints() throws Exception {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM container_type", Integer.class)).isEqualTo(5);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM material_category", Integer.class)).isEqualTo(13);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM material_category WHERE name = 'E-waste'", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM material_category", Integer.class)).isEqualTo(16);
+        mvc.perform(get("/api/material-categories").session(staff))
+                .andExpect(jsonPath("$.length()").value(13))
+                .andExpect(jsonPath("$[?(@.name == 'E-waste')]").isEmpty());
         mvc.perform(get("/api/crate-pallet-records")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/auth/csrf")).andExpect(status().isOk()).andExpect(jsonPath("$.token").isNotEmpty());
         mvc.perform(post("/api/auth/login").with(csrf()).param("username", "unknown").param("password", "wrong"))

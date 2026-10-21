@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react'
-import { percentageTotal } from './decimal'
+import { percentageTotal } from '../../utils/decimal'
 import type { ContainerType, CratePalletInput, MaterialCategory } from './types'
 
 interface Props {

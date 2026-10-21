@@ -20,8 +20,8 @@ public class ReferenceService {
                 .map(c -> new ContainerResponse(c.getId(), c.getName(), c.getTareWeight().toPlainString())).toList();
     }
 
-    public List<MaterialResponse> materials() {
-        return materials.findByActiveTrueOrderByIdAsc().stream()
+    public List<MaterialResponse> materials(MaterialContext context) {
+        return materials.findAvailable(context.name()).stream()
                 .map(m -> new MaterialResponse(m.getId(), m.getName())).toList();
     }
 

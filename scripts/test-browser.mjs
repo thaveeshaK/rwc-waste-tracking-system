@@ -63,9 +63,10 @@ async function click(text) {
   })()`)
 }
 
-async function fill(label, value) {
+async function fill(label, value, scope = '') {
   await evaluate(`(() => {
-    const label = [...document.querySelectorAll('label')].find(l => l.textContent.trim().startsWith(${JSON.stringify(label)}));
+    const root = ${scope ? `document.querySelector(${JSON.stringify(scope)})` : 'document'};
+    const label = [...root.querySelectorAll('label')].find(l => l.textContent.trim().startsWith(${JSON.stringify(label)}));
     const input = label?.querySelector('input, select');
     if (!input) throw new Error('Input missing: ' + ${JSON.stringify(label)});
     const prototype = input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
@@ -79,6 +80,18 @@ const enabled = text => until(() => evaluate(`[...document.querySelectorAll('but
 async function screenshot(name) {
   const result = await cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })
   writeFileSync(join(output, name + '.png'), Buffer.from(result.data, 'base64'))
+}
+
+async function browserApi(path, method = 'GET', body) {
+  return evaluate(`(async () => {
+    const headers = { 'Content-Type': 'application/json' };
+    if (${JSON.stringify(method)} !== 'GET') {
+      const token = await fetch('/api/auth/csrf').then(r => r.json()); headers[token.headerName] = token.token;
+    }
+    const response = await fetch(${JSON.stringify(path)}, { method: ${JSON.stringify(method)}, headers,
+      body: ${body === undefined ? 'undefined' : JSON.stringify(JSON.stringify(body))} });
+    return { status: response.status, body: response.status === 204 ? null : await response.json() };
+  })()`)
 }
 
 try {
@@ -279,6 +292,162 @@ try {
   })()`)
   await click('Apply dates / refresh')
   await until(() => evaluate("document.querySelector('.detail-panel') === null"), 'selected deleted record cleared after refresh')
+
+  // Salvage has its own material contexts and one crew for the complete trip.
+  await click('Sign out')
+  await hasText('Sign in')
+  await fill('Username', process.env.INITIAL_STAFF_USERNAME)
+  await fill('Password', process.env.INITIAL_STAFF_PASSWORD)
+  await click('Sign in')
+  await hasText('Submitted records are read-only for Staff.')
+  const upScope = 'fieldset[data-direction="UP"]'
+  const downScope = 'fieldset[data-direction="DOWN"]'
+  await click('New Salvage')
+  await until(() => evaluate(`document.querySelector('${upScope} .material-grid')?.children.length === 9 && document.querySelector('${downScope} .material-grid')?.children.length === 14`), 'direction-specific material sets')
+  assert.equal(await evaluate("[...document.querySelectorAll('form label')].filter(l => l.textContent.startsWith('Crew')).length"), 1)
+  assert.equal(await evaluate(`document.querySelector('${upScope}').textContent.includes('Lead Acid Batteries')`), false)
+  assert.equal(await evaluate(`document.querySelector('${downScope}').textContent.includes('Mattresses')`), false)
+  await fill('Crew', 'Salvage smoke crew')
+  await fill('Time Up', '15:30', upScope)
+  await fill('Time Down', '09:15', downScope)
+  await fill('Kg Up', '10.00', upScope)
+  await fill('Kg Down', '20.00', downScope)
+  await fill('E-waste', '100.00', upScope)
+  await fill('E-waste', '100.00', downScope)
+  await screenshot('tablet-salvage-entry')
+  await click('Review trip')
+  await hasText('Review both directions before confirming.')
+  assert.equal(await evaluate("[...document.querySelectorAll('.salvage-review dt')].filter(n => n.textContent === 'Crew').length"), 1)
+  await evaluate(`window.__salvagePayloads = []; window.__salvageLost = false;
+    window.__salvageGate = new Promise(resolve => { window.__releaseSalvage = resolve; });
+    window.fetch = async (...args) => {
+      const submission = args[0] === '/api/salvage-records' && args[1]?.method === 'POST';
+      if (submission) { window.__salvagePayloads.push(args[1].body); await window.__salvageGate; }
+      const response = await window.__realFetch(...args);
+      if (submission && response.ok && !window.__salvageLost) { window.__salvageLost = true; throw new TypeError('Simulated lost Salvage response'); }
+      return response;
+    };`)
+  await click('Confirm and submit')
+  await until(() => evaluate('window.__salvagePayloads.length === 1'), 'Salvage submission started')
+  for (const label of ['Records', 'New Crate / Pallet', 'New Salvage', 'Sign out']) {
+    assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(label)}).disabled`), true)
+  }
+  await evaluate('window.__releaseSalvage()')
+  await enabled('Retry submission')
+  await click('Check Records')
+  await until(() => evaluate("document.querySelector('select').value === 'SALVAGE'"), 'Salvage records selected')
+  await fill('Workflow', 'CRATE_PALLET')
+  await enabled('Apply dates / refresh')
+  assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
+  await fill('Workflow', 'SALVAGE')
+  await click('Resume submission')
+  await enabled('Retry submission')
+  await click('Retry submission')
+  await hasText('saved successfully.')
+  const salvagePayloads = await evaluate('window.__salvagePayloads')
+  assert.equal(salvagePayloads.length, 2)
+  assert.equal(salvagePayloads[0], salvagePayloads[1])
+  const salvageSubmission = JSON.parse(salvagePayloads[0]).submissionId
+  let trips = await browserApi('/api/salvage-records')
+  assert.equal(trips.body.filter(r => r.submissionId === salvageSubmission).length, 1)
+  const firstSalvageId = trips.body.find(r => r.submissionId === salvageSubmission).id
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b => b.textContent === 'Correct record')"), false)
+  await screenshot('tablet-salvage-saved')
+  await evaluate('window.fetch = window.__realFetch')
+
+  // Exercise the remaining zero-weight combinations through the actual form.
+  for (const [up, down] of [['0.00', '20.00'], ['10.00', '0.00'], ['0.00', '0.00']]) {
+    await click('New Salvage')
+    await until(() => evaluate(`document.querySelector('${upScope} .material-grid')?.children.length === 9`), 'new Salvage form')
+    await fill('Crew', `Zero combination ${up}/${down}`)
+    await fill('Kg Up', up, upScope)
+    await fill('Kg Down', down, downScope)
+    for (const [weight, scope] of [[up, upScope], [down, downScope]]) {
+      if (weight === '0.00') assert.equal(await evaluate(`document.querySelector('${scope} .material-grid') === null`), true)
+      else await fill('Timber', '100.00', scope)
+    }
+    // Even the both-zero case requires both times.
+    await click('Review trip')
+    assert.equal(await evaluate("document.querySelector('form').checkValidity()"), false)
+    await fill('Time Up', '15:30', upScope)
+    await fill('Time Down', '09:15', downScope)
+    await click('Review trip')
+    await hasText('Review both directions before confirming.')
+    await click('Confirm and submit')
+    await hasText('saved successfully.')
+    const id = await evaluate("document.querySelector('.detail-heading h2').textContent.split('#')[1]")
+    const saved = (await browserApi('/api/salvage-records/' + id)).body
+    assert.equal(saved.up.kg, up); assert.equal(saved.down.kg, down)
+    assert.equal(saved.up.materials.length, up === '0.00' ? 0 : 1)
+    assert.equal(saved.down.materials.length, down === '0.00' ? 0 : 1)
+  }
+  await click('Sign out')
+  await hasText('Sign in')
+  await fill('Username', process.env.INITIAL_ADMIN_USERNAME)
+  await fill('Password', process.env.INITIAL_ADMIN_PASSWORD)
+  await click('Sign in')
+  await hasText('View submitted loads, correct entries')
+  await fill('Workflow', 'SALVAGE')
+  await enabled('#' + firstSalvageId)
+  await click('#' + firstSalvageId)
+  await hasText('Correct record')
+  await click('Correct record')
+  await until(() => evaluate(`document.querySelector('${upScope} .material-grid')?.children.length === 9`), 'Admin Salvage form')
+  await fill('Kg Up', '0.00', upScope)
+  await click('Review trip')
+  await hasText('Review both directions before confirming.')
+  await click('Confirm correction')
+  await hasText('saved successfully.')
+  let updated = (await browserApi('/api/salvage-records/' + firstSalvageId)).body
+  assert.equal(updated.up.materials.length, 0)
+  assert.equal(updated.down.materials.length, 1)
+  await click('Correct record')
+  await until(() => evaluate(`document.querySelector('${upScope} .material-grid') === null && document.querySelector('${upScope} input') !== null`), 'zero-weight Admin form')
+  await fill('Kg Up', '10.00', upScope)
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === 'Review trip').disabled"), true)
+  await fill('Timber', '100.00', upScope)
+  await click('Review trip')
+  await hasText('Review both directions before confirming.')
+  await click('Confirm correction')
+  await hasText('saved successfully.')
+  updated = (await browserApi('/api/salvage-records/' + firstSalvageId)).body
+  assert.equal(updated.up.materials.length, 1)
+
+  // Change the record from another request while an Admin has an older form open.
+  await click('Correct record')
+  await until(() => evaluate(`document.querySelector('${upScope} .material-grid')?.children.length === 9`), 'stale-correction form')
+  const materialInputs = side => side.materials.map(({ materialCategoryId, percentage }) => ({ materialCategoryId, percentage }))
+  const changed = await browserApi('/api/salvage-records/' + firstSalvageId, 'PUT', {
+    submissionId: updated.submissionId, recordDate: updated.recordDate, crew: 'Other Admin correction', version: updated.version,
+    up: { time: updated.up.time, kg: updated.up.kg, materials: materialInputs(updated.up) },
+    down: { time: updated.down.time, kg: updated.down.kg, materials: materialInputs(updated.down) },
+  })
+  assert.equal(changed.status, 200)
+  await click('Review trip')
+  await hasText('This record has changed.')
+  await click('Back to Records')
+  await enabled('#' + firstSalvageId)
+  await click('#' + firstSalvageId)
+  await hasText('Other Admin correction')
+  await enabled('Delete record')
+  await evaluate(`window.__salvageDeleteLost = false;
+    window.fetch = async (...args) => {
+      const response = await window.__realFetch(...args);
+      if (args[0].startsWith('/api/salvage-records/') && args[1]?.method === 'DELETE' && response.ok && !window.__salvageDeleteLost) {
+        window.__salvageDeleteLost = true; throw new TypeError('Simulated lost Salvage delete');
+      }
+      return response;
+    };`)
+  await click('Delete record')
+  await click('Confirm deletion')
+  await hasText('Simulated lost Salvage delete')
+  await enabled('Confirm deletion')
+  await click('Confirm deletion')
+  await hasText('is already deleted or no longer available.')
+  assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
+  assert.equal((await browserApi('/api/salvage-records/' + firstSalvageId)).status, 404)
+  await evaluate('window.fetch = window.__realFetch')
+  console.log('PASS: Salvage direction-specific categories, single crew, independent review, all four zero/positive combinations, mandatory times at zero, positive/zero correction transitions, stale Admin correction, retry/navigation across workflows, soft deletion and lost-delete reconciliation.')
   console.log('PASS: login/CSRF, validation/review, active-submission navigation/logout guards, retry UUID retained across Records navigation, definitive conflict handling, Admin correction, lost-delete/404 reconciliation, selected-detail refresh, and tablet layout.')
   console.log('Screenshots and logs: ' + output)
 } catch (error) {
