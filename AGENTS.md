@@ -84,3 +84,7 @@ It must support:
 - review before submission
 - saving the record
 - displaying the saved record on the Records page
+
+Applied Flyway migrations are immutable.
+Any schema change must use a new migration version.
+Never modify an already-applied migration.
