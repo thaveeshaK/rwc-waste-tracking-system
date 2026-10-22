@@ -55,9 +55,10 @@ async function evaluate(expression) {
   return response.result.value
 }
 
-async function click(text) {
+async function click(text, scope = '') {
   await evaluate(`(() => {
-    const button = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(text)});
+    const root = ${scope ? `document.querySelector(${JSON.stringify(scope)})` : 'document'};
+    const button = [...root.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(text)});
     if (!button || button.disabled) throw new Error('Button missing or disabled: ' + ${JSON.stringify(text)});
     button.click();
   })()`)
@@ -1000,6 +1001,183 @@ try {
   await expectWhitegoodsSummary('2001-01', 3, '144.00')
   assert.equal((await browserApi('/api/whitegoods-records/' + whitegoodsId)).status, 404)
   await evaluate('window.fetch = window.__realFetch')
+  // Electrical Testing: category counters, independent overall diversions, monthly sales references.
+  await click('Sign out')
+  await hasText('Sign in')
+  await fill('Username', process.env.INITIAL_STAFF_USERNAME)
+  await fill('Password', process.env.INITIAL_STAFF_PASSWORD)
+  await click('Sign in')
+  await enabled('Electrical Testing')
+  await click('Electrical Testing')
+  await until(() => evaluate("document.querySelectorAll('.testing-category').length === 15"), '15 electrical item categories')
+  await fill('Tally date', '2002-01-15')
+  await until(() => evaluate("document.querySelectorAll('.testing-category').length === 15 && document.querySelector('input[type=month]').value === '2002-01'"), 'January counter board')
+  const testingCategories = (await browserApi('/api/electrical-testing/categories')).body
+  const testingCategory = testingCategories[0]
+  const testingScope = `.testing-category[data-category="${testingCategory.id}"]`
+  const testingScope2 = `.testing-category[data-category="${testingCategories[1].id}"]`
+  const testingScope3 = `.testing-category[data-category="${testingCategories[2].id}"]`
+  const testingScope4 = `.testing-category[data-category="${testingCategories[3].id}"]`
+  assert.equal(await evaluate(`document.querySelector('${testingScope} .sales-reference').textContent.includes('Not entered')`), true)
+  assert.equal(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), true)
+  await click('Enter sales reference', testingScope)
+  await hasText('Sold Last Month reference')
+  await fill('Sold Last Month count', '0')
+  await click('Review entry')
+  await enabled('Confirm and submit')
+  await click('Confirm and submit')
+  await until(() => evaluate(`document.querySelector('${testingScope} .sales-reference strong')?.textContent === '0'`), 'explicit zero reference')
+  assert.equal(await evaluate(`[...document.querySelectorAll('${testingScope} button')].some(b => b.textContent === 'Correct sales reference')`), false)
+  await click('Enter sales reference', testingScope2)
+  await fill('Sold Last Month count', '7')
+  await click('Review entry')
+  await enabled('Confirm and submit')
+  await click('Confirm and submit')
+  await until(() => evaluate(`document.querySelector('${testingScope2} .sales-reference strong')?.textContent === '7'`), 'second category sales reference')
+  await click('+ Tested and Priced', testingScope)
+  await hasText('Processing / diversion tally')
+  await click('Increase quantity')
+  await click('Decrease quantity')
+  await fill('Tally quantity', '0')
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === 'Review entry').disabled"), true)
+  await fill('Tally quantity', '2')
+  await screenshot('tablet-testing-tally')
+  await click('Review entry')
+  await enabled('Confirm and submit')
+  await evaluate(`window.__testingPayloads=[];window.__testingLost=false;
+    window.__testingGate=new Promise(resolve=>{window.__releaseTesting=resolve});
+    window.fetch=async(...args)=>{
+      const submission=args[0]==='/api/electrical-testing/tallies'&&args[1]?.method==='POST';
+      if(submission){window.__testingPayloads.push(args[1].body);await window.__testingGate}
+      const response=await window.__realFetch(...args);
+      if(submission&&response.ok&&!window.__testingLost){window.__testingLost=true;throw new TypeError('Simulated lost testing tally response')}
+      return response;
+    };`)
+  await click('Confirm and submit')
+  await until(() => evaluate('window.__testingPayloads.length === 1'), 'testing tally in progress')
+  for(const label of ['Records','New Crate / Pallet','New Salvage','New Pickup','New Electrical Crate / Pallet','New Collectables','New Whitegoods','Electrical Testing','Sign out']) {
+    assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(label)}).disabled`),true)
+  }
+  await evaluate('window.__releaseTesting()')
+  await enabled('Retry submission')
+  await click('Check Records')
+  await fill('Workflow','WHITEGOODS')
+  await enabled('Apply dates / refresh')
+  await click('Resume submission')
+  await enabled('Retry submission')
+  await click('Retry submission')
+  await until(() => evaluate(`document.querySelector('${testingScope} .testing-counters')?.textContent.includes('Tested and Priced: 2')`), 'saved testing tally count')
+  const testingPayloads=await evaluate('window.__testingPayloads')
+  assert.equal(testingPayloads.length,2);assert.equal(testingPayloads[0],testingPayloads[1])
+  await evaluate('window.fetch=window.__realFetch')
+  const testingInput=JSON.parse(testingPayloads[0])
+  const testingSaved=(await browserApi('/api/electrical-testing/tallies')).body.filter(r=>r.submissionId===testingInput.submissionId)
+  assert.equal(testingSaved.length,1)
+  const testingId=testingSaved[0].id
+  await click('+ Untested / Broken / Failed',testingScope)
+  await click('Review entry')
+  await enabled('Confirm and submit')
+  await click('Confirm and submit')
+  await until(()=>evaluate(`document.querySelector('${testingScope} .testing-counters')?.textContent.includes('Untested / Broken / Failed: 1')`),'independent testing status')
+  for(const [label,count] of [['+ Diverted to OLS','3'],['+ Diverted to Coll','4']]) {
+    await click(label)
+    assert.equal(await evaluate("document.querySelector('.testing-entry select') === null"),true)
+    await fill('Tally quantity',count)
+    await click('Review entry')
+    await enabled('Confirm and submit')
+    await click('Confirm and submit')
+    await until(()=>evaluate("document.querySelectorAll('.testing-category').length === 15"),'diversion return to counters')
+  }
+  const testingSummary=(await browserApi('/api/electrical-testing/monthly-summary?month=2002-01')).body
+  assert.equal(testingSummary.divertedToOls,3);assert.equal(testingSummary.divertedToColl,4)
+  assert.equal(testingSummary.categories[0].testedAndPriced,2)
+  await click('Enter sales reference',testingScope3)
+  await fill('Sold Last Month count','5')
+  await click('Review entry')
+  await enabled('Confirm and submit')
+  assert.equal((await browserApi('/api/electrical-testing/sales-references','POST',{submissionId:crypto.randomUUID(),reportingMonth:'2002-01',categoryId:testingCategories[2].id,soldLastMonthCount:5})).status,201)
+  await click('Confirm and submit')
+  await hasText('Conflict:')
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent === 'Retry submission')"),false)
+  await click('Reload counters')
+  await until(()=>evaluate(`document.querySelector('${testingScope3} .sales-reference strong')?.textContent === '5'`),'reference conflict reconciled')
+  await click('Enter sales reference',testingScope4)
+  await fill('Sold Last Month count','0')
+  await click('Review entry')
+  await enabled('Confirm and submit')
+  await evaluate(`window.__referencePayloads=[];window.__referenceLost=false;
+    window.fetch=async(...args)=>{
+      const submission=args[0]==='/api/electrical-testing/sales-references'&&args[1]?.method==='POST';
+      if(submission)window.__referencePayloads.push(args[1].body);
+      const response=await window.__realFetch(...args);
+      if(submission&&response.ok&&!window.__referenceLost){window.__referenceLost=true;throw new TypeError('Simulated lost sales reference response')}
+      return response;
+    };`)
+  await click('Confirm and submit')
+  await enabled('Retry submission')
+  await click('Retry submission')
+  await until(()=>evaluate(`document.querySelector('${testingScope4} .sales-reference strong')?.textContent === '0'`),'reference retry resolved')
+  const referencePayloads=await evaluate('window.__referencePayloads');assert.equal(referencePayloads.length,2);assert.equal(referencePayloads[0],referencePayloads[1])
+  await evaluate('window.fetch=window.__realFetch')
+  await screenshot('tablet-testing-counters')
+  await click('Records')
+  await enabled('#'+testingId)
+  await click('#'+testingId)
+  await hasText('This is an additive operational tally')
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent === 'Correct record')"),false)
+  await click('Sign out')
+  await hasText('Sign in')
+  await fill('Username',process.env.INITIAL_ADMIN_USERNAME)
+  await fill('Password',process.env.INITIAL_ADMIN_PASSWORD)
+  await click('Sign in')
+  await enabled('#'+testingId)
+  await click('#'+testingId)
+  await enabled('Correct record')
+  await click('Correct record')
+  await hasText('Processing / diversion tally')
+  await fill('Record date','2002-02-01')
+  await fill('Tally type','DIVERTED_TO_OLS')
+  await fill('Tally quantity','5')
+  await click('Review entry')
+  await enabled('Confirm correction')
+  await click('Confirm correction')
+  await hasText('saved successfully.')
+  assert.equal((await browserApi('/api/electrical-testing/monthly-summary?month=2002-01')).body.categories[0].testedAndPriced,0)
+  assert.equal((await browserApi('/api/electrical-testing/monthly-summary?month=2002-02')).body.divertedToOls,5)
+  await click('Electrical Testing')
+  await until(()=>evaluate("document.querySelectorAll('.testing-category').length === 15"),'Admin testing board')
+  await fill('Tally date','2002-01-15')
+  await until(()=>evaluate(`document.querySelector('${testingScope} .sales-reference strong')?.textContent === '0'`),'Admin reference loaded')
+  await click('Correct sales reference',testingScope)
+  await fill('Sold Last Month count','11')
+  await click('Review entry')
+  await enabled('Confirm correction')
+  await click('Confirm correction')
+  await until(()=>evaluate(`document.querySelector('${testingScope} .sales-reference strong')?.textContent === '11'`),'reference replacement')
+  let testingReference=(await browserApi('/api/electrical-testing/sales-references?month=2002-01')).body.find(r=>r.categoryId===testingCategory.id)
+  await click('Correct sales reference',testingScope)
+  assert.equal((await browserApi('/api/electrical-testing/sales-references/'+testingReference.id,'PUT',{submissionId:testingReference.submissionId,reportingMonth:'2002-01',categoryId:testingCategory.id,soldLastMonthCount:12,version:testingReference.version})).status,200)
+  await click('Review entry')
+  await hasText('This record has changed.')
+  await click('Reload counters')
+  await until(()=>evaluate(`document.querySelector('${testingScope} .sales-reference strong')?.textContent === '12'`),'stale reference reload')
+  await click('Delete sales reference',testingScope)
+  await evaluate(`window.__testingDeleteLost=false;window.fetch=async(...args)=>{const response=await window.__realFetch(...args);if(args[1]?.method==='DELETE'&&response.ok&&!window.__testingDeleteLost){window.__testingDeleteLost=true;throw new TypeError('Simulated lost reference delete')}return response};`)
+  await click('Confirm reference deletion')
+  await hasText('Simulated lost reference delete')
+  await enabled('Confirm reference deletion')
+  await click('Confirm reference deletion')
+  await until(()=>evaluate(`document.querySelector('${testingScope} .sales-reference strong')?.textContent === 'Not entered'`),'deleted reference returns to missing')
+  await evaluate('window.fetch=window.__realFetch')
+  await click('Records')
+  await enabled('#'+testingId)
+  await click('#'+testingId)
+  await enabled('Delete record')
+  await click('Delete record')
+  await click('Confirm deletion')
+  await hasText('Record #'+testingId+' deleted.')
+  assert.equal((await browserApi('/api/electrical-testing/monthly-summary?month=2002-02')).body.divertedToOls,0)
+  console.log('PASS: Electrical Testing category counters, overall diversions, positive tally validation, missing/zero sales references, Staff read-only references, retry UUIDs, conflicts, Admin corrections/deletions and derived monthly totals.')
   console.log('PASS: Whitegoods zero/same-day entries, fixed factor, review/save, retry/navigation, independent monthly summary and error recovery, Admin month/count corrections, stale versions and deletion-driven totals.')
   console.log('PASS: Collectables operational/physical-label reminders, fixed tare, positive-net validation, category isolation, review/edit/save, retry/navigation, Staff permissions, date filters, Admin correction, stale versions and delete reconciliation.')
   console.log('PASS: Electrical Crate/Pallet four-container/two-category isolation, positive-net validation, review, retry/navigation, Staff access, date filters, Admin container/tare correction, stale versions, delete reconciliation and tablet layout.')
