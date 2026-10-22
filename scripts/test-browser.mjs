@@ -857,6 +857,150 @@ try {
   assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
   assert.equal((await browserApi('/api/collectable-records/' + collectableId)).status, 404)
   await evaluate('window.fetch = window.__realFetch')
+  // Whitegoods: daily quantities, zero and same-day entries, derived calendar-month summaries.
+  await click('Sign out')
+  await hasText('Sign in')
+  await fill('Username', process.env.INITIAL_STAFF_USERNAME)
+  await fill('Password', process.env.INITIAL_STAFF_PASSWORD)
+  await click('Sign in')
+  await enabled('New Whitegoods')
+  await click('New Whitegoods')
+  await hasText('Whitegoods entry')
+  assert.equal(await evaluate("document.querySelectorAll('form label').length"), 2)
+  for (const invalid of ['-1', '1.5', '2147483648']) {
+    await fill('Whitegoods count', invalid)
+    assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Review Whitegoods').disabled"), true)
+  }
+  await fill('Record date', '2001-01-15')
+  await fill('Whitegoods count', '5')
+  await screenshot('tablet-whitegoods-entry')
+  await click('Review Whitegoods')
+  await enabled('Confirm and submit')
+  await hasText('240.00 kg')
+  await evaluate(`window.__whitegoodsPayloads = []; window.__whitegoodsLost = false;
+    window.__whitegoodsGate = new Promise(resolve => { window.__releaseWhitegoods = resolve; });
+    window.fetch = async (...args) => {
+      const submission = args[0] === '/api/whitegoods-records' && args[1]?.method === 'POST';
+      if (submission) { window.__whitegoodsPayloads.push(args[1].body); await window.__whitegoodsGate; }
+      const response = await window.__realFetch(...args);
+      if (submission && response.ok && !window.__whitegoodsLost) { window.__whitegoodsLost = true; throw new TypeError('Simulated lost Whitegoods response'); }
+      return response;
+    };`)
+  await click('Confirm and submit')
+  await until(() => evaluate('window.__whitegoodsPayloads.length === 1'), 'Whitegoods submission active')
+  for (const label of ['Records', 'New Crate / Pallet', 'New Salvage', 'New Pickup', 'New Electrical Crate / Pallet', 'New Collectables', 'New Whitegoods', 'Sign out']) {
+    assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(label)}).disabled`), true)
+  }
+  await evaluate('window.__releaseWhitegoods()')
+  await enabled('Retry submission')
+  await click('Check Records')
+  await until(() => evaluate("document.querySelector('select').value === 'WHITEGOODS'"), 'Whitegoods Records selected')
+  await fill('Workflow', 'COLLECTABLES')
+  await enabled('Apply dates / refresh')
+  await click('Resume submission')
+  await enabled('Retry submission')
+  await click('Retry submission')
+  await hasText('saved successfully.')
+  const whitegoodsPayloads = await evaluate('window.__whitegoodsPayloads')
+  assert.equal(whitegoodsPayloads.length, 2)
+  assert.equal(whitegoodsPayloads[0], whitegoodsPayloads[1])
+  await evaluate('window.fetch = window.__realFetch')
+  const whitegoodsInput = JSON.parse(whitegoodsPayloads[0])
+  const whitegoodsRecords = (await browserApi('/api/whitegoods-records')).body.filter(r => r.submissionId === whitegoodsInput.submissionId)
+  assert.equal(whitegoodsRecords.length, 1)
+  const whitegoodsId = whitegoodsRecords[0].id
+  assert.equal(whitegoodsRecords[0].kgPerItem, '48.00')
+  assert.equal(whitegoodsRecords[0].estimatedWeight, '240.00')
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b => b.textContent === 'Correct record')"), false)
+  async function expectWhitegoodsSummary(month, count, weight) {
+    await fill('Summary month', month)
+    await until(() => evaluate(`(() => {
+      const values = [...document.querySelectorAll('.whitegoods-summary dd')].map(n => n.textContent);
+      return values[0] === ${JSON.stringify(month)} && values[1] === ${JSON.stringify(String(count))} && values[2] === ${JSON.stringify(weight + ' kg')};
+    })()`), 'Whitegoods monthly summary ' + month + ' count ' + count)
+  }
+  await expectWhitegoodsSummary('2001-01', 5, '240.00')
+  await screenshot('tablet-whitegoods-summary')
+  for (const quantity of ['0', '3']) {
+    await click('New Whitegoods')
+    await fill('Record date', '2001-01-15')
+    await fill('Whitegoods count', quantity)
+    await click('Review Whitegoods')
+    await enabled('Confirm and submit')
+    await click('Confirm and submit')
+    await hasText('saved successfully.')
+    await expectWhitegoodsSummary('2001-01', quantity === '0' ? 5 : 8, quantity === '0' ? '240.00' : '384.00')
+  }
+  assert.equal((await browserApi('/api/whitegoods-records?from=2001-01-15&to=2001-01-15')).body.length, 3)
+  await fill('To', '1999-12-31')
+  await click('Apply dates / refresh')
+  await hasText('No records found.')
+  await expectWhitegoodsSummary('2001-01', 8, '384.00') // Summary is independent of list dates.
+  await fill('To', '')
+  await click('Apply dates / refresh')
+  await enabled('#' + whitegoodsId)
+  await evaluate(`window.fetch = async (...args) => {
+    if (args[0].startsWith('/api/whitegoods-records/monthly-summary')) throw new TypeError('Simulated monthly summary failure');
+    return window.__realFetch(...args);
+  };`)
+  await fill('Summary month', '2001-03')
+  await hasText('Simulated monthly summary failure')
+  assert.equal(await evaluate("document.querySelectorAll('.whitegoods-summary dd').length"), 0)
+  await evaluate('window.fetch = window.__realFetch')
+  await click('Retry monthly summary')
+  await expectWhitegoodsSummary('2001-03', 0, '0.00')
+  await click('Sign out')
+  await hasText('Sign in')
+  await fill('Username', process.env.INITIAL_ADMIN_USERNAME)
+  await fill('Password', process.env.INITIAL_ADMIN_PASSWORD)
+  await click('Sign in')
+  await enabled('#' + whitegoodsId)
+  await click('#' + whitegoodsId)
+  await enabled('Correct record')
+  await click('Correct record')
+  await hasText('Whitegoods entry')
+  await fill('Record date', '2001-02-01')
+  await fill('Whitegoods count', '10')
+  await click('Review Whitegoods')
+  await enabled('Confirm correction')
+  await click('Confirm correction')
+  await hasText('saved successfully.')
+  await expectWhitegoodsSummary('2001-01', 3, '144.00')
+  await expectWhitegoodsSummary('2001-02', 10, '480.00')
+  const whitegoodsUpdated = (await browserApi('/api/whitegoods-records/' + whitegoodsId)).body
+  await enabled('Correct record')
+  await click('Correct record')
+  await hasText('Whitegoods entry')
+  const whitegoodsChanged = await browserApi('/api/whitegoods-records/' + whitegoodsId, 'PUT', {
+    ...whitegoodsInput, recordDate: '2001-02-01', count: 11, version: whitegoodsUpdated.version,
+  })
+  assert.equal(whitegoodsChanged.status, 200)
+  await click('Review Whitegoods')
+  await hasText('This record has changed.')
+  await click('Back to Records')
+  await expectWhitegoodsSummary('2001-02', 11, '528.00')
+  await enabled('#' + whitegoodsId)
+  await click('#' + whitegoodsId)
+  await enabled('Delete record')
+  await evaluate(`window.__whitegoodsDeleteLost = false;
+    window.fetch = async (...args) => {
+      const response = await window.__realFetch(...args);
+      if (args[0].startsWith('/api/whitegoods-records/') && args[1]?.method === 'DELETE' && response.ok && !window.__whitegoodsDeleteLost) {
+        window.__whitegoodsDeleteLost = true; throw new TypeError('Simulated lost Whitegoods delete');
+      }
+      return response;
+    };`)
+  await click('Delete record')
+  await click('Confirm deletion')
+  await hasText('Simulated lost Whitegoods delete')
+  await enabled('Confirm deletion')
+  await click('Confirm deletion')
+  await hasText('is already deleted or no longer available.')
+  await expectWhitegoodsSummary('2001-02', 0, '0.00')
+  await expectWhitegoodsSummary('2001-01', 3, '144.00')
+  assert.equal((await browserApi('/api/whitegoods-records/' + whitegoodsId)).status, 404)
+  await evaluate('window.fetch = window.__realFetch')
+  console.log('PASS: Whitegoods zero/same-day entries, fixed factor, review/save, retry/navigation, independent monthly summary and error recovery, Admin month/count corrections, stale versions and deletion-driven totals.')
   console.log('PASS: Collectables operational/physical-label reminders, fixed tare, positive-net validation, category isolation, review/edit/save, retry/navigation, Staff permissions, date filters, Admin correction, stale versions and delete reconciliation.')
   console.log('PASS: Electrical Crate/Pallet four-container/two-category isolation, positive-net validation, review, retry/navigation, Staff access, date filters, Admin container/tare correction, stale versions, delete reconciliation and tablet layout.')
   console.log('PASS: Pickup positive-weight and required-location validation, exact percentages, category restrictions, review/edit, retained retry payload/navigation, Staff permissions, date filters, Admin recalculation, stale correction and lost-delete reconciliation.')

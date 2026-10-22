@@ -43,8 +43,8 @@ public class SecurityConfig {
         // Keep the default session-backed CSRF protection, including on login/logout.
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/csrf", "/api/auth/login").permitAll()
-                .requestMatchers(HttpMethod.PUT, "/api/crate-pallet-records/**", "/api/salvage-records/**", "/api/pickup-records/**", "/api/electrical-crate-pallet-records/**", "/api/collectable-records/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/crate-pallet-records/**", "/api/salvage-records/**", "/api/pickup-records/**", "/api/electrical-crate-pallet-records/**", "/api/collectable-records/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/crate-pallet-records/**", "/api/salvage-records/**", "/api/pickup-records/**", "/api/electrical-crate-pallet-records/**", "/api/collectable-records/**", "/api/whitegoods-records/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/crate-pallet-records/**", "/api/salvage-records/**", "/api/pickup-records/**", "/api/electrical-crate-pallet-records/**", "/api/collectable-records/**", "/api/whitegoods-records/**").hasRole("ADMIN")
                 .anyRequest().authenticated())
             .formLogin(form -> form.loginProcessingUrl("/api/auth/login")
                 .successHandler((request, response, authentication) -> response.setStatus(204))
