@@ -1,6 +1,6 @@
 # RWC Waste Tracking System
 
-Implemented workflows are **normal Crate / Pallet**, **Salvage**, **Pickup**, **Electrical Crate / Pallet**, **Collectables**, **Whitegoods**, and **Electrical Testing**: sign in, enter an operational record, review calculated weights, submit, and view saved records. Admins can correct and soft-delete submitted records. Other workflows, reporting, dashboards, and user management are not implemented.
+Implemented workflows are **normal Crate / Pallet**, **Salvage**, **Pickup**, **Electrical Crate / Pallet**, **Collectables**, **Whitegoods**, and **Electrical Testing**: sign in, enter an operational record, review calculated weights, submit, and view saved records. Admins can correct and soft-delete submitted records. Admin Overview, Reports and a Monthly Waste Levy Summary working aid are available. E-waste Pickup, Scrap/Outbound, Users and Settings administration are not implemented.
 
 Requirements: [AGENTS.md](AGENTS.md) and the approved [SRS](docs/SRS-%20Waste%20Tracking%20Operations%20System%20for%20Resource%20Work%20Cooperative.pdf), supplemented by the approved workflow decisions and source datasheets in `docs`.
 
@@ -225,7 +225,7 @@ The runner starts a loopback-only PostgreSQL instance on a free port, generates 
 
 Before Spring bean creation or Flyway migration, a test initializer verifies the database URL, name, account, address, port, and identity token and pins the connection properties again. Integration setup rechecks the actual datasource before modifying data. Teardown only runs after successful verification and rechecks isolation before its updates. Unit tests cover redirected connections, wrong identity tokens, property overrides, and teardown after failed setup.
 
-The runner executes 99 tests (33 unit tests and 66 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
+The runner executes 113 tests (36 unit tests and 77 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
 
 For the complete browser smoke test:
 
@@ -256,3 +256,37 @@ Whitegoods tests cover zero and multiple same-day entries, strict integer valida
 Whitegoods migration regression tests verify the original V11 checksum (-931850275), upgrading populated V11 data to V12 without repair, and fresh V1-through-V12 migration/validation in separate schemas of the verified temporary database. Applied migrations must remain unchanged; schema changes belong in new migrations.
 
 Electrical Testing regressions cover the fifteen categories, positive tally and nonnegative reference rules, category/diversion constraints, preview behaviour, independent monthly totals, inactive historical categories, Staff/Admin/CSRF controls, exact and concurrent retries, unique active references, missing versus zero references, replacement/stale updates, soft deletion, large sums and date boundaries. The browser suite exercises category counters, separate overall diversions, positive tally validation, Staff reference submission/read-only behaviour, both request-recovery paths, definitive conflicts, Admin reference corrections/stale versions, tally month/type corrections, deletion reconciliation and updated monthly totals. The full suite retains all existing workflow and Whitegoods migration-history tests.
+
+
+## Admin reporting
+
+Staff land on Operations and retain read-only submitted Records, the Whitegoods operational summary and Electrical Testing counters. Admins land on Overview and additionally have Reports and Waste Levy Summary. Both roles reuse the existing workflow components. Management pages are guarded by role in React; all `/api/admin/**` endpoints require Admin and reporting/export services enforce the role again. There are no Users or Settings links.
+
+Overview shows submissions created today (Hobart local-midnight boundaries), operational record counts this month, workflow activity, separate monthly weights/counts, ten recent submissions and six months of workflow activity. Sales references are excluded from operational submission counts. Clicking an operational record opens the existing Records detail/correction view.
+
+Reports support daily, Monday-Sunday weekly, calendar-month, July-June financial-year and custom inclusive date ranges. Period presets are based on the From date. Apply filters before exporting. Filters are workflow, material category, Pickup location substring, Salvage direction, and a separate Electrical Testing category. Incompatible backend filter combinations are rejected. Material filters show matching material rows only. Historical inactive reference categories remain reportable.
+
+All operational report dates use `recordDate`; Submitted today uses `created_at`. Sales-reference rows use the reporting month and include each month touched by the filter; they are not prorated, added to tally totals or implicitly filled with zero. Detailed reports have explicit RECORD, DIRECTION, MATERIAL and REFERENCE row types: do not sum parent net weights and their category breakdowns together. A record key is `(workflow, id)`. Detail pages contain up to 50 rows (API maximum 200); exports include all filtered rows, not just the visible page.
+
+The Monthly Waste Levy Summary is a **monthly working aid for manual entry into the existing workbook**, not a completed Waste Levy return, NRE reconciliation or certified report. Sections are Salvage Down, general intake by workflow/container, combined normal general-intake categories, Salvage Up, Electrical Crate/Pallet and Whitegoods estimates. Stillage Cage is never assigned an invented legacy Crates/Pallets grouping. Combined general intake includes only normal Crate/Pallet, Collectables and Pickup. Electrical categories remain separate. E-waste Pickup, Scrap, legacy E-waste reconciliation/carry-over, residual reconstruction, 56/44 assumptions, 80/20 C&I/MSW allocation and AnnualReturn/NRE formulas are excluded.
+
+Reporting sums stored material weights without recalculating percentages or redistributing rounding differences. Net/direction weights may differ slightly from summed rounded categories. Whitegoods estimates sum the stored estimated weights and show applied factors separately. Default display is kg with two decimals; optional summary tonnes use kg/1000 with five decimals. No report claims automatic cross-workflow deduplication or unique diversion. Queries are ordinary read-only transactions over existing tables; there are no reporting migrations, persisted monthly totals, special snapshot infrastructure or caches. Refresh after corrections/deletion; a later export reflects current data and can differ if records changed since the displayed result.
+
+### Management endpoints
+
+All require Admin session authentication:
+
+- `GET /api/admin/overview`
+- `GET /api/admin/reports/options`
+- `GET /api/admin/reports/summary`
+- `GET /api/admin/reports/records?page=0&size=50`
+- `GET /api/admin/reports/electrical-testing`
+- `GET /api/admin/reports/export?report=summary|details|electrical-testing&format=csv|xlsx`
+- `GET /api/admin/waste-levy-summary?month=YYYY-MM`
+- `GET /api/admin/waste-levy-summary/export?month=YYYY-MM&format=csv|xlsx`
+
+Report filters are `from`, `to`, `workflow`, `materialCategoryId`, `location`, `direction` and `testingCategoryId`. Dates default to current month-to-date in Australia/Hobart. The KPI endpoint fixes the workflow to Electrical Testing; its export requires that workflow filter. JSON weights are decimal strings.
+
+CSV uses UTF-8 with a BOM, quoted columns and CRLF records; metadata/filter columns accompany every row. Empty results retain headers and report context. Formula-like user text is prefixed with an apostrophe. XLSX uses Apache POI with literal text cells (never user-generated formulas), numeric values where Excel precision permits, and exact decimal text where it does not. Metadata includes the period/filters, units or unit-bearing columns, exclusions and generation time. No legacy spreadsheet formulas are emitted. Summary workbooks use Summary; detailed exports separate parent records, material/direction breakdowns, Whitegoods, Electrical Testing KPIs and sales references when applicable. Monthly exports have one Monthly Summary sheet. All weights in exports are kg. Filenames include the date range, or `waste-levy-summary-YYYY-MM.csv|xlsx`. Detailed exports above 100,000 rows are rejected with an instruction to narrow filters; no truncation or background export machinery is used.
+
+Reporting tests cover Admin boundaries, category/direction/count separation, filtered totals/details, zero references, soft deletion/date corrections, stored rounding, financial-year/leap-day ranges, pagination validation, CSV escaping and formula protection, XLSX literal/typed cells and sheet separation, stable monthly filenames/exclusions, and Hobart DST day boundaries. Browser checks cover role navigation, periods/applied filters, CSV/XLSX buttons, detail links, monthly kg/tonnes, deletion refresh and tablet layout, alongside all existing workflow smoke tests.

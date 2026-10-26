@@ -96,3 +96,15 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 .testing-counters p { margin: .4rem 0; }
 .testing-counters button { width: 100%; }
 .testing-entry label { margin-bottom: 1rem; }
+
+.role-navigation { display: block; }
+.management-navigation, .workflow-navigation { display: flex; gap: 1rem; flex-wrap: wrap; }
+.workflow-navigation { border-top: 1px solid #dce3d9; gap: .3rem 1rem; }
+.workflow-navigation .nav-item { padding: .6rem .2rem; font-size: .88rem; }
+.report-section { margin-top: 1.2rem; }
+.metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.metric-grid strong { font-size: 2.1rem; }
+.report-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; }
+.table-scroll { overflow-x: auto; max-width: 100%; }
+.report-section table { min-width: 660px; }
+@media (max-width: 600px) { .metric-grid { grid-template-columns: 1fr; } }

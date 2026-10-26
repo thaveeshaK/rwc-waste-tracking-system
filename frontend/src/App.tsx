@@ -1,3 +1,9 @@
+import { Navigation, type Page } from './components/navigation/Navigation'
+import { OverviewPage } from './features/reporting/OverviewPage'
+import { ReportsPage } from './features/reporting/ReportsPage'
+import { WasteLevySummaryPage } from './features/reporting/WasteLevySummaryPage'
+import type { Row } from './features/reporting/types'
+import { request } from './api/client'
 import { ElectricalTestingPage } from './features/electrical-testing/ElectricalTestingPage'
 import { WhitegoodsPage } from './features/whitegoods/WhitegoodsPage'
 import { CollectablePage } from './features/collectables/CollectablePage'
@@ -17,8 +23,9 @@ function App() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [page, setPage] = useState<'entry' | 'records'>('records')
+  const [page, setPage] = useState<Page>('operations')
   const [editing, setEditing] = useState<OperationalRecord | undefined>()
+  const [reported, setReported] = useState<OperationalRecord | undefined>()
   const [saved, setSaved] = useState<OperationalRecord | undefined>()
   const [entryKey, setEntryKey] = useState(0)
   const [hasEntry, setHasEntry] = useState(false)
@@ -32,7 +39,7 @@ function App() {
 
   useEffect(() => {
     let cancelled = false
-    currentUser().then(user => { if (!cancelled) setUser(user) }).catch(error => {
+    currentUser().then(user => { if (!cancelled) { setPage(user.role === 'ADMIN' ? 'overview' : 'operations'); setUser(user) } }).catch(error => {
       if (!cancelled && (!(error instanceof ApiError) || error.status !== 401)) setError(errorMessage(error))
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
@@ -63,6 +70,7 @@ function App() {
     if (busyRef.current) return
     if (hasEntry) setRecordWorkflow(entryWorkflow)
     setPage('records')
+    setReported(undefined)
     setSaved(undefined)
   }
 
@@ -95,6 +103,7 @@ function App() {
   }
 
   function recordSaved(record: OperationalRecord) {
+    setReported(undefined)
     setSaved(record)
     setRecordWorkflow(record.workflow)
     setEditing(undefined)
@@ -102,39 +111,41 @@ function App() {
     setPage('records')
   }
 
+  function navigate(target: Page) {
+    if (busyRef.current || signingOut) return
+    if (['overview', 'reports', 'waste-levy'].includes(target) && user?.role !== 'ADMIN') return
+    if (target === 'records') { showRecords(); return }
+    setError(''); setPage(target)
+  }
+
+  async function openReportedRecord(row: Row) {
+    if (user?.role !== 'ADMIN' || busyRef.current || row.rowType === 'REFERENCE') return
+    const paths: Record<string, string> = { CRATE_PALLET: '/api/crate-pallet-records', SALVAGE: '/api/salvage-records', PICKUP: '/api/pickup-records', ELECTRICAL_CRATE_PALLET: '/api/electrical-crate-pallet-records', COLLECTABLES: '/api/collectable-records', WHITEGOODS: '/api/whitegoods-records', ELECTRICAL_TESTING: '/api/electrical-testing/tallies' }
+    activityChanged(true); setError('')
+    try {
+      const record = await request<OperationalRecord['record']>(paths[row.workflow]+'/'+row.id)
+      setRecordWorkflow(row.workflow as Workflow)
+      setSaved(undefined)
+      setReported({workflow: row.workflow, record} as OperationalRecord)
+      setPage('records')
+    } catch (e) { setError(errorMessage(e)) }
+    finally { activityChanged(false) }
+  }
+
   if (loading) return <main className="app-shell"><p role="status">Loading waste tracking...</p></main>
-  if (!user) return <>{error && <p className="notice error" role="alert">{error}</p>}<LoginPage onLogin={user => { setError(''); setUser(user) }} /></>
+  if (!user) return <>{error && <p className="notice error" role="alert">{error}</p>}<LoginPage onLogin={user => { setError(''); setPage(user.role === 'ADMIN' ? 'overview' : 'operations'); setUser(user) }} /></>
   return <><header className="app-header"><div className="header-inner">
     <div className="brand"><span className="brand-mark" aria-hidden="true">RWC</span><div><strong>Resource Work Cooperative</strong><span>Waste tracking</span></div></div>
     <div className="account"><span>{user.username} <span className="role-badge">{user.role === 'ADMIN' ? 'Admin' : 'Staff'}</span></span>
       <button className="secondary" disabled={signingOut || busy || unresolved} onClick={signOut}>{signingOut ? 'Signing out...' : 'Sign out'}</button></div>
   </div></header>
-    <main className="app-shell" inert={signingOut}><nav aria-label="Main navigation">
-      <button disabled={busy || signingOut} className={page === 'records' ? 'nav-item active' : 'nav-item'} onClick={showRecords}>Records</button>
-      <button disabled={busy || signingOut || (unresolved && entryWorkflow !== 'CRATE_PALLET')}
-        className={page === 'entry' && entryWorkflow === 'CRATE_PALLET' && !editing ? 'nav-item active' : 'nav-item'}
-        onClick={() => newRecord('CRATE_PALLET')}>{unresolved && entryWorkflow === 'CRATE_PALLET' ? 'Resume submission' : 'New Crate / Pallet'}</button>
-      <button disabled={busy || signingOut || (unresolved && entryWorkflow !== 'SALVAGE')}
-        className={page === 'entry' && entryWorkflow === 'SALVAGE' && !editing ? 'nav-item active' : 'nav-item'}
-        onClick={() => newRecord('SALVAGE')}>{unresolved && entryWorkflow === 'SALVAGE' ? 'Resume submission' : 'New Salvage'}</button>
-      <button disabled={busy || signingOut || (unresolved && entryWorkflow !== 'PICKUP')}
-        className={page === 'entry' && entryWorkflow === 'PICKUP' && !editing ? 'nav-item active' : 'nav-item'}
-        onClick={() => newRecord('PICKUP')}>{unresolved && entryWorkflow === 'PICKUP' ? 'Resume submission' : 'New Pickup'}</button>
-      <button disabled={busy || signingOut || (unresolved && entryWorkflow !== 'ELECTRICAL_CRATE_PALLET')}
-        className={page === 'entry' && entryWorkflow === 'ELECTRICAL_CRATE_PALLET' && !editing ? 'nav-item active' : 'nav-item'}
-        onClick={() => newRecord('ELECTRICAL_CRATE_PALLET')}>{unresolved && entryWorkflow === 'ELECTRICAL_CRATE_PALLET' ? 'Resume submission' : 'New Electrical Crate / Pallet'}</button>
-      <button disabled={busy || signingOut || (unresolved && entryWorkflow !== 'COLLECTABLES')}
-        className={page === 'entry' && entryWorkflow === 'COLLECTABLES' && !editing ? 'nav-item active' : 'nav-item'}
-        onClick={() => newRecord('COLLECTABLES')}>{unresolved && entryWorkflow === 'COLLECTABLES' ? 'Resume submission' : 'New Collectables'}</button>
-      <button disabled={busy || signingOut || (unresolved && entryWorkflow !== 'WHITEGOODS')}
-        className={page === 'entry' && entryWorkflow === 'WHITEGOODS' && !editing ? 'nav-item active' : 'nav-item'}
-        onClick={() => newRecord('WHITEGOODS')}>{unresolved && entryWorkflow === 'WHITEGOODS' ? 'Resume submission' : 'New Whitegoods'}</button>
-      <button disabled={busy || signingOut || (unresolved && entryWorkflow !== 'ELECTRICAL_TESTING')}
-        className={page === 'entry' && entryWorkflow === 'ELECTRICAL_TESTING' && !editing ? 'nav-item active' : 'nav-item'}
-        onClick={() => newRecord('ELECTRICAL_TESTING')}>{unresolved && entryWorkflow === 'ELECTRICAL_TESTING' ? 'Resume submission' : 'Electrical Testing'}</button>
-    </nav>
+    <main className="app-shell" inert={signingOut}><Navigation isAdmin={user.role === 'ADMIN'} page={page} busy={busy || signingOut} unresolved={unresolved} workflow={entryWorkflow} onNew={newRecord} onPage={navigate} />
       {error && <p className="notice error" role="alert">{error}</p>}
       {unresolved && <p className="notice" role="status">A submission is unresolved. Retry it or check Records. Its details stay in memory while you check.</p>}
+      {page === 'operations' && <section className="panel report-section"><p className="eyebrow">{user.role === 'ADMIN' ? 'ADMIN WORKFLOWS' : 'STAFF OPERATIONS'}</p><h1>{user.role === 'ADMIN' ? 'Workflows' : 'Operations'}</h1><p>Choose a workflow above to enter and review a record. Submitted records are available in Records.</p></section>}
+      {user.role === 'ADMIN' && page === 'overview' && <OverviewPage onOpen={openReportedRecord}/>}
+      {user.role === 'ADMIN' && page === 'reports' && <ReportsPage onOpen={openReportedRecord}/>}
+      {user.role === 'ADMIN' && page === 'waste-levy' && <WasteLevySummaryPage/>}
       {hasEntry && <div hidden={page !== 'entry'}>
         {entryWorkflow === 'CRATE_PALLET' ? <CratePalletPage key={entryKey}
           editing={editing?.workflow === 'CRATE_PALLET' ? editing.record : undefined}
@@ -159,7 +170,7 @@ function App() {
             onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
             onSaved={record => recordSaved({ workflow: 'ELECTRICAL_TESTING', record })} onCancel={showRecords} />}
       </div>}
-      {page === 'records' && <RecordsPage isAdmin={user.role === 'ADMIN'} saved={saved}
+      {page === 'records' && <RecordsPage isAdmin={user.role === 'ADMIN'} saved={saved} selectedRecord={reported}
         workflow={recordWorkflow} onWorkflowChange={workflow => { setSaved(undefined); setRecordWorkflow(workflow) }}
         onBusyChange={activityChanged} onEdit={record => {
           if (busyRef.current) return

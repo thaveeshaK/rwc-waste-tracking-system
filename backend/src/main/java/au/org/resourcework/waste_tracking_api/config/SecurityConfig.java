@@ -43,6 +43,7 @@ public class SecurityConfig {
         // Keep the default session-backed CSRF protection, including on login/logout.
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/csrf", "/api/auth/login").permitAll()
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/crate-pallet-records/**", "/api/salvage-records/**", "/api/pickup-records/**", "/api/electrical-crate-pallet-records/**", "/api/collectable-records/**", "/api/whitegoods-records/**", "/api/electrical-testing/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/crate-pallet-records/**", "/api/salvage-records/**", "/api/pickup-records/**", "/api/electrical-crate-pallet-records/**", "/api/collectable-records/**", "/api/whitegoods-records/**", "/api/electrical-testing/**").hasRole("ADMIN")
                 .anyRequest().authenticated())

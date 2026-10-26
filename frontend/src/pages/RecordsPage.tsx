@@ -23,14 +23,15 @@ interface Props {
   isAdmin: boolean
   workflow: Workflow
   saved?: OperationalRecord
+  selectedRecord?: OperationalRecord
   onWorkflowChange: (workflow: Workflow) => void
   onEdit: (record: OperationalRecord) => void
   onBusyChange: (busy: boolean) => void
 }
 
-export function RecordsPage({ isAdmin, workflow, saved, onWorkflowChange, onEdit, onBusyChange }: Props) {
+export function RecordsPage({ isAdmin, workflow, saved, selectedRecord, onWorkflowChange, onEdit, onBusyChange }: Props) {
   const [records, setRecords] = useState<OperationalRecord[]>([])
-  const [selected, setSelected] = useState<OperationalRecord | null>(saved ?? null)
+  const [selected, setSelected] = useState<OperationalRecord | null>(selectedRecord ?? saved ?? null)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [error, setError] = useState('')
