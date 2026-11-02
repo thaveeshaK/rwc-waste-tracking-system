@@ -118,7 +118,32 @@ public class ReportService {
         var testing=TESTING_STATUSES.stream().map(status->new Counter(status,
                 metric(totals,"ELECTRICAL_TESTING",status,null).toBigIntegerExact().toString())).toList();
         return new Overview(today.toString(),selected.toString(),repository.submitted(today.atStartOfDay(clock.getZone()).toInstant(),today.plusDays(1).atStartOfDay(clock.getZone()).toInstant()),
-                activity.stream().mapToLong(Activity::count).sum(),activity,repository.recent(5),trend,monthly,metrics,generalIntake(totals),testing);
+                activity.stream().mapToLong(Activity::count).sum(),activity,repository.recent(5),trend,monthly,metrics,generalIntake(totals),testing,topIntake(totals),recoveredTrend(month,end));
+    }
+
+    private List<RecoveredTrend> recoveredTrend(LocalDate month, LocalDate end) {
+        var raw=repository.recoveredTrend(new ReportFilter(month.minusMonths(5),end,null,null,null,null,null));
+        var result=new ArrayList<RecoveredTrend>();
+        for(int offset=5;offset>=0;offset--) {
+            String period=YearMonth.from(month.minusMonths(offset)).toString();
+            result.add(new RecoveredTrend(period,raw.stream().filter(t->t.month().equals(period)).map(t->new BigDecimal(t.kg()))
+                    .reduce(BigDecimal.ZERO,BigDecimal::add).setScale(2).toPlainString()));
+        }
+        return result;
+    }
+    /** Dashboard-only receiving/recovery view; not a unique-material or reporting total. */
+    private List<Total> topIntake(List<Total> totals) {
+        var combined=new TreeMap<Long,BigDecimal>();
+        var names=new HashMap<Long,String>();
+        for(var t:totals) if(t.metric().equals("Material weight") &&
+                (Set.of("CRATE_PALLET","COLLECTABLES","PICKUP").contains(t.workflow()) ||
+                 (t.workflow().equals("SALVAGE") && "DOWN".equals(t.direction())))) {
+            combined.merge(t.categoryId(),new BigDecimal(t.value()),BigDecimal::add);
+            names.put(t.categoryId(),t.category());
+        }
+        return combined.entrySet().stream().filter(e->e.getValue().signum()>0)
+                .sorted(Map.Entry.<Long,BigDecimal>comparingByValue().reversed().thenComparing(Map.Entry::getKey)).limit(8)
+                .map(e->new Total("INTAKE_RECOVERY",null,null,e.getKey(),names.get(e.getKey()),"Material weight","kg",e.getValue().setScale(2).toPlainString())).toList();
     }
 
     private BigDecimal metric(List<Total> totals,String workflow,String metric,String direction) {

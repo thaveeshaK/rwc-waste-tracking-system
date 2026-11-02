@@ -183,6 +183,42 @@ class ReportingIntegrationTests {
             .andExpect(jsonPath("$.trend.length()").value(42))
             .andExpect(jsonPath("$.recent.length()").value(5));
     }
+    @Test void intakeRecoveryUsesOnlyApprovedSourcesAndStoredCategoryWeights() throws Exception {
+        long timber=jdbc.queryForObject("select id from material_category where name='Timber'",Long.class);
+        long salvage=jdbc.queryForObject("select id from salvage_record where record_date=date '2001-02-28'",Long.class);
+        jdbc.update("update salvage_record set kg_up=900 where id=?",salvage);
+        jdbc.update("insert into salvage_material values (?,'UP',?,100,900)",salvage,timber);
+        // Category rounding may differ from the direction weight: each chart must use its own source.
+        jdbc.update("update salvage_material set material_weight=20.01 where salvage_record_id=? and direction='DOWN'",salvage);
+        mvc.perform(report("/overview").param("month","2001-02"))
+            .andExpect(jsonPath("$.topIntake.length()").value(1))
+            .andExpect(jsonPath("$.topIntake[0].value").value("50.01"))
+            .andExpect(jsonPath("$.recoveredTrend.length()").value(6))
+            .andExpect(jsonPath("$.recoveredTrend[0].month").value("2000-09"))
+            .andExpect(jsonPath("$.recoveredTrend[0].kg").value("0.00"))
+            .andExpect(jsonPath("$.recoveredTrend[5].kg").value("20.00"));
+        jdbc.update("update pickup_record set deleted_at=now(),deleted_by=? where record_date=date '2001-02-28'",actor);
+        mvc.perform(report("/overview").param("month","2001-02")).andExpect(jsonPath("$.topIntake[0].value").value("40.01"));
+        jdbc.update("update salvage_record set kg_down=25,record_date=date '2001-01-31' where id=?",salvage);
+        mvc.perform(report("/overview").param("month","2001-02"))
+            .andExpect(jsonPath("$.topIntake[0].value").value("20.00"))
+            .andExpect(jsonPath("$.recoveredTrend[4].kg").value("25.00"))
+            .andExpect(jsonPath("$.recoveredTrend[5].kg").value("0.00"));
+        jdbc.update("update salvage_record set deleted_at=now(),deleted_by=? where id=?",actor,salvage);
+        mvc.perform(report("/overview").param("month","2001-02")).andExpect(jsonPath("$.recoveredTrend[4].kg").value("0.00"));
+        mvc.perform(report("/overview").param("month","2000-02")).andExpect(jsonPath("$.topIntake.length()").value(0));
+    }
+    @Test void topIntakeIsDescendingAndLimitedToEightCategories() throws Exception {
+        long pickup=jdbc.queryForObject("select id from pickup_record where record_date=date '2001-02-28'",Long.class);
+        var categories=jdbc.queryForList("select material_category_id from material_category_applicability where context='PICKUP' and material_category_id<>? order by material_category_id limit 9",Long.class,category);
+        int weight=100;
+        for(long cat:categories) jdbc.update("insert into pickup_material values (?,?,1,?)",pickup,cat,weight++);
+        mvc.perform(report("/overview").param("month","2001-02"))
+            .andExpect(jsonPath("$.topIntake.length()").value(8))
+            .andExpect(jsonPath("$.topIntake[0].value").value("108.00"))
+            .andExpect(jsonPath("$.topIntake[7].value").value("101.00"));
+    }
+
     @Test void dashboardRejectsMalformedAndFutureMonths() throws Exception {
         for(String month:List.of("2001-2","2001-13","0000-01","9999-12")) mvc.perform(report("/overview").param("month",month)).andExpect(status().isBadRequest());
     }

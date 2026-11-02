@@ -19,10 +19,11 @@ public final class ReportData {
     public record Activity(String workflow, long count) {}
     public record Trend(String month, String workflow, long count) {}
     public record DashboardMetrics(String salvageRecoveredKg, String landfillKg, String whitegoodsCount, String whitegoodsEstimatedKg) {}
+    public record RecoveredTrend(String month, String kg) {}
     public record Counter(String status, String count) {}
     public record Overview(String today, String month, long submittedToday, long recordsThisMonth, List<Activity> activity,
             List<Row> recent, List<Trend> trend, Result monthly, DashboardMetrics metrics,
-            List<Total> generalIntake, List<Counter> electricalTesting) {}
+            List<Total> generalIntake, List<Counter> electricalTesting, List<Total> topIntake, List<RecoveredTrend> recoveredTrend) {}
     public record Option(Long id, String name) {}
     public record Options(List<Option> materials, List<Option> testingCategories) {}
 }

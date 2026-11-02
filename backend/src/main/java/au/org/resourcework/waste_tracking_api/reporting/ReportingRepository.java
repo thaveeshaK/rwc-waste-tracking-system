@@ -127,6 +127,11 @@ public class ReportingRepository {
         return jdbc.query(filtered(f,p)+"select to_char(record_date,'YYYY-MM') as reporting_month,workflow,count(*) n from filtered where row_type='RECORD' group by reporting_month,workflow order by reporting_month,workflow",p,
                 (rs,n)->new Trend(rs.getString("reporting_month"),rs.getString("workflow"),rs.getLong("n")));
     }
+    public List<RecoveredTrend> recoveredTrend(ReportFilter f) {
+        var p=new MapSqlParameterSource();
+        return jdbc.query(filtered(f,p)+"select to_char(record_date,'YYYY-MM') as reporting_month,sum(kg) kg from filtered where workflow='SALVAGE' and row_type='DIRECTION' and direction='DOWN' group by reporting_month order by reporting_month",p,
+                (rs,n)->new RecoveredTrend(rs.getString("reporting_month"),decimal(rs,"kg")));
+    }
     public Options options() {
         return new Options(jdbc.query("select id,name from material_category order by id",Map.of(),(r,n)->new Option(r.getLong(1),r.getString(2))),
                 jdbc.query("select id,name from electrical_testing_category order by display_order",Map.of(),(r,n)->new Option(r.getLong(1),r.getString(2))));
