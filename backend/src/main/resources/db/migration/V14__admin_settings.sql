@@ -5,7 +5,7 @@ CREATE TABLE application_settings (
     site_name VARCHAR(100) NOT NULL DEFAULT '',
     report_display_name VARCHAR(100) NOT NULL CHECK (length(trim(report_display_name)) > 0),
     display_unit VARCHAR(6) NOT NULL DEFAULT 'kg' CHECK (display_unit IN ('kg','tonnes')),
-    report_period VARCHAR(32) NOT NULL DEFAULT 'CURRENT_MONTH' CHECK (report_period IN ('CURRENT_MONTH','CURRENT_FINANCIAL_YEAR')),
+    report_period VARCHAR(20) NOT NULL DEFAULT 'CURRENT_MONTH' CHECK (report_period IN ('CURRENT_MONTH','CURRENT_FINANCIAL_YEAR')),
     financial_year_start_month SMALLINT NOT NULL DEFAULT 7 CHECK (financial_year_start_month BETWEEN 1 AND 12),
     whitegoods_kg_per_item NUMERIC(5,2) NOT NULL DEFAULT 48.00 CHECK (whitegoods_kg_per_item > 0),
     updated_by BIGINT REFERENCES app_user(id),
