@@ -18,8 +18,11 @@ public final class ReportData {
     public record Monthly(String month, String timezone, Instant generatedAt, String note, List<Total> totals) {}
     public record Activity(String workflow, long count) {}
     public record Trend(String month, String workflow, long count) {}
-    public record Overview(String today, long submittedToday, long recordsThisMonth, List<Activity> activity,
-            List<Row> recent, List<Trend> trend, Result monthly) {}
+    public record DashboardMetrics(String salvageRecoveredKg, String landfillKg, String whitegoodsCount, String whitegoodsEstimatedKg) {}
+    public record Counter(String status, String count) {}
+    public record Overview(String today, String month, long submittedToday, long recordsThisMonth, List<Activity> activity,
+            List<Row> recent, List<Trend> trend, Result monthly, DashboardMetrics metrics,
+            List<Total> generalIntake, List<Counter> electricalTesting) {}
     public record Option(Long id, String name) {}
     public record Options(List<Option> materials, List<Option> testingCategories) {}
 }

@@ -1,3 +1,4 @@
+import { WorkflowsPage } from './features/operations/WorkflowsPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { getOperationalConfiguration } from './features/settings/api'
 import type { OperationalConfiguration } from './features/settings/types'
@@ -155,9 +156,9 @@ function App() {
     <main className="app-shell" inert={signingOut}><Navigation isAdmin={user.role === 'ADMIN'} page={page} busy={busy || signingOut} unresolved={unresolved} workflow={entryWorkflow} onNew={newRecord} onPage={navigate} />
       {error && <p className="notice error" role="alert">{error}</p>}
       {unresolved && <p className="notice" role="status">A submission is unresolved. Retry it or check Records. Its details stay in memory while you check.</p>}
-      {page === 'operations' && <section className="panel report-section"><p className="eyebrow">{user.role === 'ADMIN' ? 'ADMIN WORKFLOWS' : 'STAFF OPERATIONS'}</p><h1>{user.role === 'ADMIN' ? 'Workflows' : 'Operations'}</h1><p>Choose a workflow above to enter and review a record. Submitted records are available in Records.</p></section>}
+      {page === 'operations' && (user.role === 'ADMIN' ? <WorkflowsPage onNew={newRecord} busy={busy || signingOut} unresolved={unresolved} currentWorkflow={entryWorkflow}/> : <section className="panel report-section"><p className="eyebrow">STAFF OPERATIONS</p><h1>Operations</h1><p>Choose a workflow above to enter and review a record. Submitted records are available in Records.</p></section>)}
       {user.role === 'ADMIN' && page === 'settings' && <SettingsPage onChanged={() => setConfigurationRevision(n => n+1)}/>}
-      {user.role === 'ADMIN' && page === 'overview' && <OverviewPage onOpen={openReportedRecord}/>}
+      {user.role === 'ADMIN' && page === 'overview' && <OverviewPage onOpen={openReportedRecord} onRecords={showRecords}/>}
       {user.role === 'ADMIN' && page === 'reports' && <ReportsPage onOpen={openReportedRecord}/>}
       {user.role === 'ADMIN' && page === 'waste-levy' && <WasteLevySummaryPage/>}
       {hasEntry && <div hidden={page !== 'entry'}>

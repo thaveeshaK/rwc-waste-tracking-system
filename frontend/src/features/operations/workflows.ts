@@ -1,0 +1,11 @@
+import type { Workflow } from '../records/types'
+export interface WorkflowEntry { id: Workflow; name: string; staffLabel: string; description: string }
+export const workflowEntries: WorkflowEntry[] = [
+  {id: 'CRATE_PALLET', name: 'Crate / Pallet', staffLabel: 'New Crate / Pallet', description: 'Record a weighed container and its material breakdown.'},
+  {id: 'SALVAGE', name: 'Salvage', staffLabel: 'New Salvage', description: 'Record one trip, with recovered and landfill weights.'},
+  {id: 'PICKUP', name: 'Pickup', staffLabel: 'New Pickup', description: 'Record a pickup location, net weight and materials.'},
+  {id: 'ELECTRICAL_CRATE_PALLET', name: 'Electrical Crate / Pallet', staffLabel: 'New Electrical Crate / Pallet', description: 'Record electrical material weight in its two approved groups.'},
+  {id: 'COLLECTABLES', name: 'Collectables', staffLabel: 'New Collectables', description: 'Record an eligible Collectable Tub and material breakdown.'},
+  {id: 'WHITEGOODS', name: 'Whitegoods', staffLabel: 'New Whitegoods', description: 'Record a received quantity and review its estimated weight.'},
+  {id: 'ELECTRICAL_TESTING', name: 'Electrical Testing', staffLabel: 'Electrical Testing', description: 'Add processing tallies or maintain monthly sales references.'},
+]

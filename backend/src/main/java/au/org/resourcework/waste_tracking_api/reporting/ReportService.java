@@ -63,12 +63,7 @@ public class ReportService {
         var f=validate(new ReportFilter(month.atDay(1),month.atEndOfMonth(),null,null,null,null,null));
         var totals=new ArrayList<>(repository.totals(f).stream().filter(t->!t.workflow().equals("ELECTRICAL_TESTING")).toList());
         // Only the approved normal intake category totals are combined. Never combine electrical or Salvage.
-        var combined=new TreeMap<Long,BigDecimal>();
-        var names=new HashMap<Long,String>();
-        for (var t:totals) if (Set.of("CRATE_PALLET","PICKUP","COLLECTABLES").contains(t.workflow()) && t.metric().equals("Material weight")) {
-            combined.merge(t.categoryId(),new BigDecimal(t.value()),BigDecimal::add); names.put(t.categoryId(),t.category());
-        }
-        for (var e:combined.entrySet()) totals.add(new Total("GENERAL_INTAKE",null,null,e.getKey(),names.get(e.getKey()),"Material weight","kg",e.getValue().toPlainString()));
+        totals.addAll(generalIntake(totals));
         // Zero-fill category rows using historical applicability, without inventing cross-workflow mappings.
         addMissingCategories(totals);
         if (totals.stream().noneMatch(t->t.workflow().equals("WHITEGOODS"))) {
@@ -87,13 +82,57 @@ public class ReportService {
         }
         totals.sort(Comparator.comparing(Total::workflow).thenComparing(t->Objects.toString(t.direction(),"")).thenComparing(t->Objects.toString(t.container(),"")).thenComparing(t->t.categoryId()==null?0L:t.categoryId()).thenComparing(Total::metric));
     }
-    public Overview overview() {
-        LocalDate today=LocalDate.now(clock); var month=today.withDayOfMonth(1);
-        var filter=new ReportFilter(month,today,null,null,null,null,null);
-        var activity=repository.activity(filter);
-        return new Overview(today.toString(),repository.submitted(today.atStartOfDay(clock.getZone()).toInstant(),today.plusDays(1).atStartOfDay(clock.getZone()).toInstant()),
-                activity.stream().mapToLong(Activity::count).sum(),activity,repository.recent(10),
-                repository.trend(new ReportFilter(month.minusMonths(5),today,null,null,null,null,null)),summary(filter));
+    private static final List<String> DASHBOARD_WORKFLOWS=List.of("CRATE_PALLET","SALVAGE","PICKUP","ELECTRICAL_CRATE_PALLET","COLLECTABLES","WHITEGOODS","ELECTRICAL_TESTING");
+    private static final List<String> TESTING_STATUSES=List.of("UNTESTED_BROKEN_FAILED","TESTED_AND_PRICED","STOCK_CULL","DIVERTED_TO_OLS","DIVERTED_TO_COLL");
+
+    public Overview overview() { return overview(null); }
+
+    public Overview overview(String value) {
+        LocalDate today=LocalDate.now(clock);
+        YearMonth selected=YearMonth.now(clock);
+        if (value!=null) {
+            try {
+                if (!value.matches("[0-9]{4}-[0-9]{2}")) throw new IllegalArgumentException();
+                selected=YearMonth.parse(value);
+            } catch (RuntimeException e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Use a valid dashboard month (YYYY-MM)."); }
+            if (selected.getYear()<1 || selected.isAfter(YearMonth.now(clock))) bad("Dashboard month must be past or current.");
+        }
+        LocalDate month=selected.atDay(1);
+        LocalDate end=selected.equals(YearMonth.now(clock))?today:selected.atEndOfMonth();
+        var filter=new ReportFilter(month,end,null,null,null,null,null);
+        var monthly=summary(filter);
+        var totals=monthly.totals();
+        var rawActivity=repository.activity(filter);
+        var activity=DASHBOARD_WORKFLOWS.stream().map(w->new Activity(w,rawActivity.stream().filter(a->a.workflow().equals(w)).mapToLong(Activity::count).sum())).toList();
+        var rawTrend=repository.trend(new ReportFilter(month.minusMonths(5),end,null,null,null,null,null));
+        var trend=new ArrayList<Trend>();
+        for(int offset=5;offset>=0;offset--) {
+            String period=selected.minusMonths(offset).toString();
+            for(String workflow:DASHBOARD_WORKFLOWS) trend.add(new Trend(period,workflow,rawTrend.stream()
+                    .filter(t->t.month().equals(period) && t.workflow().equals(workflow)).mapToLong(Trend::count).sum()));
+        }
+        var metrics=new DashboardMetrics(metric(totals,"SALVAGE","Net weight","DOWN").setScale(2).toPlainString(),
+                metric(totals,"SALVAGE","Net weight","UP").setScale(2).toPlainString(),
+                metric(totals,"WHITEGOODS","Whitegoods count",null).toBigIntegerExact().toString(),
+                metric(totals,"WHITEGOODS","Estimated weight",null).setScale(2).toPlainString());
+        var testing=TESTING_STATUSES.stream().map(status->new Counter(status,
+                metric(totals,"ELECTRICAL_TESTING",status,null).toBigIntegerExact().toString())).toList();
+        return new Overview(today.toString(),selected.toString(),repository.submitted(today.atStartOfDay(clock.getZone()).toInstant(),today.plusDays(1).atStartOfDay(clock.getZone()).toInstant()),
+                activity.stream().mapToLong(Activity::count).sum(),activity,repository.recent(5),trend,monthly,metrics,generalIntake(totals),testing);
+    }
+
+    private BigDecimal metric(List<Total> totals,String workflow,String metric,String direction) {
+        return totals.stream().filter(t->t.workflow().equals(workflow) && t.metric().equals(metric) && Objects.equals(t.direction(),direction))
+                .map(t->new BigDecimal(t.value())).reduce(BigDecimal.ZERO,BigDecimal::add);
+    }
+    /** Shared with the monthly working aid: only these three normal intake workflows are combined. */
+    private List<Total> generalIntake(List<Total> totals) {
+        var combined=new TreeMap<Long,BigDecimal>();
+        var names=new HashMap<Long,String>();
+        for (var t:totals) if (Set.of("CRATE_PALLET","PICKUP","COLLECTABLES").contains(t.workflow()) && t.metric().equals("Material weight")) {
+            combined.merge(t.categoryId(),new BigDecimal(t.value()),BigDecimal::add); names.put(t.categoryId(),t.category());
+        }
+        return combined.entrySet().stream().map(e->new Total("GENERAL_INTAKE",null,null,e.getKey(),names.get(e.getKey()),"Material weight","kg",e.getValue().setScale(2).toPlainString())).toList();
     }
     private static String blank(String s) { return s==null || s.isBlank()?null:s.trim(); }
     private static void bad(String s) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST,s); }

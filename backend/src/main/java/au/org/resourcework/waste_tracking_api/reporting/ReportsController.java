@@ -11,7 +11,7 @@ import static au.org.resourcework.waste_tracking_api.reporting.ReportData.*;
 public class ReportsController {
     private final ReportService reports;
     public ReportsController(ReportService reports) { this.reports=reports; }
-    @GetMapping("/overview") public Overview overview() { return reports.overview(); }
+    @GetMapping("/overview") public Overview overview(@RequestParam(required=false) String month) { return reports.overview(month); }
     @GetMapping("/reports/options") public Options options() { return reports.options(); }
     @GetMapping("/reports/summary") public Result summary(@ModelAttribute ReportFilter input) { return reports.summary(input); }
     @GetMapping("/reports/records")

@@ -1,34 +1,42 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { request } from './api'
 import { errorMessage } from '../../api/client'
+import { operationalDate } from '../../utils/decimal'
 import type { Overview, Row } from './types'
 import { label } from './types'
-import { DetailTable, TotalsTable } from './ReportTables'
-export function OverviewPage({ onOpen }: {onOpen: (row: Row) => void}) {
-  const [result, setResult] = useState<{data?: Overview; error?: string}>({})
+import { TotalsTable } from './ReportTables'
+import { typeLabels } from '../electrical-testing/types'
+import type { TallyType } from '../electrical-testing/types'
+const DashboardCharts = lazy(() => import('./DashboardCharts'))
+export function OverviewPage({onOpen, onRecords}: {onOpen: (row: Row) => void; onRecords: () => void}) {
+  const [month, setMonth] = useState(() => operationalDate().slice(0, 7))
   const [attempt, setAttempt] = useState(0)
+  const [result, setResult] = useState<{key: string; data?: Overview; error?: string} | null>(null)
+  const key = month+':'+attempt
+  const loading = result?.key !== key
+  const data = loading ? undefined : result?.data
+  const error = loading ? undefined : result?.error
   useEffect(() => {
     let cancelled = false
-    request<Overview>('/api/admin/overview').then(data => { if (!cancelled) setResult({data}) })
-      .catch(error => { if (!cancelled) setResult({error: errorMessage(error)}) })
-    return () => { cancelled = true }
-  }, [attempt])
-  const data = result.data
-  function metric(workflow: string, metric: string, direction?: string): string {
-    return data?.monthly.totals.find(t => t.workflow === workflow && t.metric === metric && (!direction || t.direction === direction))?.value ?? (metric === 'Whitegoods count' ? '0' : '0.00')
-  }
-  function tally(type: string): string {
-    return (data?.monthly.totals.filter(t => t.workflow === 'ELECTRICAL_TESTING' && t.metric === type).reduce((sum, t) => sum + BigInt(t.value), 0n) ?? 0n).toString()
-  }
-  return <section><div className="page-heading"><div><p className="eyebrow">ADMIN</p><h1>Overview</h1><p>Operational activity in Australia/Hobart. Quantities remain separated by workflow.</p></div><button className="secondary" onClick={() => setAttempt(n => n + 1)}>Refresh overview</button></div>
-    {result.error && <p role="alert" className="notice error">{result.error}</p>}
-    {!data && !result.error && <p role="status">Loading overview...</p>}
-    {data && <><div className="metric-grid"><article className="panel"><h2>Submitted today</h2><strong>{data.submittedToday}</strong><p>Active operational records submitted on {data.today}.</p></article><article className="panel"><h2>Records this month</h2><strong>{data.recordsThisMonth}</strong><p>By operational record date; excludes sales references.</p></article></div>
-      <section className="panel report-section"><h2>Workflow activity this month</h2><ul>{data.activity.map(a => <li key={a.workflow}>{label(a.workflow)}: {a.count}</li>)}</ul>{!data.activity.length && <p>No records this month.</p>}</section>
-      <div className="metric-grid report-section"><article className="panel"><h2>Salvage recovered this month</h2><strong>{metric('SALVAGE', 'Net weight', 'DOWN')} kg</strong><p>Council-provided Down weight.</p></article><article className="panel"><h2>Landfill recorded this month</h2><strong>{metric('SALVAGE', 'Net weight', 'UP')} kg</strong><p>Council-provided Up weight.</p></article><article className="panel"><h2>Whitegoods this month</h2><strong>{metric('WHITEGOODS', 'Whitegoods count')}</strong><p>{metric('WHITEGOODS', 'Estimated weight')} kg estimated.</p></article></div>
-      <section className="panel report-section"><h2>Electrical Testing this month</h2><p>Tally activity, not unique items or stock balances.</p><dl className="record-facts">{['UNTESTED_BROKEN_FAILED', 'TESTED_AND_PRICED', 'STOCK_CULL', 'DIVERTED_TO_OLS', 'DIVERTED_TO_COLL'].map(type => <div key={type}><dt>{label(type)}</dt><dd>{tally(type)}</dd></div>)}</dl></section>
-      <section className="panel report-section"><details><summary>Monthly quantities by workflow and material</summary><p>Measured weights, category estimates and Whitegoods estimates are separate.</p><TotalsTable totals={data.monthly.totals}/></details></section>
-      <section className="panel report-section"><h2>Recent submissions</h2><DetailTable rows={data.recent} onOpen={onOpen}/></section>
-      <section className="panel report-section"><h2>Monthly workflow activity - six months</h2><div className="table-scroll"><table><thead><tr><th>Month</th><th>Workflow</th><th>Records</th></tr></thead><tbody>{data.trend.map(t => <tr key={t.month+t.workflow}><td>{t.month}</td><td>{label(t.workflow)}</td><td>{t.count}</td></tr>)}</tbody></table></div><p className="hint">Current month is partial. E-waste Pickup and Scrap are excluded.</p></section></>}
+    request<Overview>('/api/admin/overview?month='+month).then(data => {if (!cancelled) setResult({key, data})})
+      .catch(e => {if (!cancelled) setResult({key, error: errorMessage(e)})})
+    return () => {cancelled = true}
+  }, [month, key])
+  const monthName = new Intl.DateTimeFormat('en-AU', {month: 'long', year: 'numeric', timeZone: 'UTC'}).format(new Date(month+'-01T00:00:00Z'))
+  const current = month === operationalDate().slice(0, 7)
+  return <section className="dashboard"><div className="page-heading dashboard-heading"><div><p className="eyebrow">ADMIN</p><h1>Overview</h1><p>Operational overview for {monthName}</p></div><div className="dashboard-period"><label>Overview month<input type="month" required min="0001-01" max={operationalDate().slice(0, 7)} value={month} onChange={e => {if (e.target.value) setMonth(e.target.value)}}/></label><button className="secondary" disabled={loading} onClick={() => setAttempt(n => n+1)}>Refresh</button></div></div>
+    {loading && <p role="status">Loading overview...</p>}{error && <p className="notice error" role="alert">{error} Use Refresh to try again.</p>}
+    {data && <><div className="dashboard-kpis">
+      <article className="panel dashboard-kpi" data-kpi="records" data-value={data.recordsThisMonth}><h2>{current ? 'Records this month' : 'Records in period'}</h2><strong>{data.recordsThisMonth}</strong><p>Operational entries</p></article>
+      <article className="panel dashboard-kpi" data-kpi="recovered" data-value={data.metrics.salvageRecoveredKg}><h2>{current ? 'Salvage recovered this month' : 'Salvage recovered'}</h2><strong>{data.metrics.salvageRecoveredKg}<small> kg</small></strong><p>Council-provided Down weight</p></article>
+      <article className="panel dashboard-kpi" data-kpi="landfill" data-value={data.metrics.landfillKg}><h2>{current ? 'Landfill recorded this month' : 'Landfill recorded'}</h2><strong>{data.metrics.landfillKg}<small> kg</small></strong><p>Council-provided Up weight</p></article>
+      <article className="panel dashboard-kpi" data-kpi="whitegoods" data-value={data.metrics.whitegoodsCount}><h2>{current ? 'Whitegoods processed this month' : 'Whitegoods processed'}</h2><strong>{data.metrics.whitegoodsCount}</strong><p>{data.metrics.whitegoodsEstimatedKg} kg estimated from received counts</p></article>
+    </div><p className="dashboard-secondary">Submitted today: <strong>{data.submittedToday}</strong><span> Active entries submitted on {data.today}, across all operational dates.</span></p>
+      <Suspense fallback={<p role="status">Loading charts...</p>}><DashboardCharts data={data}/></Suspense>
+      <section className="panel report-section dashboard-recent" aria-label="Recent submissions"><div className="detail-heading"><div><h2>Recent submissions</h2><p className="hint">Latest five active submissions, across all dates.</p></div><button className="secondary" onClick={onRecords}>View all records</button></div>
+        {!data.recent.length ? <p>No submissions yet.</p> : <div className="table-scroll"><table><thead><tr><th>Record date</th><th>Workflow</th><th>Details</th><th>Weight / count</th><th>Submitted by</th></tr></thead><tbody>{data.recent.map(r => <tr key={r.workflow+r.id}><td>{r.date}</td><td>{label(r.workflow)}</td><td><button className="text-button" onClick={() => onOpen(r)}>#{r.id}</button> {[r.container, r.location, r.crew, r.category, r.status ? typeLabels[r.status as TallyType] : null].filter(Boolean).join(' / ')}</td><td>{r.kg !== null ? `${r.kg} kg${r.workflow === 'WHITEGOODS' ? ' estimated' : ''}` : r.count !== null ? `${r.count} tallied` : '-'}</td><td>{r.createdBy}</td></tr>)}</tbody></table></div>}
+      </section>
+      <section className="panel report-section"><details><summary>Monthly quantities by workflow and material</summary><p className="hint">Net weights, material breakdowns and estimated weights are separate measures.</p><TotalsTable totals={data.monthly.totals}/></details></section>
+    </>}
   </section>
 }

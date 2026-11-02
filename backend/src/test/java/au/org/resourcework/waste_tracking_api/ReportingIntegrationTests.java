@@ -149,4 +149,42 @@ class ReportingIntegrationTests {
         mvc.perform(report("/waste-levy-summary").param("month","2000-02")).andExpect(status().isOk());
     }
 
+    @Test void dashboardUsesApprovedWeightsCountsAndSixCompleteTrendBuckets() throws Exception {
+        mvc.perform(report("/overview").param("month","2001-02"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.month").value("2001-02"))
+            .andExpect(jsonPath("$.recordsThisMonth").value(8))
+            .andExpect(jsonPath("$.metrics.salvageRecoveredKg").value("20.00"))
+            .andExpect(jsonPath("$.metrics.landfillKg").value("0.00"))
+            .andExpect(jsonPath("$.metrics.whitegoodsCount").value("2"))
+            .andExpect(jsonPath("$.metrics.whitegoodsEstimatedKg").value("96.00"))
+            .andExpect(jsonPath("$.generalIntake.length()").value(1))
+            .andExpect(jsonPath("$.generalIntake[0].category").value("Iron and Steel"))
+            .andExpect(jsonPath("$.generalIntake[0].value").value("30.00"))
+            .andExpect(jsonPath("$.activity.length()").value(7))
+            .andExpect(jsonPath("$.trend.length()").value(42))
+            .andExpect(jsonPath("$.trend[0].month").value("2000-09"))
+            .andExpect(jsonPath("$.recent.length()").value(5))
+            .andExpect(jsonPath("$.electricalTesting.length()").value(5))
+            .andExpect(jsonPath("$.electricalTesting[3].status").value("DIVERTED_TO_OLS"))
+            .andExpect(jsonPath("$.electricalTesting[3].count").value("3"));
+    }
+    @Test void dashboardExcludesSoftDeletedRowsAndKeepsRecentSeparateFromPeriod() throws Exception {
+        jdbc.update("update pickup_record set deleted_at=now(),deleted_by=? where record_date=date '2001-02-28'",actor);
+        jdbc.update("update electrical_testing_tally set deleted_at=now(),deleted_by=? where record_date=date '2001-02-28'",actor);
+        mvc.perform(report("/overview").param("month","2001-02"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.recordsThisMonth").value(6))
+            .andExpect(jsonPath("$.generalIntake[0].value").value("20.00"))
+            .andExpect(jsonPath("$.electricalTesting[3].count").value("0"));
+        mvc.perform(report("/overview").param("month","2000-02"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.recordsThisMonth").value(0))
+            .andExpect(jsonPath("$.metrics.salvageRecoveredKg").value("0.00"))
+            .andExpect(jsonPath("$.metrics.whitegoodsCount").value("0"))
+            .andExpect(jsonPath("$.generalIntake.length()").value(0))
+            .andExpect(jsonPath("$.trend.length()").value(42))
+            .andExpect(jsonPath("$.recent.length()").value(5));
+    }
+    @Test void dashboardRejectsMalformedAndFutureMonths() throws Exception {
+        for(String month:List.of("2001-2","2001-13","0000-01","9999-12")) mvc.perform(report("/overview").param("month",month)).andExpect(status().isBadRequest());
+    }
+
 }

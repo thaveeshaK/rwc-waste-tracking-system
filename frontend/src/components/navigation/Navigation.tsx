@@ -1,15 +1,12 @@
+import { NewEntryMenu } from './NewEntryMenu'
+import { workflowEntries } from '../../features/operations/workflows'
 import type { Workflow } from '../../features/records/types'
 export type Page = 'operations' | 'entry' | 'records' | 'overview' | 'reports' | 'waste-levy' | 'settings'
-const entries: [Workflow, string][] = [
-  ['CRATE_PALLET', 'New Crate / Pallet'], ['SALVAGE', 'New Salvage'], ['PICKUP', 'New Pickup'],
-  ['ELECTRICAL_CRATE_PALLET', 'New Electrical Crate / Pallet'], ['COLLECTABLES', 'New Collectables'],
-  ['WHITEGOODS', 'New Whitegoods'], ['ELECTRICAL_TESTING', 'Electrical Testing'],
-]
 interface Props { isAdmin: boolean; page: Page; busy: boolean; unresolved: boolean; workflow: Workflow; onPage: (page: Page) => void; onNew: (workflow: Workflow) => void }
 export function Navigation({isAdmin, page, busy, unresolved, workflow, onPage, onNew}: Props) {
-  function link(target: Page, text: string) { return <button disabled={busy} className={'nav-item'+(page === target ? ' active' : '')} onClick={() => onPage(target)}>{text}</button> }
+  function link(target: Page, text: string) { return <button disabled={busy} aria-current={page === target ? 'page' : undefined} className={'nav-item'+(page === target ? ' active' : '')} onClick={() => onPage(target)}>{text}</button> }
   return <nav className="role-navigation" aria-label={isAdmin ? 'Admin navigation' : 'Staff navigation'}>
-    <div className="management-navigation">{isAdmin && link('overview', 'Overview')}{link('operations', isAdmin ? 'Workflows' : 'Operations')}{isAdmin && <>{link('reports', 'Reports')}{link('waste-levy', 'Waste Levy Summary')}</>}{link('records', 'Records')}{isAdmin && link('settings', 'Settings')}</div>
-    <div className="workflow-navigation" aria-label={isAdmin ? 'Workflows' : 'Operations'}>{entries.map(([w, name]) => <button key={w} disabled={busy || (unresolved && workflow !== w)} className={'nav-item'+(page === 'entry' && workflow === w ? ' active' : '')} onClick={() => onNew(w)}>{unresolved && workflow === w ? 'Resume submission' : name}</button>)}</div>
+    <div className="primary-navigation"><div className="management-navigation">{isAdmin && link('overview', 'Overview')}{link('operations', isAdmin ? 'Workflows' : 'Operations')}{isAdmin && <>{link('reports', 'Reports')}{link('waste-levy', 'Waste Levy Summary')}</>}{link('records', 'Records')}{isAdmin && link('settings', 'Settings')}</div>{isAdmin && <NewEntryMenu busy={busy} unresolved={unresolved} workflow={workflow} onNew={onNew}/>}</div>
+    {!isAdmin && <div className="workflow-navigation" aria-label="Operations">{workflowEntries.map(w => <button key={w.id} disabled={busy || (unresolved && workflow !== w.id)} className={'nav-item'+(page === 'entry' && workflow === w.id ? ' active' : '')} onClick={() => onNew(w.id)}>{unresolved && workflow === w.id ? 'Resume submission' : w.staffLabel}</button>)}</div>}
   </nav>
 }
