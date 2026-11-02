@@ -82,6 +82,7 @@ public class CratePalletService {
         var calculated = calculate(input, saved);
         saved.setRecordDate(calculated.getRecordDate());
         saved.setContainerType(calculated.getContainerType());
+        saved.setContainerName(calculated.getContainerName());
         saved.setGrossWeight(calculated.getGrossWeight());
         saved.setTareWeight(calculated.getTareWeight());
         saved.setNetWeight(calculated.getNetWeight());
@@ -118,6 +119,7 @@ public class CratePalletService {
         var result = new CratePalletRecord();
         result.setRecordDate(input.recordDate());
         result.setContainerType(container);
+        result.setContainerName(sameContainer ? previous.getContainerName() : container.getName());
         result.setGrossWeight(input.grossWeight().setScale(2));
         result.setTareWeight(tare);
         result.setNetWeight(net);
@@ -175,7 +177,7 @@ public class CratePalletService {
                 .map(m -> new CratePalletResponse.MaterialResponse(m.getCategory().getId(), m.getCategory().getName(),
                         m.getPercentage().toPlainString(), m.getMaterialWeight().toPlainString())).toList();
         return new CratePalletResponse(record.getId(), record.getVersion(), record.getSubmissionId(), record.getRecordDate(),
-                record.getContainerType().getId(), record.getContainerType().getName(),
+                record.getContainerType().getId(), record.getContainerName(),
                 record.getGrossWeight().toPlainString(), record.getTareWeight().toPlainString(),
                 record.getNetWeight().toPlainString(), materials,
                 record.getCreatedBy() == null ? null : record.getCreatedBy().getUsername(), record.getCreatedAt(),

@@ -13,7 +13,7 @@ class ReportServiceTests {
         when(repository.recent(anyInt())).thenReturn(List.of());
         when(repository.trend(any())).thenReturn(List.of());
         when(repository.totals(any())).thenReturn(List.of());
-        var overview=new ReportService(repository,clock).overview();
+        var overview=new ReportService(repository,clock,null).overview();
         assertThat(overview.today()).isEqualTo("2026-10-04");
         verify(repository).submitted(Instant.parse("2026-10-03T14:00:00Z"),Instant.parse("2026-10-04T13:00:00Z"));
         assertThat(overview.monthly().filters().from()).isEqualTo(LocalDate.of(2026,10,1));
@@ -29,7 +29,7 @@ class ReportServiceTests {
         when(service.summary(filter)).thenReturn(new ReportData.Result(filter,"Australia/Hobart",Instant.EPOCH,List.of(
             new ReportData.Total("PICKUP",null,null,null,null,"Net weight","kg","123456789012345.67"),
             new ReportData.Total("PICKUP",null,null,null,null,"Material weight","kg","12.34"))));
-        var file=new ReportExportService(service,Clock.fixed(Instant.EPOCH,ZoneId.of("Australia/Hobart"))).report(filter,"summary","xlsx");
+        var file=new ReportExportService(service,Clock.fixed(Instant.EPOCH,ZoneId.of("Australia/Hobart")), configuration()).report(filter,"summary","xlsx");
         try(var workbook=new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(file.bytes()))) {
             var cells=new java.util.ArrayList<org.apache.poi.ss.usermodel.Cell>();
             for(var row:workbook.getSheet("Summary")) if(row.getCell(5)!=null && row.getCell(5).getCellType()==org.apache.poi.ss.usermodel.CellType.STRING && List.of("Net weight","Material weight").contains(row.getCell(5).getStringCellValue())) cells.add(row.getCell(6));
@@ -39,6 +39,12 @@ class ReportServiceTests {
             assertThat(cells.getLast().getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.NUMERIC);
             assertThat(java.math.BigDecimal.valueOf(cells.getLast().getNumericCellValue())).isEqualByComparingTo("12.34");
         }
+    }
+
+    private au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration configuration() {
+        var config=mock(au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration.class);
+        when(config.current()).thenReturn(new au.org.resourcework.waste_tracking_api.settings.SettingsData.Configuration(0L,"RWC","","RWC","kg","CURRENT_MONTH",7,new java.math.BigDecimal("48.00"),null,null));
+        return config;
     }
 
 }

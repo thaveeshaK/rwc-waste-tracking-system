@@ -18,11 +18,17 @@ public class ReportService {
     private static final Set<String> WORKFLOWS=Set.of("CRATE_PALLET","SALVAGE","PICKUP","ELECTRICAL_CRATE_PALLET","COLLECTABLES","WHITEGOODS","ELECTRICAL_TESTING");
     private final ReportingRepository repository;
     private final Clock clock;
-    public ReportService(ReportingRepository repository, Clock clock) { this.repository=repository; this.clock=clock; }
+    private final au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration configuration;
+    public ReportService(ReportingRepository repository, Clock clock, au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration configuration) { this.repository=repository; this.clock=clock; this.configuration=configuration; }
 
     public ReportFilter validate(ReportFilter input) {
         LocalDate today=LocalDate.now(clock);
-        LocalDate from=input.from()==null?today.withDayOfMonth(1):input.from();
+        LocalDate from=input.from();
+        if (from==null) {
+            var defaults=configuration.current();
+            int startMonth=defaults.financialYearStartMonth();
+            from=defaults.reportPeriod().equals("CURRENT_FINANCIAL_YEAR")?LocalDate.of(today.getYear()-(today.getMonthValue()<startMonth?1:0),startMonth,1):today.withDayOfMonth(1);
+        }
         LocalDate to=input.to()==null?today:input.to();
         if (from.getYear()<1 || to.getYear()>9998 || from.isAfter(to)) bad("Invalid reporting date range.");
         String workflow=blank(input.workflow()), location=blank(input.location()), direction=blank(input.direction());
@@ -68,7 +74,6 @@ public class ReportService {
         if (totals.stream().noneMatch(t->t.workflow().equals("WHITEGOODS"))) {
             totals.add(new Total("WHITEGOODS",null,null,null,null,"Whitegoods count","count","0"));
             totals.add(new Total("WHITEGOODS",null,null,null,null,"Estimated weight","kg","0.00"));
-            totals.add(new Total("WHITEGOODS",null,null,null,null,"Applied factor","kg/item","48.00"));
         }
         for (String direction:List.of("UP","DOWN")) if (totals.stream().noneMatch(t->t.workflow().equals("SALVAGE") && Objects.equals(t.direction(),direction) && t.metric().equals("Net weight"))) {
             totals.add(new Total("SALVAGE",direction,null,null,null,"Net weight","kg","0.00"));

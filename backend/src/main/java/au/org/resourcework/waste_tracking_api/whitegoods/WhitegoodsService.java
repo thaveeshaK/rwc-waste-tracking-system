@@ -19,14 +19,16 @@ public class WhitegoodsService {
     private final AppUserRepository users;
     private final WhitegoodsCalculator calculator;
     private final Clock clock;
+    private final au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration configuration;
 
     public WhitegoodsService(WhitegoodsRepository records,
             AppUserRepository users,
-            WhitegoodsCalculator calculator, Clock clock) {
+            WhitegoodsCalculator calculator, Clock clock, au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration configuration) {
         this.records = records;
         this.users = users;
         this.calculator = calculator;
         this.clock = clock;
+        this.configuration = configuration;
     }
 
     public WhitegoodsResponse preview(WhitegoodsRequest input) {
@@ -100,7 +102,7 @@ public class WhitegoodsService {
         var result = new WhitegoodsRecord();
         result.setRecordDate(input.recordDate());
         result.setCount(count);
-        result.setKgPerItem(previous == null ? WhitegoodsCalculator.KG_PER_ITEM : previous.getKgPerItem());
+        result.setKgPerItem(previous == null ? configuration.current().whitegoodsKgPerItem() : previous.getKgPerItem());
         result.setEstimatedWeight(BigDecimal.valueOf(count).multiply(result.getKgPerItem()));
         return result;
     }
@@ -118,8 +120,10 @@ public class WhitegoodsService {
     public WhitegoodsMonthlySummary monthlySummary(String value) {
         var month = calculator.month(value);
         long total = records.sumActiveCount(month.atDay(1), month.plusMonths(1).atDay(1));
-        return new WhitegoodsMonthlySummary(month.toString(), total, WhitegoodsCalculator.KG_PER_ITEM.toPlainString(),
-                calculator.estimatedWeight(total).toPlainString());
+        var weights=records.sumActiveWeight(month.atDay(1),month.plusMonths(1).atDay(1));
+        String factor=weights.getMinFactor()==null?null:
+                weights.getMinFactor().compareTo(weights.getMaxFactor())==0?weights.getMinFactor().toPlainString():null;
+        return new WhitegoodsMonthlySummary(month.toString(),total,factor,weights.getWeight().setScale(2).toPlainString());
     }
 
     private WhitegoodsRecord active(Long id) {

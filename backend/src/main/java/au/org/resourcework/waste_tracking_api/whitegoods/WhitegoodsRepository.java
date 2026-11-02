@@ -25,6 +25,10 @@ public interface WhitegoodsRepository extends JpaRepository<WhitegoodsRecord, Lo
         """)
     List<WhitegoodsRecord> findActiveBetween(@Param("from") LocalDate from, @Param("to") LocalDate to);
 
+    interface WeightSummary { BigDecimal getWeight(); BigDecimal getMinFactor(); BigDecimal getMaxFactor(); }
+    @Query("select coalesce(sum(r.estimatedWeight),0) as weight,min(r.kgPerItem) as minFactor,max(r.kgPerItem) as maxFactor from WhitegoodsRecord r where r.deletedAt is null and r.recordDate >= :start and r.recordDate < :end")
+    WeightSummary sumActiveWeight(@Param("start") LocalDate start, @Param("end") LocalDate end);
+
     // A database uniqueness constraint resolves concurrent retries without aborting the transaction.
     @Modifying
     @Query(value = """

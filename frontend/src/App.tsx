@@ -1,3 +1,6 @@
+import { SettingsPage } from './features/settings/SettingsPage'
+import { getOperationalConfiguration } from './features/settings/api'
+import type { OperationalConfiguration } from './features/settings/types'
 import { Navigation, type Page } from './components/navigation/Navigation'
 import { OverviewPage } from './features/reporting/OverviewPage'
 import { ReportsPage } from './features/reporting/ReportsPage'
@@ -20,6 +23,8 @@ import type { OperationalRecord, Workflow } from './features/records/types'
 import { RecordsPage } from './pages/RecordsPage'
 
 function App() {
+  const [configuration, setConfiguration] = useState<OperationalConfiguration | null>(null)
+  const [configurationRevision, setConfigurationRevision] = useState(0)
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -44,6 +49,13 @@ function App() {
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    getOperationalConfiguration().then(value => {if (!cancelled) setConfiguration(value)}).catch(e => {if (!cancelled) setError(errorMessage(e))})
+    return () => {cancelled = true}
+  }, [user, configurationRevision])
 
   useEffect(() => {
     function beforeUnload(event: BeforeUnloadEvent) {
@@ -94,6 +106,7 @@ function App() {
     try {
       await logout()
       setUser(null)
+      setConfiguration(null)
       setEditing(undefined)
       setSaved(undefined)
       setHasEntry(false)
@@ -113,7 +126,7 @@ function App() {
 
   function navigate(target: Page) {
     if (busyRef.current || signingOut) return
-    if (['overview', 'reports', 'waste-levy'].includes(target) && user?.role !== 'ADMIN') return
+    if (['overview', 'reports', 'waste-levy', 'settings'].includes(target) && user?.role !== 'ADMIN') return
     if (target === 'records') { showRecords(); return }
     setError(''); setPage(target)
   }
@@ -135,7 +148,7 @@ function App() {
   if (loading) return <main className="app-shell"><p role="status">Loading waste tracking...</p></main>
   if (!user) return <>{error && <p className="notice error" role="alert">{error}</p>}<LoginPage onLogin={user => { setError(''); setPage(user.role === 'ADMIN' ? 'overview' : 'operations'); setUser(user) }} /></>
   return <><header className="app-header"><div className="header-inner">
-    <div className="brand"><span className="brand-mark" aria-hidden="true">RWC</span><div><strong>Resource Work Cooperative</strong><span>Waste tracking</span></div></div>
+    <div className="brand"><span className="brand-mark" aria-hidden="true">RWC</span><div><strong>{configuration?.organisationName ?? 'Resource Work Cooperative'}</strong><span>{configuration?.siteName || 'Waste tracking'}</span></div></div>
     <div className="account"><span>{user.username} <span className="role-badge">{user.role === 'ADMIN' ? 'Admin' : 'Staff'}</span></span>
       <button className="secondary" disabled={signingOut || busy || unresolved} onClick={signOut}>{signingOut ? 'Signing out...' : 'Sign out'}</button></div>
   </div></header>
@@ -143,6 +156,7 @@ function App() {
       {error && <p className="notice error" role="alert">{error}</p>}
       {unresolved && <p className="notice" role="status">A submission is unresolved. Retry it or check Records. Its details stay in memory while you check.</p>}
       {page === 'operations' && <section className="panel report-section"><p className="eyebrow">{user.role === 'ADMIN' ? 'ADMIN WORKFLOWS' : 'STAFF OPERATIONS'}</p><h1>{user.role === 'ADMIN' ? 'Workflows' : 'Operations'}</h1><p>Choose a workflow above to enter and review a record. Submitted records are available in Records.</p></section>}
+      {user.role === 'ADMIN' && page === 'settings' && <SettingsPage onChanged={() => setConfigurationRevision(n => n+1)}/>}
       {user.role === 'ADMIN' && page === 'overview' && <OverviewPage onOpen={openReportedRecord}/>}
       {user.role === 'ADMIN' && page === 'reports' && <ReportsPage onOpen={openReportedRecord}/>}
       {user.role === 'ADMIN' && page === 'waste-levy' && <WasteLevySummaryPage/>}
@@ -163,7 +177,7 @@ function App() {
           : entryWorkflow === 'COLLECTABLES' ? <CollectablePage key={entryKey} editing={editing?.workflow === 'COLLECTABLES' ? editing.record : undefined}
             onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
             onSaved={record => recordSaved({ workflow: 'COLLECTABLES', record })} onCancel={showRecords} />
-          : entryWorkflow === 'WHITEGOODS' ? <WhitegoodsPage key={entryKey} editing={editing?.workflow === 'WHITEGOODS' ? editing.record : undefined}
+          : entryWorkflow === 'WHITEGOODS' ? <WhitegoodsPage key={entryKey} factor={configuration?.whitegoodsKgPerItem} editing={editing?.workflow === 'WHITEGOODS' ? editing.record : undefined}
             onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
             onSaved={record => recordSaved({ workflow: 'WHITEGOODS', record })} onCancel={showRecords} />
           : <ElectricalTestingPage key={entryKey} isAdmin={user.role === 'ADMIN'} editing={editing?.workflow === 'ELECTRICAL_TESTING' ? editing.record : undefined}

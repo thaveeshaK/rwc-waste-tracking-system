@@ -7,6 +7,7 @@ import { WhitegoodsReview } from './WhitegoodsReview'
 import type { WhitegoodsInput, WhitegoodsRecord } from './types'
 
 interface Props {
+  factor?: string
   editing?: WhitegoodsRecord
   onSaved: (record: WhitegoodsRecord) => void
   onCancel: () => void
@@ -14,7 +15,7 @@ interface Props {
   onUnresolvedChange: (unresolved: boolean) => void
 }
 
-export function WhitegoodsPage({ editing, onSaved, onCancel, onBusyChange, onUnresolvedChange }: Props) {
+export function WhitegoodsPage({ factor, editing, onSaved, onCancel, onBusyChange, onUnresolvedChange }: Props) {
   const [input, setInput] = useState<Omit<WhitegoodsInput, 'count'> & { count: string }>(() => ({
     submissionId: editing?.submissionId ?? crypto.randomUUID(), version: editing?.version ?? undefined,
     recordDate: editing?.recordDate ?? operationalDate(), count: editing ? String(editing.count) : '',
@@ -81,7 +82,7 @@ export function WhitegoodsPage({ editing, onSaved, onCancel, onBusyChange, onUnr
           <div className="actions"><button disabled={busy} onClick={save}>{busy ? 'Saving...' : uncertain ? 'Retry submission' : editing ? 'Confirm correction' : 'Confirm and submit'}</button>
             <button className="secondary" disabled={busy || uncertain} onClick={() => { setReview(null); setError('') }}>Back to edit</button>
           </div></>
-        : <WhitegoodsForm value={input} today={operationalDate()}
+        : <WhitegoodsForm factor={editing?.kgPerItem ?? factor} value={input} today={operationalDate()}
           busy={busy} onChange={setInput} onReview={calculate} />}
       <button className="text-button" disabled={busy} onClick={onCancel}>{uncertain ? 'Check Records' : 'Back to Records'}</button>
     </div>

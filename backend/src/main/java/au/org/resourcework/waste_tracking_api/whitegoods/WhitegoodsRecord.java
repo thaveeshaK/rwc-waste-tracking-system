@@ -28,7 +28,7 @@ public class WhitegoodsRecord {
     private Integer count;
     @Column(nullable = false, precision = 5, scale = 2)
     private BigDecimal kgPerItem;
-    @Column(nullable = false, precision = 14, scale = 2)
+    @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal estimatedWeight;
     @ManyToOne(optional = false) @JoinColumn(name = "created_by")
     private AppUser createdBy;

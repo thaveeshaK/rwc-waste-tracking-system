@@ -12,4 +12,4 @@ export interface WhitegoodsRecord {
   updatedBy: string | null
   updatedAt: string | null
 }
-export interface MonthlySummary { month: string; totalCount: number; kgPerItem: string; estimatedWeight: string }
+export interface MonthlySummary { month: string; totalCount: number; kgPerItem: string | null; estimatedWeight: string }

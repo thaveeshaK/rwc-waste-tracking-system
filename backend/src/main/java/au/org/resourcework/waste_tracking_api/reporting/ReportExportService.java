@@ -23,7 +23,8 @@ public class ReportExportService {
     private record Table(String name, List<String> headers, List<List<Object>> rows) {}
     private final ReportService reports;
     private final java.time.Clock clock;
-    public ReportExportService(ReportService reports, java.time.Clock clock) { this.reports=reports; this.clock=clock; }
+    private final au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration configuration;
+    public ReportExportService(ReportService reports, java.time.Clock clock, au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration configuration) { this.reports=reports; this.clock=clock; this.configuration=configuration; }
 
     public File report(ReportFilter input, String type, String format) {
         if (!Set.of("summary","details","electrical-testing").contains(type)) bad("Unknown export report type.");
@@ -52,12 +53,14 @@ public class ReportExportService {
     public File monthly(String month,String format) {
         var summary=reports.monthly(month);
         var metadata=new LinkedHashMap<String,String>();
+        metadata.put("Organisation",configuration.current().reportDisplayName());
         metadata.put("Reporting month",month); metadata.put("Timezone",summary.timezone());
         metadata.put("Generated at",summary.generatedAt().toString()); metadata.put("Note",summary.note());
         return render("waste-levy-summary-"+month,format,List.of(totalTable("Monthly Summary",summary.totals())),metadata);
     }
     private Map<String,String> metadata(ReportFilter f) {
         var m=new LinkedHashMap<String,String>();
+        m.put("Organisation",configuration.current().reportDisplayName());
         m.put("Generated at",clock.instant().toString()); m.put("From",f.from().toString()); m.put("To",f.to().toString()); m.put("Timezone","Australia/Hobart");
         m.put("Workflow",Objects.toString(f.workflow(),"All")); m.put("Material category",Objects.toString(f.materialCategoryId(),"All"));
         m.put("Location contains",Objects.toString(f.location(),"")); m.put("Direction",Objects.toString(f.direction(),"All"));

@@ -108,3 +108,8 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 .table-scroll { overflow-x: auto; max-width: 100%; }
 .report-section table { min-width: 660px; }
 @media (max-width: 600px) { .metric-grid { grid-template-columns: 1fr; } }
+
+.settings-editor { margin: 1rem 0; padding: 1rem; background: #f4f6f2; border-radius: 6px; }
+.settings-contexts { margin: 1rem 0; display: flex; flex-wrap: wrap; gap: 1rem; }
+.settings-contexts label { display: flex; align-items: center; gap: .5rem; }
+.settings-contexts input { width: 22px; height: 22px; margin: 0; }

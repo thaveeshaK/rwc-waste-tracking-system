@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { getSettings } from '../settings/api'
+import { useEffect, useState, useRef } from 'react'
 import { request, download } from './api'
 import { errorMessage } from '../../api/client'
 import { operationalDate } from '../../utils/decimal'
@@ -6,6 +7,7 @@ import type { Monthly } from './types'
 import { TotalsTable } from './ReportTables'
 export function WasteLevySummaryPage() {
   const [month, setMonth] = useState(() => operationalDate().slice(0, 7))
+  const defaultsApplied = useRef(false)
   const [tonnes, setTonnes] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [result, setResult] = useState<{key: string; data: Monthly} | null>(null)
@@ -15,7 +17,7 @@ export function WasteLevySummaryPage() {
   const loading = result?.key !== key
   useEffect(() => {
     let cancelled = false
-    request<Monthly>('/api/admin/waste-levy-summary?month='+month).then(data => { if (!cancelled) {setResult({key, data}); setError('')} }).catch(e => { if (!cancelled) setError(errorMessage(e)) })
+    Promise.all([request<Monthly>('/api/admin/waste-levy-summary?month='+month), getSettings()]).then(([data, defaults]) => { if (!cancelled) {setResult({key, data}); setError(''); if (!defaultsApplied.current) {setTonnes(defaults.displayUnit === 'tonnes'); defaultsApplied.current = true}} }).catch(e => { if (!cancelled) setError(errorMessage(e)) })
     return () => { cancelled = true }
   }, [key, month])
   async function exportFile(format: string) {

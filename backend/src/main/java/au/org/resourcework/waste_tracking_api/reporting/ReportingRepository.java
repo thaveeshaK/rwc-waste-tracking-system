@@ -39,7 +39,7 @@ public class ReportingRepository {
             String t=tables[i], w=workflows[i];
             boolean container = i==0 || i==3;
             String join = container ? "join container_type ct on ct.id=r.container_type_id" : "";
-            String name = container ? "ct.name" : "null";
+            String name = container ? "r.container_name" : "null";
             String loc = i==1 ? "r.pickup_location" : "null";
             parts.add(source(t+"_record",w,"RECORD",join,name,loc,"null","null","null","null","null",
                     "r.net_weight",i==1?"null":"r.gross_weight",i==1?"null":"r.tare_weight","null","null","null","r.record_date"));

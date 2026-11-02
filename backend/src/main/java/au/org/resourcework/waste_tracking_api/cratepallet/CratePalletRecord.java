@@ -27,6 +27,8 @@ public class CratePalletRecord {
     private LocalDate recordDate;
     @ManyToOne(optional = false) @JoinColumn(name = "container_type_id")
     private ContainerType containerType;
+    @Column(nullable = false, length = 100)
+    private String containerName;
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal grossWeight;
     @Column(nullable = false, precision = 10, scale = 2)

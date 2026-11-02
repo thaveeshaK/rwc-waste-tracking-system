@@ -164,7 +164,7 @@ class WhitegoodsIntegrationTests {
 
     @Test void databaseConstraintsRejectInvalidCalculationData() throws Exception {
         long id = create(input(LocalDate.now(clock), "1")).path("id").asLong();
-        assertThatThrownBy(() -> jdbc.update("UPDATE whitegoods_record SET kg_per_item=47,estimated_weight=47 WHERE id=?", id)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbc.update("UPDATE whitegoods_record SET kg_per_item=0,estimated_weight=0 WHERE id=?", id)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
         assertThatThrownBy(() -> jdbc.update("UPDATE whitegoods_record SET whitegoods_count=-1,estimated_weight=-48 WHERE id=?", id)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
         assertThatThrownBy(() -> jdbc.update("UPDATE whitegoods_record SET estimated_weight=0 WHERE id=?", id)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
