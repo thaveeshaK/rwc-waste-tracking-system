@@ -1209,10 +1209,12 @@ try {
   await until(() => evaluate("document.querySelectorAll('.testing-category').length === 15 && document.querySelector('input[type=month]').value === '2002-01'"), 'January counter board')
   const testingCategories = (await browserApi('/api/electrical-testing/categories')).body
   const testingCategory = testingCategories[0]
-  const testingScope = `.testing-category[data-category="${testingCategory.id}"]`
-  const testingScope2 = `.testing-category[data-category="${testingCategories[1].id}"]`
-  const testingScope3 = `.testing-category[data-category="${testingCategories[2].id}"]`
-  const testingScope4 = `.testing-category[data-category="${testingCategories[3].id}"]`
+  const testingScope = `[data-reference-category="${testingCategory.id}"]`
+  const testingScope2 = `[data-reference-category="${testingCategories[1].id}"]`
+  const testingScope3 = `[data-reference-category="${testingCategories[2].id}"]`
+  const testingScope4 = `[data-reference-category="${testingCategories[3].id}"]`
+  await click('Monthly Sales Reference')
+  await until(()=>evaluate("document.querySelectorAll('[data-reference-category]').length===15"),'sales reference rows')
   assert.equal(await evaluate(`document.querySelector('${testingScope} .sales-reference').textContent.includes('Not entered')`), true)
   assert.equal(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), true)
   await click('Enter sales reference', testingScope)
@@ -1229,63 +1231,95 @@ try {
   await enabled('Confirm and submit')
   await click('Confirm and submit')
   await until(() => evaluate(`document.querySelector('${testingScope2} .sales-reference strong')?.textContent === '7'`), 'second category sales reference')
-  await click('+ Tested and Priced', testingScope)
-  await hasText('Processing / diversion tally')
-  await click('Increase quantity')
-  await click('Decrease quantity')
-  await fill('Tally quantity', '0')
-  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === 'Review entry').disabled"), true)
-  await fill('Tally quantity', '2')
-  await screenshot('tablet-testing-tally')
-  await click('Review entry')
-  await enabled('Confirm and submit')
+  await click('Daily Tallies')
+  assert.equal(await evaluate("document.querySelector('.testing-summary').open"),false)
+  assert.equal(await evaluate("document.querySelectorAll('.quick-tally input').length"),47)
+  assert.equal(await evaluate("[...document.querySelectorAll('.quick-tally input')].every(i=>i.value==='0')"),true)
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Save Tallies').disabled"),true)
+  const pendingCell=(categoryId,type)=>categoryId===null?`.testing-diversions [data-tally="${type}"]`:`.testing-category[data-category="${categoryId}"] [data-tally="${type}"]`
+  const tapTally=async(categoryId,type,sign)=>click(sign,pendingCell(categoryId,type))
+  const setTally=async(categoryId,type,value)=>evaluate(`(() => {const i=document.querySelector(${JSON.stringify(pendingCell(categoryId,type)+' input')});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,${JSON.stringify(value)});i.dispatchEvent(new Event('input',{bubbles:true}));})()`)
+  const pendingCount=(categoryId,type)=>evaluate(`document.querySelector(${JSON.stringify(pendingCell(categoryId,type)+' input')}).value`)
+  const cull='STOCK_CULL',tested='TESTED_AND_PRICED'
+  assert.equal(await evaluate(`document.querySelector(${JSON.stringify(pendingCell(testingCategory.id,tested)+' button')}).disabled`),true)
+  // The first cell will succeed before the next cell's response is deliberately lost.
+  for(let i=0;i<4;i++)await tapTally(testingCategories[1].id,cull,'+')
+  await tapTally(testingCategories[1].id,cull,'-')
+  assert.equal(await pendingCount(testingCategories[1].id,cull),'3')
+  for(const invalid of ['-1','1.5','not-a-number']) {
+    await setTally(testingCategory.id,tested,invalid)
+    assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Save Tallies').disabled"),true)
+  }
+  await setTally(testingCategory.id,tested,'2')
+  await tapTally(testingCategory.id,'UNTESTED_BROKEN_FAILED','+')
+  await setTally(null,'DIVERTED_TO_OLS','3')
+  await setTally(null,'DIVERTED_TO_COLL','4')
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Sign out').disabled"),true)
+  assert.equal(await evaluate(`(() => {const e=new Event('beforeunload',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented})()`),true)
+  await click('Records')
+  await resumeStaffSubmission()
+  assert.equal(await pendingCount(testingCategory.id,tested),'2')
+  assert.equal(await pendingCount(testingCategories[1].id,cull),'3')
+  for(const width of [1280,768,1024]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
+    await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'quick tally overflow at '+width)
+    await tapTally(testingCategory.id,tested,'+')
+    await tapTally(testingCategory.id,tested,'-')
+    assert.equal(await pendingCount(testingCategory.id,tested),'2')
+    await screenshot('electrical-testing-grid-'+width)
+  }
   await evaluate(`window.__testingPayloads=[];window.__testingLost=false;
     window.__testingGate=new Promise(resolve=>{window.__releaseTesting=resolve});
     window.fetch=async(...args)=>{
       const submission=args[0]==='/api/electrical-testing/tallies'&&args[1]?.method==='POST';
-      if(submission){window.__testingPayloads.push(args[1].body);await window.__testingGate}
+      if(submission){window.__testingPayloads.push(args[1].body);if(JSON.parse(args[1].body).tallyType==='TESTED_AND_PRICED')await window.__testingGate}
       const response=await window.__realFetch(...args);
-      if(submission&&response.ok&&!window.__testingLost){window.__testingLost=true;throw new TypeError('Simulated lost testing tally response')}
+      if(submission&&JSON.parse(args[1].body).tallyType==='TESTED_AND_PRICED'&&response.ok&&!window.__testingLost){window.__testingLost=true;throw new TypeError('Simulated lost testing tally response')}
       return response;
     };`)
-  await click('Confirm and submit')
-  await until(() => evaluate('window.__testingPayloads.length === 1'), 'testing tally in progress')
-  for(const label of ['Operations','Records','Sign out']) {
-    assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(label)}).disabled`),true)
-  }
+  await click('Save Tallies')
+  await until(()=>evaluate('window.__testingPayloads.length===2'),'first cell confirmed, second in progress')
+  assert.equal(await pendingCount(testingCategories[1].id,cull),'0')
+  for(const label of ['Operations','Records','Sign out']) assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(label)}).disabled`),true)
   await evaluate('window.__releaseTesting()')
-  await enabled('Retry submission')
-  await click('Check Records')
+  await enabled('Retry Save Tallies')
+  await hasText('1 of 5 tally records confirmed saved')
+  await click('Records')
   await fill('Workflow','WHITEGOODS')
   await enabled('Apply dates / refresh')
   await resumeStaffSubmission()
-  await enabled('Retry submission')
-  await click('Retry submission')
-  await until(() => evaluate(`document.querySelector('${testingScope} .testing-counters')?.textContent.includes('Tested and Priced: 2')`), 'saved testing tally count')
+  await click('Retry Save Tallies')
+  await hasText('Tallies saved successfully.')
+  assert.equal(await evaluate("[...document.querySelectorAll('.quick-tally input')].every(i=>i.value==='0')"),true)
   const testingPayloads=await evaluate('window.__testingPayloads')
-  assert.equal(testingPayloads.length,2);assert.equal(testingPayloads[0],testingPayloads[1])
+  assert.equal(testingPayloads.length,6)
+  const testedAttempts=testingPayloads.filter(p=>JSON.parse(p).tallyType==='TESTED_AND_PRICED')
+  assert.equal(testedAttempts.length,2);assert.equal(testedAttempts[0],testedAttempts[1])
+  assert.equal(testingPayloads.filter(p=>JSON.parse(p).tallyType==='STOCK_CULL').length,1)
   await evaluate('window.fetch=window.__realFetch')
-  const testingInput=JSON.parse(testingPayloads[0])
+  const testingInput=JSON.parse(testedAttempts[0])
   const testingSaved=(await browserApi('/api/electrical-testing/tallies')).body.filter(r=>r.submissionId===testingInput.submissionId)
   assert.equal(testingSaved.length,1)
   const testingId=testingSaved[0].id
-  await click('+ Untested / Broken / Failed',testingScope)
-  await click('Review entry')
-  await enabled('Confirm and submit')
-  await click('Confirm and submit')
-  await until(()=>evaluate(`document.querySelector('${testingScope} .testing-counters')?.textContent.includes('Untested / Broken / Failed: 1')`),'independent testing status')
-  for(const [label,count] of [['+ Diverted to OLS','3'],['+ Diverted to Coll','4']]) {
-    await click(label)
-    assert.equal(await evaluate("document.querySelector('.testing-entry select') === null"),true)
-    await fill('Tally quantity',count)
-    await click('Review entry')
-    await enabled('Confirm and submit')
-    await click('Confirm and submit')
-    await until(()=>evaluate("document.querySelectorAll('.testing-category').length === 15"),'diversion return to counters')
-  }
   const testingSummary=(await browserApi('/api/electrical-testing/monthly-summary?month=2002-01')).body
   assert.equal(testingSummary.divertedToOls,3);assert.equal(testingSummary.divertedToColl,4)
   assert.equal(testingSummary.categories[0].testedAndPriced,2)
+  assert.equal(testingSummary.categories[0].untestedBrokenFailed,1)
+  assert.equal(testingSummary.categories[1].stockCull,3)
+  await tapTally(testingCategory.id,tested,'+')
+  await tapTally(testingCategory.id,tested,'-')
+  assert.equal(await pendingCount(testingCategory.id,tested),'0')
+  assert.equal((await browserApi('/api/electrical-testing/monthly-summary?month=2002-01')).body.categories[0].testedAndPriced,2)
+  await tapTally(testingCategory.id,tested,'+')
+  await evaluate(`window.fetch=(...args)=>args[0]==='/api/electrical-testing/tallies'&&args[1]?.method==='POST'?Promise.resolve(new Response(JSON.stringify({detail:'Simulated tally conflict'}),{status:409,headers:{'Content-Type':'application/problem+json'}})):window.__realFetch(...args)`)
+  await click('Save Tallies')
+  await hasText('Conflict:')
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Retry Save Tallies').disabled"),true)
+  await click('Clear remaining session')
+  await evaluate('window.fetch=window.__realFetch')
+  assert.equal(await pendingCount(testingCategory.id,tested),'0')
+  await click('Monthly Sales Reference')
+  await until(()=>evaluate("document.querySelectorAll('[data-reference-category]').length===15"),'references refreshed after session conflict')
   await click('Enter sales reference',testingScope3)
   await fill('Sold Last Month count','5')
   await click('Review entry')
@@ -1345,6 +1379,7 @@ try {
   await click('Electrical Testing', '#admin-new-entry-menu')
   await until(()=>evaluate("document.querySelectorAll('.testing-category').length === 15"),'Admin testing board')
   await fill('Tally date','2002-01-15')
+  await click('Monthly Sales Reference')
   await until(()=>evaluate(`document.querySelector('${testingScope} .sales-reference strong')?.textContent === '0'`),'Admin reference loaded')
   await click('Correct sales reference',testingScope)
   await fill('Sold Last Month count','11')

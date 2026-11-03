@@ -40,6 +40,8 @@ function App() {
   const [recordWorkflow, setRecordWorkflow] = useState<Workflow>('CRATE_PALLET')
   const [signingOut, setSigningOut] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [pendingTallies, setPendingTallies] = useState(false)
+  const pendingTalliesRef = useRef(false)
   const [unresolved, setUnresolved] = useState(false)
   const busyRef = useRef(false)
   const unresolvedRef = useRef(false)
@@ -61,7 +63,7 @@ function App() {
 
   useEffect(() => {
     function beforeUnload(event: BeforeUnloadEvent) {
-      if (busyRef.current || unresolvedRef.current) {
+      if (busyRef.current || unresolvedRef.current || pendingTalliesRef.current) {
         event.preventDefault()
         event.returnValue = ''
       }
@@ -80,6 +82,11 @@ function App() {
     setUnresolved(value)
   }
 
+  function pendingTalliesChanged(value: boolean) {
+    pendingTalliesRef.current = value
+    setPendingTallies(value)
+  }
+
   function showRecords() {
     if (busyRef.current) return
     if (hasEntry) setRecordWorkflow(entryWorkflow)
@@ -91,7 +98,7 @@ function App() {
   function newRecord(workflow: Workflow) {
     if (busyRef.current) return
     setError('')
-    if (!unresolvedRef.current) {
+    if (!unresolvedRef.current && !pendingTalliesRef.current) {
       setEditing(undefined)
       setSaved(undefined)
       setEntryWorkflow(workflow)
@@ -102,7 +109,7 @@ function App() {
   }
 
   async function signOut() {
-    if (busyRef.current || unresolvedRef.current) return
+    if (busyRef.current || unresolvedRef.current || pendingTalliesRef.current) return
     setSigningOut(true)
     setError('')
     try {
@@ -152,12 +159,13 @@ function App() {
   return <><header className="app-header"><div className="header-inner">
     <div className="brand"><span className="brand-mark" aria-hidden="true">RWC</span><div><strong>{configuration?.organisationName ?? 'Resource Work Cooperative'}</strong><span>{configuration?.siteName || 'Waste tracking'}</span></div></div>
     <div className="account"><span>{user.username} <span className="role-badge">{user.role === 'ADMIN' ? 'Admin' : 'Staff'}</span></span>
-      <button className="secondary" disabled={signingOut || busy || unresolved} onClick={signOut}>{signingOut ? 'Signing out...' : 'Sign out'}</button></div>
+      <button className="secondary" disabled={signingOut || busy || unresolved || pendingTallies} onClick={signOut}>{signingOut ? 'Signing out...' : 'Sign out'}</button></div>
   </div></header>
-    <main className="app-shell" inert={signingOut}><Navigation isAdmin={user.role === 'ADMIN'} page={page} busy={busy || signingOut} unresolved={unresolved} workflow={entryWorkflow} onNew={newRecord} onPage={navigate} />
+    <main className="app-shell" inert={signingOut}><Navigation isAdmin={user.role === 'ADMIN'} page={page} busy={busy || signingOut} unresolved={unresolved || pendingTallies} workflow={entryWorkflow} onNew={newRecord} onPage={navigate} />
       {error && <p className="notice error" role="alert">{error}</p>}
+      {pendingTallies && !unresolved && page !== 'entry' && <p className="notice" role="status">Electrical Testing tallies are pending. Save them before signing out or starting another workflow. They remain in memory while you check Records.</p>}
       {unresolved && <p className="notice" role="status">A submission is unresolved. Retry it or check Records. Its details stay in memory while you check.</p>}
-      {page === 'operations' && (user.role === 'ADMIN' ? <WorkflowsPage onNew={newRecord} busy={busy || signingOut} unresolved={unresolved} currentWorkflow={entryWorkflow}/> : <StaffOperationsPage onNew={newRecord} onRecords={showRecords} busy={busy || signingOut} unresolved={unresolved} currentWorkflow={entryWorkflow}/>)}
+      {page === 'operations' && (user.role === 'ADMIN' ? <WorkflowsPage onNew={newRecord} busy={busy || signingOut} unresolved={unresolved || pendingTallies} currentWorkflow={entryWorkflow}/> : <StaffOperationsPage onNew={newRecord} onRecords={showRecords} busy={busy || signingOut} unresolved={unresolved || pendingTallies} currentWorkflow={entryWorkflow}/>)}
       {user.role === 'ADMIN' && page === 'settings' && <SettingsPage onChanged={() => setConfigurationRevision(n => n+1)}/>}
       {user.role === 'ADMIN' && page === 'overview' && <OverviewPage onOpen={openReportedRecord} onRecords={showRecords}/>}
       {user.role === 'ADMIN' && page === 'reports' && <ReportsPage onOpen={openReportedRecord}/>}
@@ -183,14 +191,14 @@ function App() {
             onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
             onSaved={record => recordSaved({ workflow: 'WHITEGOODS', record })} onCancel={showRecords} />
           : <ElectricalTestingPage key={entryKey} isAdmin={user.role === 'ADMIN'} editing={editing?.workflow === 'ELECTRICAL_TESTING' ? editing.record : undefined}
-            onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
+            onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged} onPendingChange={pendingTalliesChanged}
             onSaved={record => recordSaved({ workflow: 'ELECTRICAL_TESTING', record })} onCancel={showRecords} />}
       </div>}
       {page === 'records' && <RecordsPage isAdmin={user.role === 'ADMIN'} saved={saved} selectedRecord={reported}
         workflow={recordWorkflow} onWorkflowChange={workflow => { setSaved(undefined); setRecordWorkflow(workflow) }}
         onBusyChange={activityChanged} onEdit={record => {
           if (busyRef.current) return
-          if (unresolvedRef.current) {
+          if (unresolvedRef.current || pendingTalliesRef.current) {
             setError('Resolve the current submission before correcting another record.')
             return
           }

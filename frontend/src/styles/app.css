@@ -168,3 +168,33 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 .salvage-steps button.completed { background: #e4ebe1; color: #245c43; border-color: #7d9b83; }
 .salvage-steps button.completed::after { content: ' \2713'; margin-left: .5rem; }
 .salvage-entry .material-grid input { min-height: 44px; }
+
+.testing-tabs { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 1rem; }
+.tally-date { max-width: 240px; margin-bottom: 1rem; }
+.tally-grid { background: white; border: 1px solid #dce4da; border-radius: 8px; overflow: hidden; }
+.tally-grid-heading, .tally-grid-row { display: grid; grid-template-columns: minmax(130px, 1.3fr) repeat(3, minmax(148px, 1fr)); gap: .5rem; align-items: center; padding: .55rem .75rem; }
+.tally-grid-heading { background: #eaf1e8; font-size: .8rem; font-weight: 600; text-align: center; }
+.tally-grid-heading span:first-child { text-align: left; }
+.tally-grid-row { border-bottom: 1px solid #e6ece4; }
+.tally-grid-row:last-child { border: 0; }
+.tally-grid-row h2 { font-size: .85rem; margin: 0; overflow-wrap: anywhere; }
+.quick-tally { display: flex; justify-content: center; gap: .2rem; align-items: center; }
+.quick-tally button { min-width: 44px; min-height: 44px; padding: .4rem; font-size: 1.05rem; }
+.quick-tally input { width: 52px; min-width: 0; min-height: 44px; text-align: center; padding: .3rem; margin: 0; }
+.quick-tally input::-webkit-inner-spin-button { appearance: none; }
+.quick-tally input[aria-invalid=true] { border-color: #9b3432; }
+.tally-mobile-label { display: none; }
+.testing-board .testing-diversions { margin: 1.25rem 0; }
+.quick-diversions { display: flex; flex-wrap: wrap; gap: 1.5rem; }
+.quick-diversions h3 { font-size: .9rem; }
+.tally-save { position: sticky; bottom: 0; z-index: 5; background: #f3f7f1; border: 1px solid #b8cdb6; border-radius: 8px; padding: .75rem 1rem; display: flex; align-items: center; flex-wrap: wrap; gap: .6rem 1rem; box-shadow: 0 -3px 12px #24452d12; margin: 1rem 0; }
+.tally-save p { margin: 0; font-weight: 600; }
+.testing-summary { margin: 1rem 0; }
+@media (max-width: 700px) {
+  .tally-grid-heading { grid-template-columns: 1fr; }
+  .tally-grid-heading span:not(:first-child) { display: none; }
+  .tally-grid-row { grid-template-columns: 1fr; gap: .4rem; }
+  .tally-grid-row h2 { padding: .2rem 0; }
+  .tally-grid-cell { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+  .tally-mobile-label { display: inline; font-size: .82rem; }
+}

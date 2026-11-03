@@ -10,8 +10,8 @@ type FormState = {kind:'tally'; input:Omit<TallyInput,'count'>&{count:string}; e
   | {kind:'reference'; input:Omit<ReferenceInput,'soldLastMonthCount'>&{soldLastMonthCount:string};editing?:SalesReference;categoryName:string}
 type Pending = {kind:'tally';input:TallyInput;id?:number}|{kind:'reference';input:ReferenceInput;id?:number}
 type Review = {kind:'tally';record:TallyRecord}|{kind:'reference';record:SalesReference}
-interface Props { editing?:TallyRecord;isAdmin:boolean;onSaved:(record:TallyRecord)=>void;onCancel:()=>void;onBusyChange:(busy:boolean)=>void;onUnresolvedChange:(value:boolean)=>void }
-export function ElectricalTestingPage({editing,isAdmin,onSaved,onCancel,onBusyChange,onUnresolvedChange}:Props) {
+interface Props { editing?:TallyRecord;isAdmin:boolean;onSaved:(record:TallyRecord)=>void;onCancel:()=>void;onBusyChange:(busy:boolean)=>void;onUnresolvedChange:(value:boolean)=>void;onPendingChange:(value:boolean)=>void }
+export function ElectricalTestingPage({editing,isAdmin,onSaved,onCancel,onBusyChange,onUnresolvedChange,onPendingChange}:Props) {
   const [date,setDate]=useState(()=>editing?.recordDate??operationalDate())
   const [month,setMonth]=useState(()=>date.slice(0,7))
   const [form,setForm]=useState<FormState|null>(()=>editing?{kind:'tally',editing,categoryName:editing.categoryName,input:{submissionId:editing.submissionId!,version:editing.version!,recordDate:editing.recordDate,categoryId:editing.categoryId,tallyType:editing.tallyType,count:String(editing.count)}}:null)
@@ -30,7 +30,6 @@ export function ElectricalTestingPage({editing,isAdmin,onSaved,onCancel,onBusyCh
   const submitting=useRef(false)
   useEffect(()=>{let cancelled=false;api.getCategories().then(rows=>{if(!cancelled)setCategories(rows)}).catch(error=>{if(!cancelled)setCategoryError(errorMessage(error))});return()=>{cancelled=true}},[categoryAttempt])
   function activity(value:boolean){setBusy(value);onBusyChange(value)}
-  function openTally(category:Category|null,tallyType:TallyType){setError('');setMessage('');setReview(null);setConflict(false);setForm({kind:'tally',categoryName:category?.name??null,input:{submissionId:crypto.randomUUID(),recordDate:date,categoryId:category?.id??null,tallyType,count:'1'}})}
   function openReference(category:Category,row?:SalesReference){setError('');setMessage('');setReview(null);setConflict(false);setForm({kind:'reference',categoryName:category.name,editing:row,input:{submissionId:row?.submissionId??crypto.randomUUID(),version:row?.version??undefined,reportingMonth:row?.reportingMonth??month,categoryId:category.id,soldLastMonthCount:row?String(row.soldLastMonthCount):''}})}
   function payload():Pending {
     if(!form)throw new Error('No active counter')
@@ -51,8 +50,9 @@ export function ElectricalTestingPage({editing,isAdmin,onSaved,onCancel,onBusyCh
   return <section><div className="page-heading"><div><p className="eyebrow">INTERNAL OPERATIONAL COUNTS</p><h1>Electrical Testing</h1><p>Processing tallies and monthly sales references. These counts do not contribute to waste reporting.</p></div></div>
     {error&&<p className="notice error" role="alert">{error}</p>}{message&&<p className="notice success" role="status">{message}</p>}
     {deleting&&<div className="notice" role="alert"><p>Delete the {deleting.reportingMonth} sales reference for {deleting.categoryName}? It will become Not entered.</p><button className="danger" disabled={busy} onClick={removeReference}>Confirm reference deletion</button><button className="secondary" disabled={busy} onClick={()=>setDeleting(null)}>Cancel reference deletion</button></div>}
-    {!form?<TestingBoard date={date} month={month} onDate={value=>{setDate(value);setMonth(value.slice(0,7))}} onMonth={setMonth} isAdmin={isAdmin} refresh={refresh} busy={busy||deleting!==null} onTally={openTally} onReference={openReference} onDeleteReference={row=>{setError('');setDeleting(row)}}/>
-      :<div className="panel testing-entry"><h2>{form.kind==='tally'?'Processing / diversion tally':'Sold Last Month reference'}</h2>
+    {!editing&&<div hidden={form!==null}><TestingBoard categories={categories} date={date} month={month} onDate={value=>{setDate(value);setMonth(value.slice(0,7))}} onMonth={setMonth} isAdmin={isAdmin} refresh={refresh} busy={busy||deleting!==null} onReference={openReference} onDeleteReference={row=>{setError('');setDeleting(row)}} onBusy={activity} onUnresolved={onUnresolvedChange} onPending={value=>{onPendingChange(value);if(value)setMessage('')}} onSaved={()=>setRefresh(value=>value+1)}/>
+      {categoryError&&<p role="alert">{categoryError}<button onClick={()=>{setCategoryError('');setCategoryAttempt(n=>n+1)}}>Retry categories</button></p>}</div>}
+    {form&&<div className="panel testing-entry"><h2>{form.kind==='tally'?'Processing / diversion tally':'Sold Last Month reference'}</h2>
         {conflict?<><p>Reload saved records before making another change. This conflicting request will not be retried.</p><button disabled={busy} onClick={()=>{if(editing)onCancel();else{setForm(null);setReview(null);setRefresh(value=>value+1)}}}>Reload counters</button></>
           :review?<>{review.kind==='tally'?<TallyReview record={review.record}/>:<dl className="record-facts"><div><dt>Reporting month</dt><dd>{review.record.reportingMonth}</dd></div><div><dt>Category</dt><dd>{review.record.categoryName}</dd></div><div><dt>Sold Last Month</dt><dd>{review.record.soldLastMonthCount}</dd></div></dl>}
             <div className="actions"><button disabled={busy} onClick={save}>{busy?'Saving...':uncertain?'Retry submission':form.editing?'Confirm correction':'Confirm and submit'}</button><button className="secondary" disabled={busy||uncertain} onClick={()=>setReview(null)}>Back to edit</button></div></>
