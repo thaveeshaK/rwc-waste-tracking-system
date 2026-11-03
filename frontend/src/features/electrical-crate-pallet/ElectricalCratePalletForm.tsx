@@ -20,6 +20,13 @@ export function ElectricalCratePalletForm({ value, containers, materials, today,
   const net = gross !== null && tare !== null ? gross - tare : null
   const valid = total === '100.00' && net !== null && net > 0n && value.materials.length === 2
   const displayNet = net === null ? 'Select container and enter gross weight' : net < 0n ? 'Gross weight is below tare' : `${net / 100n}.${(net % 100n).toString().padStart(2, '0')} kg`
+  function percentageChanged(materialCategoryId: number, percentage: string) {
+    const amount = decimalHundredths(percentage)
+    const complement = amount !== null && amount <= 10000n && value.materials.length === 2 ? 10000n - amount : null
+    onChange({ ...value, materials: value.materials.map(row => row.materialCategoryId === materialCategoryId
+      ? { ...row, percentage }
+      : complement === null ? row : { ...row, percentage: `${complement / 100n}.${(complement % 100n).toString().padStart(2, '0')}` }) })
+  }
   function submit(event: FormEvent) { event.preventDefault(); if (!busy && valid) onReview() }
   return <form onSubmit={submit}>
     <fieldset disabled={busy}><legend>Load details</legend>
@@ -42,12 +49,11 @@ export function ElectricalCratePalletForm({ value, containers, materials, today,
         <div><dt>Net material weight</dt><dd aria-live="polite">{displayNet}</dd></div></dl>
     </fieldset>
     <fieldset disabled={busy}><legend>Material percentages</legend>
-      <p className="hint">Enter both electrical percentages. Either may be zero; their total must equal 100%.</p>
+      <p className="hint">Edit either percentage; the other is calculated automatically. Either may be zero; their total must equal 100%.</p>
       <div className="material-grid">{materials.map(material => <label key={material.id}>
         {material.name}<span className="percentage-input"><input type="number" inputMode="decimal" required min="0" max="100" step="0.01"
           value={value.materials.find(row => row.materialCategoryId === material.id)?.percentage ?? '0'}
-          onChange={event => onChange({ ...value, materials: value.materials.map(row => row.materialCategoryId === material.id
-            ? { ...row, percentage: event.target.value } : row) })} /><span>%</span></span></label>)}</div>
+          onChange={event => percentageChanged(material.id, event.target.value)} /><span>%</span></span></label>)}</div>
       <p className={`percentage-total ${total === '100.00' ? 'valid' : ''}`} aria-live="polite">
         Total: {total ?? 'Check entries'}{total !== null ? '%' : ''} <span>Must equal 100.00%</span></p>
     </fieldset>

@@ -754,6 +754,8 @@ try {
   const electricalRefs = (await browserApi('/api/container-types?context=ELECTRICAL_CRATE_PALLET')).body
   const electricalCage = electricalRefs.find(c => c.name === 'Stillage Cage')
   const electricalPlastic = electricalRefs.find(c => c.name === 'Plastic Pallet')
+  const electricalPercentages = () => evaluate("[...document.querySelectorAll('.material-grid input')].map(i=>i.value)")
+  assert.deepEqual(await electricalPercentages(),['0.00','0.00'])
   await fill('Container type', String(electricalCage.id))
   await fill('TVs / Monitors / Projectors', '100.00')
   await fill('Everything Else', '0.00')
@@ -762,11 +764,38 @@ try {
     assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Review record').disabled"), true)
   }
   await fill('Gross weight', '150.00')
-  await fill('TVs / Monitors / Projectors', '99.99')
-  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Review record').disabled"), true)
-  await fill('TVs / Monitors / Projectors', '100.00')
-  assert.equal(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), true)
-  await screenshot('tablet-electrical-entry')
+  for(const [label,entered,expected] of [
+    ['TVs / Monitors / Projectors','35',['35','65.00']],
+    ['Everything Else','22.5',['77.50','22.5']],
+    ['TVs / Monitors / Projectors','33.33',['33.33','66.67']],
+    ['Everything Else','62.5',['37.50','62.5']],
+    ['TVs / Monitors / Projectors','100',['100','0.00']],
+    ['TVs / Monitors / Projectors','0',['0','100.00']],
+    ['Everything Else','0',['100.00','0']],
+    ['Everything Else','100',['0.00','100']],
+  ]) {
+    await fill(label,entered)
+    assert.deepEqual(await electricalPercentages(),expected)
+    assert.equal(await evaluate("document.querySelector('.percentage-total').textContent.includes('100.00%')"),true)
+  }
+  // Invalid edits keep the other value unchanged and block Review; no clamping/complementing.
+  for(const invalid of ['-1','100.01','33.333','not-a-number','']) {
+    await fill('TVs / Monitors / Projectors',invalid)
+    assert.equal((await electricalPercentages())[1],'100')
+    assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Review record').disabled"),true)
+  }
+  await fill('TVs / Monitors / Projectors','33.33')
+  for(const width of [1280,768,1024]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
+    await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'electrical complement overflow at '+width)
+    await screenshot('electrical-complement-'+width)
+  }
+  await click('Review record')
+  await hasText('Review the calculated weights before confirming.')
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.record-review tbody tr')].map(r=>r.cells[1].textContent)"),['33.33%','66.67%'])
+  await click('Back to edit')
+  assert.deepEqual(await electricalPercentages(),['33.33','66.67'])
+  await fill('TVs / Monitors / Projectors','100.00')
   await click('Review record')
   await hasText('Review the calculated weights before confirming.')
   await hasText('100.00 kg')
@@ -831,6 +860,7 @@ try {
   await enabled('Correct record')
   await click('Correct record')
   await until(() => evaluate("document.querySelector('.material-grid')?.children.length === 2"), 'Admin electrical form')
+  assert.deepEqual(await electricalPercentages(),electricalRecords[0].materials.map(m=>m.percentage))
   await fill('Gross weight', '50.00')
   assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Review record').disabled"), true)
   await fill('Container type', String(electricalPlastic.id))
@@ -849,6 +879,7 @@ try {
   await enabled('Correct record')
   await click('Correct record')
   await until(() => evaluate("document.querySelector('.material-grid')?.children.length === 2"), 'stale electrical form')
+  assert.deepEqual(await electricalPercentages(),electricalUpdated.materials.map(m=>m.percentage))
   const electricalChanged = await browserApi('/api/electrical-crate-pallet-records/' + electricalId, 'PUT', {
     ...electricalInput, containerTypeId: electricalPlastic.id, grossWeight: '26.00', version: electricalUpdated.version,
   })
