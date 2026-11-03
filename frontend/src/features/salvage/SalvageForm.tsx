@@ -9,6 +9,9 @@ interface Props {
   today: string
   busy: boolean
   onChange: (value: SalvageInput) => void
+  step: 1 | 2
+  onContinue: () => void
+  onBack: () => void
   onReview: () => void
 }
 
@@ -40,20 +43,31 @@ function DirectionFields({ name, value, categories, onChange }: {
   </fieldset>
 }
 
-export function SalvageForm({ value, upMaterials, downMaterials, today, busy, onChange, onReview }: Props) {
+export function SalvageForm({ value, upMaterials, downMaterials, today, busy, step, onChange, onContinue, onBack, onReview }: Props) {
   const valid = (direction: DirectionInput) => {
     const kg = decimalHundredths(direction.kg)
-    return kg !== null && (kg === 0n || percentageTotal(direction.materials.map(row => row.percentage)) === '100.00')
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(direction.time) && kg !== null && kg <= 9999999999n &&
+      (kg === 0n || percentageTotal(direction.materials.map(row => row.percentage)) === '100.00')
   }
-  function review(event: FormEvent) { event.preventDefault(); if (!busy && valid(value.up) && valid(value.down)) onReview() }
-  return <form onSubmit={review}><fieldset disabled={busy}><legend>Trip details</legend>
-    <div className="form-grid"><label>Record date (required)<input type="date" required min="0001-01-01" max={today}
+  const tripValid = /^\d{4}-\d{2}-\d{2}$/.test(value.recordDate) && value.recordDate >= '0001-01-01' && value.recordDate <= today && value.crew.trim().length > 0 && value.crew.length <= 255
+  const canContinue = tripValid && valid(value.up)
+  const canReview = canContinue && valid(value.down)
+  function proceed(event: FormEvent) {
+    event.preventDefault()
+    if (busy) return
+    if (step === 1 && canContinue) onContinue()
+    if (step === 2 && canReview) onReview()
+  }
+  return <form onSubmit={proceed}><fieldset disabled={busy}><legend className="sr-only">Salvage {step === 1 ? 'Up' : 'Down'} entry</legend>
+    {step === 1 && <><h2>Trip details</h2><div className="form-grid"><label>Record date (required)<input type="date" required min="0001-01-01" max={today}
       value={value.recordDate} onChange={event => onChange({ ...value, recordDate: event.target.value })} /></label>
       <label>Crew (required)<input required maxLength={255} value={value.crew}
-        onChange={event => onChange({ ...value, crew: event.target.value })} /><span className="hint">The same crew performs the complete trip.</span></label></div>
-    <DirectionFields name="Up" value={value.up} categories={upMaterials} onChange={up => onChange({ ...value, up })} />
-    <DirectionFields name="Down" value={value.down} categories={downMaterials} onChange={down => onChange({ ...value, down })} />
-    <div className="actions"><button disabled={busy || !valid(value.up) || !valid(value.down)}>{busy ? 'Calculating...' : 'Review trip'}</button>
+        onChange={event => onChange({ ...value, crew: event.target.value })} /><span className="hint">The same crew performs the complete trip.</span></label></div></>}
+    {step === 1 ? <DirectionFields name="Up" value={value.up} categories={upMaterials} onChange={up => onChange({ ...value, up })} />
+      : <DirectionFields name="Down" value={value.down} categories={downMaterials} onChange={down => onChange({ ...value, down })} />}
+    <div className="actions">{step === 1 ? <button disabled={busy || !canContinue}>Continue to Salvage Down</button>
+      : <><button type="button" className="secondary" disabled={busy} onClick={onBack}>Back to Salvage Up</button>
+        <button disabled={busy || !canReview}>{busy ? 'Calculating...' : 'Review Trip'}</button></>}
       <span className="hint">Nothing is saved until you confirm submission.</span></div>
   </fieldset></form>
 }

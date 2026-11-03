@@ -29,6 +29,7 @@ export function SalvagePage({ editing, onSaved, onCancel, onBusyChange, onUnreso
   const [uncertain, setUncertain] = useState(false)
   const [conflict, setConflict] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  const [entryStep, setEntryStep] = useState<1 | 2>(1)
   const [review, setReview] = useState<SalvageRecord | null>(null)
   const submitting = useRef(false)
   const pending = useRef<SalvageInput | null>(null)
@@ -85,20 +86,30 @@ export function SalvagePage({ editing, onSaved, onCancel, onBusyChange, onUnreso
     } finally { submitting.current = false; setBusy(false); onBusyChange(false) }
   }
 
-  return <section aria-labelledby="salvage-heading"><div className="page-heading"><div><p className="eyebrow">SALVAGE TRIP</p>
+  const step = review ? 3 : entryStep
+  function backTo(target: 1 | 2) {
+    if (busy || uncertain || conflict) return
+    setReview(null); setEntryStep(target); setError('')
+  }
+
+  return <section className="salvage-entry" aria-labelledby="salvage-heading"><div className="page-heading"><div><p className="eyebrow">SALVAGE TRIP</p>
     <h1 id="salvage-heading">{editing ? `Correct Salvage trip #${editing.id}` : 'Salvage'}</h1>
     <p>{review ? 'Review both directions before confirming.' : 'Record one trip using the final council weighbridge weights.'}</p></div>
-    <span className="step-label">{review ? '2 - Review' : '1 - Enter details'}</span></div>
+    </div>
+    <ol className="salvage-steps" aria-label="Salvage trip steps">{['Salvage Up', 'Salvage Down', 'Review'].map((label, index) => <li key={label}>
+      {index < 2 && index+1 < step ? <button type="button" className="step-label completed" disabled={busy || uncertain || conflict} onClick={() => backTo(index === 0 ? 1 : 2)}>{index+1} - {label}<span className="sr-only"> (completed)</span></button>
+        : <span className={'step-label'+(index+1 === step ? ' current' : '')} aria-current={index+1 === step ? 'step' : undefined}>{index+1} - {label}</span>}
+    </li>)}</ol>
     <div className="panel">{error && <p className="notice error" role="alert">{error}</p>}
       {loading ? <p role="status">Loading Salvage material categories...</p>
         : upMaterials.length === 0 || downMaterials.length === 0 ? <><p>Material categories could not be loaded.</p>
           <button onClick={() => { setLoading(true); setError(''); setAttempt(attempt + 1) }}>Retry</button></>
         : conflict ? <p>Open Records and reload the trip. This request will not be retried automatically.</p>
-        : review ? <><SalvageReview record={review} /><div className="actions">
+        : review ? <><SalvageReview record={review} showTotals /><div className="actions">
           <button disabled={busy} onClick={save}>{busy ? 'Saving...' : uncertain ? 'Retry submission' : editing ? 'Confirm correction' : 'Confirm and submit'}</button>
-          <button className="secondary" disabled={busy || uncertain} onClick={() => { setReview(null); setError('') }}>Back to edit</button></div></>
+          <button className="secondary" disabled={busy || uncertain} onClick={() => backTo(2)}>Back to edit</button></div></>
         : <SalvageForm value={input} upMaterials={upMaterials} downMaterials={downMaterials} today={operationalDate()}
-          busy={busy} onChange={setInput} onReview={calculate} />}
+          busy={busy} step={entryStep} onChange={setInput} onContinue={() => {setEntryStep(2); setError('')}} onBack={() => backTo(1)} onReview={calculate} />}
       <button className="text-button" disabled={busy} onClick={onCancel}>{uncertain ? 'Check Records' : 'Back to Records'}</button>
     </div></section>
 }

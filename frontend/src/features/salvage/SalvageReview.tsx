@@ -1,6 +1,7 @@
+import { percentageTotal } from '../../utils/decimal'
 import type { DirectionResult, SalvageRecord } from './types'
 
-function DirectionReview({ name, value }: { name: 'Up' | 'Down'; value: DirectionResult }) {
+function DirectionReview({ name, value, showTotals }: { name: 'Up' | 'Down'; value: DirectionResult; showTotals: boolean }) {
   return <section className="salvage-direction"><h3>Salvage {name} - {name === 'Up' ? 'Waste to landfill' : 'Recovered material'}</h3>
     <dl className="record-facts"><div><dt>Time {name}</dt><dd>{value.time.slice(0, 5)}</dd></div>
       <div><dt>Kg {name}</dt><dd>{value.kg} kg</dd></div></dl>
@@ -8,14 +9,14 @@ function DirectionReview({ name, value }: { name: 'Up' | 'Down'; value: Directio
       : <div className="table-scroll"><table><caption>{name} material breakdown</caption>
         <thead><tr><th>Material</th><th className="numeric">Percentage</th><th className="numeric">Weight</th></tr></thead>
         <tbody>{value.materials.map(row => <tr key={row.materialCategoryId}><td>{row.name}</td>
-          <td className="numeric">{row.percentage}%</td><td className="numeric">{row.materialWeight} kg</td></tr>)}</tbody></table></div>}
+          <td className="numeric">{row.percentage}%</td><td className="numeric">{row.materialWeight} kg</td></tr>)}</tbody></table>{showTotals && <p className="percentage-total valid">{name} total: {percentageTotal(value.materials.map(row => row.percentage))}%</p>}</div>}
   </section>
 }
 
-export function SalvageReview({ record }: { record: SalvageRecord }) {
+export function SalvageReview({ record, showTotals = false }: { record: SalvageRecord; showTotals?: boolean }) {
   return <div className="salvage-review"><dl className="record-facts"><div><dt>Record date</dt><dd>{record.recordDate}</dd></div>
     <div><dt>Crew</dt><dd>{record.crew}</dd></div></dl>
-    <DirectionReview name="Up" value={record.up} /><DirectionReview name="Down" value={record.down} />
+    <DirectionReview name="Up" value={record.up} showTotals={showTotals} /><DirectionReview name="Down" value={record.down} showTotals={showTotals} />
     <p className="hint">Material weights use the final council weights and are rounded individually to 0.01 kg. Rounding differences are not redistributed.</p>
     {record.createdBy && <p className="hint">Created by {record.createdBy}
       {record.createdAt && <> - {new Date(record.createdAt).toLocaleString('en-AU', { timeZone: 'Australia/Hobart' })} (Hobart)</>}

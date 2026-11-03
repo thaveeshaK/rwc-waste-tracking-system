@@ -161,3 +161,10 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 .staff-recent .detail-heading { flex-wrap: wrap; gap: .75rem; }
 @media (max-width: 1000px) { .staff-operations .workflow-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 650px) { .staff-operations .workflow-card-grid { grid-template-columns: 1fr; } }
+
+.salvage-steps { display: flex; flex-wrap: wrap; gap: .65rem; list-style: none; padding: 0; margin: 0 0 1.25rem; }
+.salvage-steps .step-label { display: inline-flex; align-items: center; min-height: 44px; border: 1px solid #d7e1d4; font-weight: 600; }
+.salvage-steps .current { background: #245c43; color: white; border-color: #245c43; }
+.salvage-steps button.completed { background: #e4ebe1; color: #245c43; border-color: #7d9b83; }
+.salvage-steps button.completed::after { content: ' \2713'; margin-left: .5rem; }
+.salvage-entry .material-grid input { min-height: 44px; }
