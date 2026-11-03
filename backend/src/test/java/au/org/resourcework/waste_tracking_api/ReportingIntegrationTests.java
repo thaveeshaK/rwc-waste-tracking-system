@@ -219,6 +219,32 @@ class ReportingIntegrationTests {
             .andExpect(jsonPath("$.topIntake[7].value").value("101.00"));
     }
 
+    @Test void recentOperationsIsAuthenticatedReadOnlyAndNotAnAdminReportingSurface() throws Exception {
+        mvc.perform(get("/api/operations/recent-submissions")).andExpect(status().isUnauthorized());
+        for(String role:List.of("STAFF","ADMIN")) mvc.perform(get("/api/operations/recent-submissions").with(user("reader").roles(role)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(5))
+            .andExpect(jsonPath("$[0].createdBy").doesNotExist()).andExpect(jsonPath("$[0].metrics").doesNotExist());
+    }
+    @Test void recentOperationsUsesSubmissionOrderLimitsFiveAndExcludesDeleted() throws Exception {
+        for(int n=0;n<7;n++) jdbc.update("insert into whitegoods_record (submission_id,record_date,whitegoods_count,kg_per_item,estimated_weight,created_by,updated_by,created_at,updated_at) values (?,date '1999-01-01',?,48,?, ?,?,timestamp with time zone '2090-01-01 00:00:00+00' + ? * interval '1 second',now())",UUID.randomUUID(),n,n*48,actor,actor,n);
+        mvc.perform(get("/api/operations/recent-submissions").with(user("staff").roles("STAFF")))
+            .andExpect(jsonPath("$.length()").value(5)).andExpect(jsonPath("$[0].count").value(6))
+            .andExpect(jsonPath("$[0].recordDate").value("1999-01-01")).andExpect(jsonPath("$[4].count").value(2));
+        jdbc.update("update whitegoods_record set deleted_at=now(),deleted_by=? where record_date=date '1999-01-01' and whitegoods_count=6",actor);
+        mvc.perform(get("/api/operations/recent-submissions").with(user("staff").roles("STAFF"))).andExpect(jsonPath("$[0].count").value(5));
+        for(String table:List.of("crate_pallet_record","salvage_record","pickup_record","electrical_crate_pallet_record","collectable_record","whitegoods_record","electrical_testing_tally")) jdbc.update("update "+table+" set deleted_at=now(),deleted_by=?",actor);
+        mvc.perform(get("/api/operations/recent-submissions").with(user("staff").roles("STAFF"))).andExpect(jsonPath("$.length()").value(0));
+    }
+    @Test void recentOperationsIncludesAllSevenWorkflowsWithoutSalesReferences() throws Exception {
+        String[] tables={"crate_pallet_record","salvage_record","pickup_record","electrical_crate_pallet_record","collectable_record","whitegoods_record","electrical_testing_tally"};
+        String[] workflows={"CRATE_PALLET","SALVAGE","PICKUP","ELECTRICAL_CRATE_PALLET","COLLECTABLES","WHITEGOODS","ELECTRICAL_TESTING"};
+        for(int i=0;i<tables.length;i++) {
+            jdbc.update("update "+tables[i]+" set created_at=timestamp with time zone '2091-01-01 00:00:00+00' + ? * interval '1 second'",i);
+            mvc.perform(get("/api/operations/recent-submissions").with(user("staff").roles("STAFF")))
+                .andExpect(jsonPath("$[0].workflow").value(workflows[i])).andExpect(jsonPath("$[0].details").isNotEmpty());
+        }
+    }
+
     @Test void dashboardRejectsMalformedAndFutureMonths() throws Exception {
         for(String month:List.of("2001-2","2001-13","0000-01","9999-12")) mvc.perform(report("/overview").param("month",month)).andExpect(status().isBadRequest());
     }

@@ -64,6 +64,19 @@ async function click(text, scope = '') {
   })()`)
 }
 
+// Staff workflow access now starts from Operations cards, never a persistent shortcut row.
+async function staffWorkflow(name) {
+  await click('Operations')
+  await until(()=>evaluate("document.querySelectorAll('.staff-operations .workflow-card').length===7"),'Staff workflow cards')
+  const ids={'Crate / Pallet':'CRATE_PALLET',Salvage:'SALVAGE',Pickup:'PICKUP','Electrical Crate / Pallet':'ELECTRICAL_CRATE_PALLET',Collectables:'COLLECTABLES',Whitegoods:'WHITEGOODS','Electrical Testing':'ELECTRICAL_TESTING'}
+  await click(name==='Electrical Testing'?'Open':'New Entry',`.staff-operations [data-workflow="${ids[name]}"]`)
+}
+async function resumeStaffSubmission() {
+  await click('Operations')
+  assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card button:not(:disabled)').length"),1)
+  await click('Resume submission','.staff-operations')
+}
+
 async function fill(label, value, scope = '') {
   await evaluate(`(() => {
     const root = ${scope ? `document.querySelector(${JSON.stringify(scope)})` : 'document'};
@@ -138,14 +151,40 @@ try {
   await fill('Password', process.env.INITIAL_STAFF_PASSWORD)
   await click('Sign in')
   await enabled('Records')
+  await hasText('Staff Operations')
+  await until(()=>evaluate("document.querySelector('.staff-recent tbody')!==null"),'existing recent submissions')
+  const initialRecent=(await browserApi('/api/operations/recent-submissions')).body
+  assert.equal(await evaluate("document.querySelectorAll('.staff-recent tbody tr').length"),initialRecent.length)
+  // Exercise empty state without deleting regression fixtures.
+  await evaluate(`window.__operationsFetch=window.fetch; window.fetch=(...args)=>args[0]==='/api/operations/recent-submissions'
+    ? Promise.resolve(new Response('[]',{status:200,headers:{'Content-Type':'application/json'}})) : window.__operationsFetch(...args);`)
   await click('Records')
+  await click('Operations')
+  await hasText('No recent submissions.')
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('nav button')].map(b=>b.textContent.trim())"),['Operations','Records'])
+  assert.equal(await evaluate("document.querySelector('.workflow-navigation')===null"),true)
+  assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card').length"),7)
+  assert.equal(await evaluate("document.querySelector('.staff-recent tbody')===null"),true)
+  await screenshot('desktop-staff-operations-empty')
+  await evaluate('window.fetch=window.__operationsFetch; delete window.__operationsFetch')
+  for(const name of ['Crate / Pallet','Salvage','Pickup','Electrical Crate / Pallet','Collectables','Whitegoods','Electrical Testing']) {
+    await staffWorkflow(name)
+    await until(()=>evaluate(`document.querySelector('main h1')?.textContent===${JSON.stringify(name)}`),'existing '+name+' form')
+    await click('Operations')
+  }
+  for(const width of [768,1024,1280]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
+    await until(()=>evaluate("document.documentElement.scrollWidth<=window.innerWidth"),'Staff Operations overflow at '+width)
+    await screenshot('staff-operations-'+width)
+  }
+  await click('View Records')
   await hasText('Submitted records are read-only for Staff.')
   assert.equal(await evaluate("[...document.querySelectorAll('nav button')].some(b => ['Overview','Reports','Waste Levy Summary','Users','Settings'].includes(b.textContent.trim()))"), false)
   for (const path of ['/api/admin/overview','/api/admin/reports/summary','/api/admin/reports/export?format=csv','/api/admin/reports/export?format=xlsx','/api/admin/waste-levy-summary?month=2004-02','/api/admin/settings','/api/admin/settings/container-types','/api/admin/settings/material-categories']) {
     assert.equal((await browserApi(path)).status,403)
   }
 
-  await click('New Crate / Pallet')
+  await staffWorkflow('Crate / Pallet')
   await hasText('Material percentages')
   await until(() => evaluate("document.querySelector('select')?.options.length === 6"), 'reference data')
   assert.equal(await evaluate("[...document.querySelectorAll('label')].some(l => l.textContent.includes('E-waste'))"), false)
@@ -190,7 +229,7 @@ try {
     };`)
   await click('Confirm and submit')
   await until(() => evaluate('window.__submissionStarted'), 'submission paused before response')
-  for (const label of ['Records', 'New Crate / Pallet', 'Sign out']) {
+  for (const label of ['Operations', 'Records', 'Sign out']) {
     assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(label)}).disabled`), true)
   }
   assert.equal(await evaluate(`(() => {
@@ -201,7 +240,7 @@ try {
   await enabled('Retry submission')
   await click('Check Records')
   await hasText('Submitted records are read-only for Staff.')
-  await click('Resume submission')
+  await resumeStaffSubmission()
   await enabled('Retry submission')
   await click('Retry submission')
   await hasText('saved successfully.')
@@ -209,12 +248,27 @@ try {
   assert.equal(ids.length, 2); assert.equal(ids[0], ids[1])
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b => b.textContent === 'Correct record')"), false)
   const savedId = await evaluate("document.querySelector('.detail-heading h2').textContent.split('#')[1]")
+  await click('Operations')
+  await until(()=>evaluate("document.querySelectorAll('.staff-recent tbody tr').length===5"),'recent Staff submission')
+  const recentStaff=(await browserApi('/api/operations/recent-submissions')).body
+  assert.equal(String(recentStaff[0].id),savedId)
+  assert.equal(await evaluate("document.querySelector('.staff-recent tbody tr').textContent.includes('100.00 kg')"),true)
+  assert.equal(await evaluate("[...document.querySelectorAll('.staff-recent button')].some(b=>/edit|delete|correct/i.test(b.textContent))"),false)
+  for(const width of [1280,768,1024]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
+    await until(()=>evaluate("document.documentElement.scrollWidth<=window.innerWidth"),'populated Staff Operations overflow at '+width)
+    await screenshot('staff-operations-recent-'+width)
+  }
+  console.log('PASS: Staff Operations seven existing workflow cards, primary navigation only, read-only recent submissions, empty state and desktop/tablet overflow checks.')
+  await screenshot('staff-operations-with-recent')
+  await click('View Records')
+  await hasText('Submitted records are read-only for Staff.')
   const duplicateCount = await evaluate(`fetch('/api/crate-pallet-records').then(r => r.json()).then(rows => rows.filter(r => r.submissionId === ${JSON.stringify(ids[0])}).length)`)
   assert.equal(duplicateCount, 1)
   await screenshot('tablet-saved-record')
 
   // A definitive ID/data conflict must not become an endless retry loop.
-  await click('New Crate / Pallet')
+  await staffWorkflow('Crate / Pallet')
   await until(() => evaluate("document.querySelector('select')?.options.length === 6"), 'conflict form references')
   await fill('Container type', apple)
   await fill('Gross weight', '161.00')
@@ -340,7 +394,7 @@ try {
   await hasText('Submitted records are read-only for Staff.')
   const upScope = 'fieldset[data-direction="UP"]'
   const downScope = 'fieldset[data-direction="DOWN"]'
-  await click('New Salvage')
+  await staffWorkflow('Salvage')
   await until(() => evaluate(`document.querySelector('${upScope} .material-grid')?.children.length === 9 && document.querySelector('${downScope} .material-grid')?.children.length === 14`), 'direction-specific material sets')
   assert.equal(await evaluate("[...document.querySelectorAll('form label')].filter(l => l.textContent.startsWith('Crew')).length"), 1)
   assert.equal(await evaluate(`document.querySelector('${upScope}').textContent.includes('Lead Acid Batteries')`), false)
@@ -367,7 +421,7 @@ try {
     };`)
   await click('Confirm and submit')
   await until(() => evaluate('window.__salvagePayloads.length === 1'), 'Salvage submission started')
-  for (const label of ['Records', 'New Crate / Pallet', 'New Salvage', 'Sign out']) {
+  for (const label of ['Operations', 'Records', 'Sign out']) {
     assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(label)}).disabled`), true)
   }
   await evaluate('window.__releaseSalvage()')
@@ -378,7 +432,7 @@ try {
   await enabled('Apply dates / refresh')
   assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
   await fill('Workflow', 'SALVAGE')
-  await click('Resume submission')
+  await resumeStaffSubmission()
   await enabled('Retry submission')
   await click('Retry submission')
   await hasText('saved successfully.')
@@ -395,7 +449,7 @@ try {
 
   // Exercise the remaining zero-weight combinations through the actual form.
   for (const [up, down] of [['0.00', '20.00'], ['10.00', '0.00'], ['0.00', '0.00']]) {
-    await click('New Salvage')
+    await staffWorkflow('Salvage')
     await until(() => evaluate(`document.querySelector('${upScope} .material-grid')?.children.length === 9`), 'new Salvage form')
     await fill('Crew', `Zero combination ${up}/${down}`)
     await fill('Kg Up', up, upScope)
@@ -495,8 +549,7 @@ try {
   await click('Sign in')
   await enabled('Records')
   await click('Records')
-  await enabled('New Pickup')
-  await click('New Pickup')
+  await staffWorkflow('Pickup')
   await until(() => evaluate("document.querySelector('.material-grid')?.children.length === 13"), 'Pickup categories loaded')
   const pickupLabels = await evaluate("[...document.querySelectorAll('.material-grid label')].map(l => l.textContent.replace('%', '').trim())")
   assert.equal(pickupLabels.includes('E-waste'), false)
@@ -534,7 +587,7 @@ try {
     };`)
   await click('Confirm and submit')
   await until(() => evaluate('window.__pickupPayloads.length === 1'), 'Pickup submission started')
-  for (const label of ['Records', 'New Crate / Pallet', 'New Salvage', 'New Pickup', 'Sign out']) {
+  for (const label of ['Operations', 'Records', 'Sign out']) {
     assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(label)}).disabled`), true)
   }
   await evaluate('window.__releasePickup()')
@@ -543,7 +596,7 @@ try {
   await until(() => evaluate("document.querySelector('select').value === 'PICKUP'"), 'Pickup Records selected')
   await fill('Workflow', 'SALVAGE')
   await enabled('Apply dates / refresh')
-  await click('Resume submission')
+  await resumeStaffSubmission()
   await enabled('Retry submission')
   await click('Retry submission')
   await hasText('saved successfully.')
@@ -632,8 +685,7 @@ try {
   await click('Sign in')
   await enabled('Records')
   await click('Records')
-  await enabled('New Electrical Crate / Pallet')
-  await click('New Electrical Crate / Pallet')
+  await staffWorkflow('Electrical Crate / Pallet')
   await until(() => evaluate("document.querySelector('.material-grid')?.children.length === 2"), 'electrical categories')
   const electricalLabels = await evaluate("[...document.querySelectorAll('.material-grid label')].map(l => l.textContent.replace('%', '').trim())")
   assert.deepEqual(electricalLabels, ['TVs / Monitors / Projectors', 'Everything Else'])
@@ -672,7 +724,7 @@ try {
     };`)
   await click('Confirm and submit')
   await until(() => evaluate('window.__electricalPayloads.length === 1'), 'electrical submission active')
-  for (const label of ['Records', 'New Crate / Pallet', 'New Salvage', 'New Pickup', 'New Electrical Crate / Pallet', 'Sign out']) {
+  for (const label of ['Operations', 'Records', 'Sign out']) {
     assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(label)}).disabled`), true)
   }
   await evaluate('window.__releaseElectrical()')
@@ -681,7 +733,7 @@ try {
   await until(() => evaluate("document.querySelector('select').value === 'ELECTRICAL_CRATE_PALLET'"), 'electrical Records selected')
   await fill('Workflow', 'PICKUP')
   await enabled('Apply dates / refresh')
-  await click('Resume submission')
+  await resumeStaffSubmission()
   await enabled('Retry submission')
   await click('Retry submission')
   await hasText('saved successfully.')
@@ -775,8 +827,7 @@ try {
   await click('Sign in')
   await enabled('Records')
   await click('Records')
-  await enabled('New Collectables')
-  await click('New Collectables')
+  await staffWorkflow('Collectables')
   await until(() => evaluate("document.querySelector('.material-grid')?.children.length === 13"), 'Collectables categories loaded')
   const collectableReminder = 'Only record collectables brought directly from the driveway/outside area. Do not record tubs from the pricing bench or material already counted through another process.'
   await hasText(collectableReminder)
@@ -816,7 +867,7 @@ try {
     };`)
   await click('Confirm and submit')
   await until(() => evaluate('window.__collectablePayloads.length === 1'), 'Collectables submission active')
-  for (const label of ['Records', 'New Crate / Pallet', 'New Salvage', 'New Pickup', 'New Electrical Crate / Pallet', 'New Collectables', 'Sign out']) {
+  for (const label of ['Operations', 'Records', 'Sign out']) {
     assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(label)}).disabled`), true)
   }
   await evaluate('window.__releaseCollectable()')
@@ -825,7 +876,7 @@ try {
   await until(() => evaluate("document.querySelector('select').value === 'COLLECTABLES'"), 'Collectables Records selected')
   await fill('Workflow', 'ELECTRICAL_CRATE_PALLET')
   await enabled('Apply dates / refresh')
-  await click('Resume submission')
+  await resumeStaffSubmission()
   await enabled('Retry submission')
   await click('Retry submission')
   await hasText('saved successfully.')
@@ -917,8 +968,7 @@ try {
   await click('Sign in')
   await enabled('Records')
   await click('Records')
-  await enabled('New Whitegoods')
-  await click('New Whitegoods')
+  await staffWorkflow('Whitegoods')
   await hasText('Whitegoods entry')
   assert.equal(await evaluate("document.querySelectorAll('form label').length"), 2)
   for (const invalid of ['-1', '1.5', '2147483648']) {
@@ -942,7 +992,7 @@ try {
     };`)
   await click('Confirm and submit')
   await until(() => evaluate('window.__whitegoodsPayloads.length === 1'), 'Whitegoods submission active')
-  for (const label of ['Records', 'New Crate / Pallet', 'New Salvage', 'New Pickup', 'New Electrical Crate / Pallet', 'New Collectables', 'New Whitegoods', 'Sign out']) {
+  for (const label of ['Operations', 'Records', 'Sign out']) {
     assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(label)}).disabled`), true)
   }
   await evaluate('window.__releaseWhitegoods()')
@@ -951,7 +1001,7 @@ try {
   await until(() => evaluate("document.querySelector('select').value === 'WHITEGOODS'"), 'Whitegoods Records selected')
   await fill('Workflow', 'COLLECTABLES')
   await enabled('Apply dates / refresh')
-  await click('Resume submission')
+  await resumeStaffSubmission()
   await enabled('Retry submission')
   await click('Retry submission')
   await hasText('saved successfully.')
@@ -976,7 +1026,7 @@ try {
   await expectWhitegoodsSummary('2001-01', 5, '240.00')
   await screenshot('tablet-whitegoods-summary')
   for (const quantity of ['0', '3']) {
-    await click('New Whitegoods')
+    await staffWorkflow('Whitegoods')
     await fill('Record date', '2001-01-15')
     await fill('Whitegoods count', quantity)
     await click('Review Whitegoods')
@@ -1064,8 +1114,7 @@ try {
   await click('Sign in')
   await enabled('Records')
   await click('Records')
-  await enabled('Electrical Testing')
-  await click('Electrical Testing')
+  await staffWorkflow('Electrical Testing')
   await until(() => evaluate("document.querySelectorAll('.testing-category').length === 15"), '15 electrical item categories')
   await fill('Tally date', '2002-01-15')
   await until(() => evaluate("document.querySelectorAll('.testing-category').length === 15 && document.querySelector('input[type=month]').value === '2002-01'"), 'January counter board')
@@ -1112,7 +1161,7 @@ try {
     };`)
   await click('Confirm and submit')
   await until(() => evaluate('window.__testingPayloads.length === 1'), 'testing tally in progress')
-  for(const label of ['Records','New Crate / Pallet','New Salvage','New Pickup','New Electrical Crate / Pallet','New Collectables','New Whitegoods','Electrical Testing','Sign out']) {
+  for(const label of ['Operations','Records','Sign out']) {
     assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(label)}).disabled`),true)
   }
   await evaluate('window.__releaseTesting()')
@@ -1120,7 +1169,7 @@ try {
   await click('Check Records')
   await fill('Workflow','WHITEGOODS')
   await enabled('Apply dates / refresh')
-  await click('Resume submission')
+  await resumeStaffSubmission()
   await enabled('Retry submission')
   await click('Retry submission')
   await until(() => evaluate(`document.querySelector('${testingScope} .testing-counters')?.textContent.includes('Tested and Priced: 2')`), 'saved testing tally count')

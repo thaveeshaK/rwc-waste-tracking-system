@@ -1,3 +1,4 @@
+import { StaffOperationsPage } from './features/operations/StaffOperationsPage'
 import { WorkflowsPage } from './features/operations/WorkflowsPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { getOperationalConfiguration } from './features/settings/api'
@@ -156,7 +157,7 @@ function App() {
     <main className="app-shell" inert={signingOut}><Navigation isAdmin={user.role === 'ADMIN'} page={page} busy={busy || signingOut} unresolved={unresolved} workflow={entryWorkflow} onNew={newRecord} onPage={navigate} />
       {error && <p className="notice error" role="alert">{error}</p>}
       {unresolved && <p className="notice" role="status">A submission is unresolved. Retry it or check Records. Its details stay in memory while you check.</p>}
-      {page === 'operations' && (user.role === 'ADMIN' ? <WorkflowsPage onNew={newRecord} busy={busy || signingOut} unresolved={unresolved} currentWorkflow={entryWorkflow}/> : <section className="panel report-section"><p className="eyebrow">STAFF OPERATIONS</p><h1>Operations</h1><p>Choose a workflow above to enter and review a record. Submitted records are available in Records.</p></section>)}
+      {page === 'operations' && (user.role === 'ADMIN' ? <WorkflowsPage onNew={newRecord} busy={busy || signingOut} unresolved={unresolved} currentWorkflow={entryWorkflow}/> : <StaffOperationsPage onNew={newRecord} onRecords={showRecords} busy={busy || signingOut} unresolved={unresolved} currentWorkflow={entryWorkflow}/>)}
       {user.role === 'ADMIN' && page === 'settings' && <SettingsPage onChanged={() => setConfigurationRevision(n => n+1)}/>}
       {user.role === 'ADMIN' && page === 'overview' && <OverviewPage onOpen={openReportedRecord} onRecords={showRecords}/>}
       {user.role === 'ADMIN' && page === 'reports' && <ReportsPage onOpen={openReportedRecord}/>}
@@ -199,7 +200,7 @@ function App() {
           setHasEntry(true)
           setPage('entry')
         }} />}
-      <footer>Resource Work Cooperative - Operational dates and times use Australia/Hobart.</footer>
+      <footer>{user.role === 'ADMIN' ? 'Resource Work Cooperative - Operational dates and times use Australia/Hobart.' : 'Resource Work Cooperative'}</footer>
     </main></>
 }
 

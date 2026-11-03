@@ -156,3 +156,8 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 .dashboard-chart-canvas canvas { max-width: 100%; }
 
 .dashboard-chart[data-chart="activity"] { grid-column: 1 / -1; }
+
+.staff-operations .workflow-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.staff-recent .detail-heading { flex-wrap: wrap; gap: .75rem; }
+@media (max-width: 1000px) { .staff-operations .workflow-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .staff-operations .workflow-card-grid { grid-template-columns: 1fr; } }
