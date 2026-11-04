@@ -1,3 +1,6 @@
+import { EwastePickupPage } from './features/ewaste-pickup/EwastePickupPage'
+import { settingsSectionFromPath } from './features/settings/sections'
+import type { SettingsSection } from './features/settings/sections'
 import { StaffOperationsPage } from './features/operations/StaffOperationsPage'
 import { WorkflowsPage } from './features/operations/WorkflowsPage'
 import { SettingsPage } from './features/settings/SettingsPage'
@@ -30,6 +33,7 @@ function App() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>(() => settingsSectionFromPath(window.location.pathname) ?? 'container-types')
   const [page, setPage] = useState<Page>('operations')
   const [editing, setEditing] = useState<OperationalRecord | undefined>()
   const [reported, setReported] = useState<OperationalRecord | undefined>()
@@ -48,7 +52,7 @@ function App() {
 
   useEffect(() => {
     let cancelled = false
-    currentUser().then(user => { if (!cancelled) { setPage(user.role === 'ADMIN' ? 'overview' : 'operations'); setUser(user) } }).catch(error => {
+    currentUser().then(user => { if (!cancelled) { setPage(user.role === 'ADMIN' ? (settingsSectionFromPath(window.location.pathname) ? 'settings' : 'overview') : 'operations'); setUser(user) } }).catch(error => {
       if (!cancelled && (!(error instanceof ApiError) || error.status !== 401)) setError(errorMessage(error))
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
@@ -114,6 +118,7 @@ function App() {
     setError('')
     try {
       await logout()
+      window.history.replaceState(null,'','/')
       setUser(null)
       setConfiguration(null)
       setEditing(undefined)
@@ -136,13 +141,21 @@ function App() {
   function navigate(target: Page) {
     if (busyRef.current || signingOut) return
     if (['overview', 'reports', 'waste-levy', 'settings'].includes(target) && user?.role !== 'ADMIN') return
+    if (target !== 'settings') window.history.replaceState(null,'','/')
     if (target === 'records') { showRecords(); return }
     setError(''); setPage(target)
   }
 
+  function showSettings(section: SettingsSection) {
+    if(user?.role!=='ADMIN'||busyRef.current||signingOut)return
+    setSettingsSection(section)
+    window.history.replaceState(null,'',`/admin/settings/${section}`)
+    navigate('settings')
+  }
+
   async function openReportedRecord(row: Row) {
     if (user?.role !== 'ADMIN' || busyRef.current || row.rowType === 'REFERENCE') return
-    const paths: Record<string, string> = { CRATE_PALLET: '/api/crate-pallet-records', SALVAGE: '/api/salvage-records', PICKUP: '/api/pickup-records', ELECTRICAL_CRATE_PALLET: '/api/electrical-crate-pallet-records', COLLECTABLES: '/api/collectable-records', WHITEGOODS: '/api/whitegoods-records', ELECTRICAL_TESTING: '/api/electrical-testing/tallies' }
+    const paths: Record<string, string> = { EWASTE_PICKUP: '/api/ewaste-pickups', CRATE_PALLET: '/api/crate-pallet-records', SALVAGE: '/api/salvage-records', PICKUP: '/api/pickup-records', ELECTRICAL_CRATE_PALLET: '/api/electrical-crate-pallet-records', COLLECTABLES: '/api/collectable-records', WHITEGOODS: '/api/whitegoods-records', ELECTRICAL_TESTING: '/api/electrical-testing/tallies' }
     activityChanged(true); setError('')
     try {
       const record = await request<OperationalRecord['record']>(paths[row.workflow]+'/'+row.id)
@@ -155,23 +168,23 @@ function App() {
   }
 
   if (loading) return <main className="app-shell"><p role="status">Loading waste tracking...</p></main>
-  if (!user) return <>{error && <p className="notice error" role="alert">{error}</p>}<LoginPage onLogin={user => { setError(''); setPage(user.role === 'ADMIN' ? 'overview' : 'operations'); setUser(user) }} /></>
+  if (!user) return <>{error && <p className="notice error" role="alert">{error}</p>}<LoginPage onLogin={user => { setError(''); setPage(user.role === 'ADMIN' ? (settingsSectionFromPath(window.location.pathname) ? 'settings' : 'overview') : 'operations'); setUser(user) }} /></>
   return <><header className="app-header"><div className="header-inner">
     <div className="brand"><span className="brand-mark" aria-hidden="true">RWC</span><div><strong>{configuration?.organisationName ?? 'Resource Work Cooperative'}</strong><span>{configuration?.siteName || 'Waste tracking'}</span></div></div>
     <div className="account"><span>{user.username} <span className="role-badge">{user.role === 'ADMIN' ? 'Admin' : 'Staff'}</span></span>
       <button className="secondary" disabled={signingOut || busy || unresolved || pendingTallies} onClick={signOut}>{signingOut ? 'Signing out...' : 'Sign out'}</button></div>
   </div></header>
-    <main className="app-shell" inert={signingOut}><Navigation isAdmin={user.role === 'ADMIN'} page={page} busy={busy || signingOut} unresolved={unresolved || pendingTallies} workflow={entryWorkflow} onNew={newRecord} onPage={navigate} />
+    <main className="app-shell" inert={signingOut}><Navigation isAdmin={user.role === 'ADMIN'} page={page} busy={busy || signingOut} section={settingsSection} onSettings={showSettings} onPage={navigate} />
       {error && <p className="notice error" role="alert">{error}</p>}
       {pendingTallies && !unresolved && page !== 'entry' && <p className="notice" role="status">Electrical Testing tallies are pending. Save them before signing out or starting another workflow. They remain in memory while you check Records.</p>}
       {unresolved && <p className="notice" role="status">A submission is unresolved. Retry it or check Records. Its details stay in memory while you check.</p>}
       {page === 'operations' && (user.role === 'ADMIN' ? <WorkflowsPage onNew={newRecord} busy={busy || signingOut} unresolved={unresolved || pendingTallies} currentWorkflow={entryWorkflow}/> : <StaffOperationsPage onNew={newRecord} onRecords={showRecords} busy={busy || signingOut} unresolved={unresolved || pendingTallies} currentWorkflow={entryWorkflow}/>)}
-      {user.role === 'ADMIN' && page === 'settings' && <SettingsPage onChanged={() => setConfigurationRevision(n => n+1)}/>}
+      {user.role === 'ADMIN' && page === 'settings' && <SettingsPage key={settingsSection} section={settingsSection} onChanged={() => setConfigurationRevision(n => n+1)}/>}
       {user.role === 'ADMIN' && page === 'overview' && <OverviewPage onOpen={openReportedRecord} onRecords={showRecords}/>}
       {user.role === 'ADMIN' && page === 'reports' && <ReportsPage onOpen={openReportedRecord}/>}
       {user.role === 'ADMIN' && page === 'waste-levy' && <WasteLevySummaryPage/>}
       {hasEntry && <div hidden={page !== 'entry'}>
-        {entryWorkflow === 'CRATE_PALLET' ? <CratePalletPage key={entryKey}
+        {entryWorkflow === 'EWASTE_PICKUP' ? <EwastePickupPage key={entryKey} editing={editing?.workflow === 'EWASTE_PICKUP' ? editing.record : undefined} onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged} onSaved={record => recordSaved({workflow: 'EWASTE_PICKUP', record})} onCancel={showRecords}/> : entryWorkflow === 'CRATE_PALLET' ? <CratePalletPage key={entryKey}
           editing={editing?.workflow === 'CRATE_PALLET' ? editing.record : undefined}
           onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
           onSaved={record => recordSaved({ workflow: 'CRATE_PALLET', record })} onCancel={showRecords} />

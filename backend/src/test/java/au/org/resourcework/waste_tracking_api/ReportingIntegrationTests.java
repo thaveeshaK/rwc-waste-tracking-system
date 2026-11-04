@@ -160,8 +160,8 @@ class ReportingIntegrationTests {
             .andExpect(jsonPath("$.generalIntake.length()").value(1))
             .andExpect(jsonPath("$.generalIntake[0].category").value("Iron and Steel"))
             .andExpect(jsonPath("$.generalIntake[0].value").value("30.00"))
-            .andExpect(jsonPath("$.activity.length()").value(7))
-            .andExpect(jsonPath("$.trend.length()").value(42))
+            .andExpect(jsonPath("$.activity.length()").value(8))
+            .andExpect(jsonPath("$.trend.length()").value(48))
             .andExpect(jsonPath("$.trend[0].month").value("2000-09"))
             .andExpect(jsonPath("$.recent.length()").value(5))
             .andExpect(jsonPath("$.electricalTesting.length()").value(5))
@@ -180,7 +180,7 @@ class ReportingIntegrationTests {
             .andExpect(jsonPath("$.metrics.salvageRecoveredKg").value("0.00"))
             .andExpect(jsonPath("$.metrics.whitegoodsCount").value("0"))
             .andExpect(jsonPath("$.generalIntake.length()").value(0))
-            .andExpect(jsonPath("$.trend.length()").value(42))
+            .andExpect(jsonPath("$.trend.length()").value(48))
             .andExpect(jsonPath("$.recent.length()").value(5));
     }
     @Test void intakeRecoveryUsesOnlyApprovedSourcesAndStoredCategoryWeights() throws Exception {

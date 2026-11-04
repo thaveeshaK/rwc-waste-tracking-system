@@ -15,7 +15,7 @@ import static au.org.resourcework.waste_tracking_api.reporting.ReportData.*;
 @PreAuthorize("hasRole('ADMIN')")
 public class ReportService {
     public static final String NOTE="Monthly working aid only; not a completed Waste Levy return, NRE reconciliation or certified report. E-waste Pickup, Scrap and legacy E-waste reconciliation/carry-over calculations are excluded.";
-    private static final Set<String> WORKFLOWS=Set.of("CRATE_PALLET","SALVAGE","PICKUP","ELECTRICAL_CRATE_PALLET","COLLECTABLES","WHITEGOODS","ELECTRICAL_TESTING");
+    private static final Set<String> WORKFLOWS=Set.of("CRATE_PALLET","SALVAGE","PICKUP","ELECTRICAL_CRATE_PALLET","COLLECTABLES","WHITEGOODS","ELECTRICAL_TESTING","EWASTE_PICKUP");
     private final ReportingRepository repository;
     private final Clock clock;
     private final au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration configuration;
@@ -33,9 +33,9 @@ public class ReportService {
         if (from.getYear()<1 || to.getYear()>9998 || from.isAfter(to)) bad("Invalid reporting date range.");
         String workflow=blank(input.workflow()), location=blank(input.location()), direction=blank(input.direction());
         if (workflow!=null && !WORKFLOWS.contains(workflow)) bad("Unknown workflow.");
-        if (location!=null && (!"PICKUP".equals(workflow) || location.length()>255)) bad("Location filtering requires the Pickup workflow and at most 255 characters.");
+        if (location!=null && (!Set.of("PICKUP","EWASTE_PICKUP").contains(workflow==null?"":workflow) || location.length()>255)) bad("Location/organisation filtering requires Pickup or E-waste Pickup and at most 255 characters.");
         if (direction!=null && (!"SALVAGE".equals(workflow) || !Set.of("UP","DOWN").contains(direction))) bad("Direction filtering requires Salvage Up or Down.");
-        if (input.materialCategoryId()!=null && (input.materialCategoryId()<1 || "WHITEGOODS".equals(workflow) || "ELECTRICAL_TESTING".equals(workflow))) bad("Material category is incompatible with this workflow.");
+        if (input.materialCategoryId()!=null && (input.materialCategoryId()<1 || "WHITEGOODS".equals(workflow) || "ELECTRICAL_TESTING".equals(workflow) || "EWASTE_PICKUP".equals(workflow))) bad("Material category is incompatible with this workflow.");
         if (input.testingCategoryId()!=null && (input.testingCategoryId()<1 || !"ELECTRICAL_TESTING".equals(workflow) || input.materialCategoryId()!=null)) bad("Testing category filtering requires Electrical Testing.");
         if (input.materialCategoryId()!=null && repository.options().materials().stream().noneMatch(c->c.id().equals(input.materialCategoryId()))) bad("Unknown material category.");
         if (input.testingCategoryId()!=null && repository.options().testingCategories().stream().noneMatch(c->c.id().equals(input.testingCategoryId()))) bad("Unknown testing category.");
@@ -61,7 +61,7 @@ public class ReportService {
         catch (RuntimeException e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Use a valid reporting month (YYYY-MM)."); }
         if (month.getYear()<1 || month.getYear()>9998) bad("Invalid reporting month.");
         var f=validate(new ReportFilter(month.atDay(1),month.atEndOfMonth(),null,null,null,null,null));
-        var totals=new ArrayList<>(repository.totals(f).stream().filter(t->!t.workflow().equals("ELECTRICAL_TESTING")).toList());
+        var totals=new ArrayList<>(repository.totals(f).stream().filter(t->!Set.of("ELECTRICAL_TESTING","EWASTE_PICKUP").contains(t.workflow())).toList());
         // Only the approved normal intake category totals are combined. Never combine electrical or Salvage.
         totals.addAll(generalIntake(totals));
         // Zero-fill category rows using historical applicability, without inventing cross-workflow mappings.
@@ -82,7 +82,7 @@ public class ReportService {
         }
         totals.sort(Comparator.comparing(Total::workflow).thenComparing(t->Objects.toString(t.direction(),"")).thenComparing(t->Objects.toString(t.container(),"")).thenComparing(t->t.categoryId()==null?0L:t.categoryId()).thenComparing(Total::metric));
     }
-    private static final List<String> DASHBOARD_WORKFLOWS=List.of("CRATE_PALLET","SALVAGE","PICKUP","ELECTRICAL_CRATE_PALLET","COLLECTABLES","WHITEGOODS","ELECTRICAL_TESTING");
+    private static final List<String> DASHBOARD_WORKFLOWS=List.of("CRATE_PALLET","SALVAGE","PICKUP","ELECTRICAL_CRATE_PALLET","COLLECTABLES","WHITEGOODS","ELECTRICAL_TESTING","EWASTE_PICKUP");
     private static final List<String> TESTING_STATUSES=List.of("UNTESTED_BROKEN_FAILED","TESTED_AND_PRICED","STOCK_CULL","DIVERTED_TO_OLS","DIVERTED_TO_COLL");
 
     public Overview overview() { return overview(null); }

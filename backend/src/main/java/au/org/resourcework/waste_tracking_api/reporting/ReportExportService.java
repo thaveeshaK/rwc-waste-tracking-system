@@ -63,7 +63,7 @@ public class ReportExportService {
         m.put("Organisation",configuration.current().reportDisplayName());
         m.put("Generated at",clock.instant().toString()); m.put("From",f.from().toString()); m.put("To",f.to().toString()); m.put("Timezone","Australia/Hobart");
         m.put("Workflow",Objects.toString(f.workflow(),"All")); m.put("Material category",Objects.toString(f.materialCategoryId(),"All"));
-        m.put("Location contains",Objects.toString(f.location(),"")); m.put("Direction",Objects.toString(f.direction(),"All"));
+        m.put("Location/organisation contains",Objects.toString(f.location(),"")); m.put("Direction",Objects.toString(f.direction(),"All"));
         m.put("Testing category",Objects.toString(f.testingCategoryId(),"All"));
         m.put("Note","Active records only. Weights in kg; category rows and parent weights are separate. Reference dates denote reporting months. Operational totals are not certified diversion figures.");
         return m;
@@ -80,9 +80,9 @@ public class ReportExportService {
     private Table detailTable(String name,List<Row> rows) {
         var values=new ArrayList<List<Object>>();
         for(var r:rows) values.add(Arrays.asList(r.rowType(),r.workflow(),r.id(),r.date().toString(),r.container(),r.location(),r.crew(),r.direction(),r.categoryId(),r.category(),r.status(),
-                decimal(r.kg()),decimal(r.grossKg()),decimal(r.tareKg()),decimal(r.percentage()),r.count(),decimal(r.factor()),r.timeUp(),r.timeDown(),r.submissionId(),r.version(),r.createdBy(),r.createdAt().toString(),r.updatedBy(),r.updatedAt().toString()));
+                decimal(r.kg()),decimal(r.grossKg()),decimal(r.tareKg()),decimal(r.percentage()),r.count(),decimal(r.factor()),r.timeUp(),r.timeDown(),r.submissionId(),r.version(),r.createdBy(),r.createdAt().toString(),r.updatedBy(),r.updatedAt().toString(),r.organisation(),decimal(r.enteredWeight()),r.containerLines()));
         return new Table(name,List.of("row_type","workflow","id","date_or_reporting_month","container","location","crew","direction","category_id","category","status",
-                "kg","gross_kg","tare_kg","percentage","count","kg_per_item","time_up","time_down","submission_id","version","created_by","created_at","updated_by","updated_at"),values);
+                "kg","gross_kg","tare_kg","percentage","count","kg_per_item","time_up","time_down","submission_id","version","created_by","created_at","updated_by","updated_at","organisation","entered_weight","container_lines"),values);
     }
     private static BigDecimal decimal(String s) { return s==null?null:new BigDecimal(s); }
     private File render(String filename,String format,List<Table> tables,Map<String,String> metadata) {

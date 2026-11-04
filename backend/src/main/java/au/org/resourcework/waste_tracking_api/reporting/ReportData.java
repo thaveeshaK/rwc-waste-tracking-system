@@ -9,7 +9,7 @@ public final class ReportData {
     public record Row(String rowType, String workflow, Long id, LocalDate date, String container,
             String location, String crew, String direction, Long categoryId, String category,
             String status, String kg, String grossKg, String tareKg, String percentage, Long count,
-            String factor, String timeUp, String timeDown, String submissionId, Long version, String createdBy, Instant createdAt, String updatedBy, Instant updatedAt) {}
+            String factor, String timeUp, String timeDown, String submissionId, Long version, String createdBy, Instant createdAt, String updatedBy, Instant updatedAt, String organisation, String enteredWeight, String containerLines) {}
     public record Total(String workflow, String direction, String container, Long categoryId,
             String category, String metric, String unit, String value) {}
     public record Result(ReportFilter filters, String timezone, Instant generatedAt, List<Total> totals) {}

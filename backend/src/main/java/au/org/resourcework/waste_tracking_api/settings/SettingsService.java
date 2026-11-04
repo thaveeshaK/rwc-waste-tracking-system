@@ -12,7 +12,7 @@ import static au.org.resourcework.waste_tracking_api.settings.SettingsData.*;
 @Transactional(readOnly=true)
 @PreAuthorize("hasRole('ADMIN')")
 public class SettingsService {
-    private static final Set<String> CONTAINERS=Set.of("CRATE_PALLET","ELECTRICAL_CRATE_PALLET");
+    private static final Set<String> CONTAINERS=Set.of("CRATE_PALLET","ELECTRICAL_CRATE_PALLET","EWASTE_PICKUP");
     private static final Set<String> MATERIALS=Set.of("CRATE_PALLET","SALVAGE_UP","SALVAGE_DOWN","PICKUP","COLLECTABLES");
     private final SettingsRepository repository;
     public SettingsService(SettingsRepository repository) { this.repository=repository; }

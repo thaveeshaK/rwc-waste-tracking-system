@@ -25,7 +25,7 @@ public class ReportingRepository {
                 + status + "::text status, " + kg + "::numeric kg, " + gross + "::numeric gross_kg, "
                 + tare + "::numeric tare_kg, " + percentage + "::numeric percentage, " + count + "::bigint count, "
                 + factor + "::numeric factor, " + (table.equals("salvage_record")?"r.time_up::text":"null::text") + " time_up, "
-                + (table.equals("salvage_record")?"r.time_down::text":"null::text") + " time_down, r.submission_id::text submission_id, r.version, u.username created_by, r.created_at, v.username updated_by, r.updated_at from "
+                + (table.equals("salvage_record")?"r.time_down::text":"null::text") + " time_down, null::text container_lines, r.submission_id::text submission_id, r.version, u.username created_by, r.created_at, v.username updated_by, r.updated_at from "
                 + table + " r join app_user u on u.id=r.created_by join app_user v on v.id=r.updated_by "
                 + joins + " where r.deleted_at is null";
     }
@@ -55,6 +55,8 @@ public class ReportingRepository {
                 "null","null","null","null","c.id","c.name","r.tally_type","null","null","null","null","r.count","null","r.record_date"));
         parts.add(source("electrical_testing_sales_reference","ELECTRICAL_TESTING","REFERENCE","join electrical_testing_category c on c.id=r.category_id",
                 "null","null","null","null","c.id","c.name","'SOLD_LAST_MONTH'","null","null","null","null","r.sold_last_month_count","null","r.reporting_month"));
+        parts.add(source("ewaste_pickup_record","EWASTE_PICKUP","RECORD","","null","r.organisation","null","null","null","null","null","r.net_weight","r.entered_weight","r.total_tare_weight","null","null","null","r.record_date")
+            .replace("null::text container_lines", "(select string_agg(l.quantity || ' x ' || l.container_name || ' @ ' || l.tare_per_unit || ' kg = ' || l.tare_subtotal || ' kg', '; ' order by l.container_type_id) from ewaste_pickup_container l where l.ewaste_pickup_record_id=r.id)::text container_lines"));
         return String.join(" union all ", parts);
     }
 
@@ -155,9 +157,9 @@ public class ReportingRepository {
     }
     private static Row row(ResultSet r) throws SQLException {
         return new Row(r.getString("row_type"),r.getString("workflow"),r.getLong("id"),r.getDate("record_date").toLocalDate(),
-                r.getString("container"),r.getString("location"),r.getString("crew"),r.getString("direction"),r.getObject("category_id",Long.class),
-                r.getString("category"),r.getString("status"),decimal(r,"kg"),decimal(r,"gross_kg"),decimal(r,"tare_kg"),decimal(r,"percentage"),
+                r.getString("container"),"EWASTE_PICKUP".equals(r.getString("workflow"))?null:r.getString("location"),r.getString("crew"),r.getString("direction"),r.getObject("category_id",Long.class),
+                r.getString("category"),r.getString("status"),decimal(r,"kg"),"EWASTE_PICKUP".equals(r.getString("workflow"))?null:decimal(r,"gross_kg"),decimal(r,"tare_kg"),decimal(r,"percentage"),
                 r.getObject("count",Long.class),decimal(r,"factor"),r.getString("time_up"),r.getString("time_down"),r.getString("submission_id"),r.getLong("version"),r.getString("created_by"),r.getTimestamp("created_at").toInstant(),
-                r.getString("updated_by"),r.getTimestamp("updated_at").toInstant());
+                r.getString("updated_by"),r.getTimestamp("updated_at").toInstant(),"EWASTE_PICKUP".equals(r.getString("workflow"))?r.getString("location"):null,"EWASTE_PICKUP".equals(r.getString("workflow"))?decimal(r,"gross_kg"):null,r.getString("container_lines"));
     }
 }

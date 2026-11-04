@@ -6,6 +6,7 @@ import { workflowEntries } from './workflows'
 interface RecentSubmission { id: number; recordDate: string; workflow: Workflow; details: string; weightKg: string | null; count: number | null }
 interface Props { onNew: (workflow: Workflow) => void; onRecords: () => void; busy: boolean; unresolved: boolean; currentWorkflow: Workflow }
 const descriptions: Record<Workflow, string> = {
+  EWASTE_PICKUP: 'Record E-waste collected from organisations.',
   CRATE_PALLET: 'Record weighed crate and pallet loads.', SALVAGE: 'Record Salvage Up and Down trip weights.',
   PICKUP: 'Record collected material weights.', ELECTRICAL_CRATE_PALLET: 'Record electrical crate and pallet loads.',
   COLLECTABLES: 'Record collectable tub weights.', WHITEGOODS: 'Record daily Whitegoods counts.',

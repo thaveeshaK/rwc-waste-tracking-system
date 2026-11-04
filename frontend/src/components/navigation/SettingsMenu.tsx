@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import type { Workflow } from '../../features/records/types'
-import { workflowEntries } from '../../features/operations/workflows'
-interface Props { busy: boolean; unresolved: boolean; workflow: Workflow; onNew: (workflow: Workflow) => void }
-export function NewEntryMenu({busy, unresolved, workflow, onNew}: Props) {
+import { settingsSections } from '../../features/settings/sections'
+import type { SettingsSection } from '../../features/settings/sections'
+interface Props { busy: boolean; selected?: SettingsSection; onSelect: (section: SettingsSection) => void }
+export function SettingsMenu({busy, selected, onSelect}: Props) {
   const [open, setOpen] = useState(false)
   const wrapper = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -26,7 +26,7 @@ export function NewEntryMenu({busy, unresolved, workflow, onNew}: Props) {
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length-1 : (current + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length
     items[next]?.focus()
   }
-  return <div className="new-entry" ref={wrapper} onKeyDown={keyboard}><button className="new-entry-trigger" ref={trigger} disabled={busy} aria-haspopup="menu" aria-expanded={open} aria-controls="admin-new-entry-menu" onClick={() => setOpen(value => !value)}>+ New Entry</button>
-    {open && <div id="admin-new-entry-menu" className="new-entry-menu" role="menu" aria-label="Choose a workflow">{workflowEntries.map(w => <button key={w.id} role="menuitem" data-workflow={w.id} disabled={busy || (unresolved && workflow !== w.id)} onClick={() => {setOpen(false); trigger.current?.focus(); onNew(w.id)}}>{w.name}{unresolved && workflow === w.id && <span className="hint">Resume submission</span>}</button>)}</div>}
+  return <div className="settings-navigation" ref={wrapper} onKeyDown={keyboard}><button className="settings-menu-trigger" ref={trigger} disabled={busy} aria-haspopup="menu" aria-expanded={open} aria-controls="admin-settings-menu" onClick={() => setOpen(value => !value)}>Settings <span aria-hidden="true" className="settings-caret"/></button>
+    {open && <div id="admin-settings-menu" className="settings-menu" role="menu" aria-label="Settings sections">{settingsSections.map(s => <button key={s.id} role="menuitem" disabled={busy} aria-current={selected === s.id ? 'page' : undefined} onClick={() => {setOpen(false); trigger.current?.focus(); onSelect(s.id)}}>{s.label}</button>)}</div>}
   </div>
 }

@@ -115,12 +115,12 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 .settings-contexts input { width: 22px; height: 22px; margin: 0; }
 
 .primary-navigation { display: flex; align-items: center; justify-content: space-between; gap: .5rem 1rem; flex-wrap: wrap; }
-.new-entry { position: relative; margin-left: auto; }
-.new-entry-trigger { padding: .5rem .9rem; font-size: .9rem; white-space: nowrap; }
-.new-entry-menu { position: absolute; right: 0; top: calc(100% + .5rem); width: min(300px, calc(100vw - 2rem)); background: white; border: 1px solid #c7d3c8; box-shadow: 0 12px 32px #20382f26; border-radius: 8px; z-index: 20; padding: .4rem; }
-.new-entry-menu button { display: block; width: 100%; text-align: left; border: 0; background: white; color: #20382f; font-size: .92rem; padding: .7rem; }
-.new-entry-menu button:hover:not(:disabled), .new-entry-menu button:focus-visible { background: #eaf1e8; outline: 2px solid #245c43; outline-offset: -2px; }
-.new-entry-menu .hint { display: block; }
+.settings-navigation { position: relative; margin-left: auto; }
+.settings-menu-trigger { padding: .5rem .9rem; font-size: .9rem; white-space: nowrap; }
+.settings-menu { position: absolute; right: 0; top: calc(100% + .5rem); width: min(300px, calc(100vw - 2rem)); background: white; border: 1px solid #c7d3c8; box-shadow: 0 12px 32px #20382f26; border-radius: 8px; z-index: 20; padding: .4rem; }
+.settings-menu button { display: block; width: 100%; text-align: left; border: 0; background: white; color: #20382f; font-size: .92rem; padding: .7rem; }
+.settings-menu button:hover:not(:disabled), .settings-menu button:focus-visible { background: #eaf1e8; outline: 2px solid #245c43; outline-offset: -2px; }
+.settings-menu button[aria-current="page"] { background: #eaf1e8; font-weight: 700; }
 .workflow-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
 .workflow-card { display: flex; flex-direction: column; align-items: flex-start; }
 .workflow-card p { flex: 1; color: #5c6f62; }
@@ -198,3 +198,5 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
   .tally-grid-cell { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
   .tally-mobile-label { display: inline; font-size: .82rem; }
 }
+
+.settings-caret::after { content: '\25be'; margin-left: .3rem; }

@@ -8,4 +8,5 @@ export const workflowEntries: WorkflowEntry[] = [
   {id: 'COLLECTABLES', name: 'Collectables', description: 'Record an eligible Collectable Tub and material breakdown.'},
   {id: 'WHITEGOODS', name: 'Whitegoods', description: 'Record a received quantity and review its estimated weight.'},
   {id: 'ELECTRICAL_TESTING', name: 'Electrical Testing', description: 'Add processing tallies or maintain monthly sales references.'},
+  {id: 'EWASTE_PICKUP', name: 'E-waste Pickup', description: 'Record E-waste collected from organisations.'},
 ]

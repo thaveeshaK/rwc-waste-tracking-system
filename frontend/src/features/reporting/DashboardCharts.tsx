@@ -6,7 +6,7 @@ import { workflowEntries } from '../operations/workflows'
 import { typeLabels } from '../electrical-testing/types'
 import type { TallyType } from '../electrical-testing/types'
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Tooltip, Legend)
-const colours = ['#245c43', '#347aa1', '#b47725', '#795797', '#ad5975', '#44877f', '#596a7c']
+const colours = ['#245c43', '#347aa1', '#b47725', '#795797', '#ad5975', '#44877f', '#596a7c', '#586e32']
 interface Point { name: string; value: string }
 function wrap(label: string): string[] {
   const words = label.split(' '), lines: string[] = []

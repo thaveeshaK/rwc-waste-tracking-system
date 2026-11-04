@@ -37,6 +37,9 @@ public class OperationsRepository {
                   when 'DIVERTED_TO_OLS' then 'Diverted to OLS' when 'DIVERTED_TO_COLL' then 'Diverted to Coll' end,
                 null,r.count,r.created_at from electrical_testing_tally r
                 left join electrical_testing_category c on c.id=r.category_id where r.deleted_at is null
+              union all
+              select id,record_date,'EWASTE_PICKUP',organisation,net_weight,null,created_at
+                from ewaste_pickup_record where deleted_at is null
             ) recent order by created_at desc,workflow,id desc limit 5
             """,(rs,n)->new RecentSubmission(rs.getLong("id"),rs.getDate("record_date").toLocalDate(),
                 rs.getString("workflow"),rs.getString("details"),rs.getBigDecimal("weight_kg")==null?null:rs.getBigDecimal("weight_kg").toPlainString(),rs.getObject("count",Long.class)));
