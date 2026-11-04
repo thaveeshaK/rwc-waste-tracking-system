@@ -1,6 +1,7 @@
 import type { Workflow } from '../records/types'
 export interface WorkflowEntry { id: Workflow; name: string; description: string }
 export const workflowEntries: WorkflowEntry[] = [
+  {id: 'SCRAP', name: 'Scrap', description: 'Record monthly Scrap material weights.'},
   {id: 'CRATE_PALLET', name: 'Crate / Pallet', description: 'Record a weighed container and its material breakdown.'},
   {id: 'SALVAGE', name: 'Salvage', description: 'Record one trip, with recovered and landfill weights.'},
   {id: 'PICKUP', name: 'Pickup', description: 'Record a pickup location, net weight and materials.'},

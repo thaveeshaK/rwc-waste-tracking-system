@@ -57,12 +57,18 @@ public class ReportingRepository {
                 "null","null","null","null","c.id","c.name","'SOLD_LAST_MONTH'","null","null","null","null","r.sold_last_month_count","null","r.reporting_month"));
         parts.add(source("ewaste_pickup_record","EWASTE_PICKUP","RECORD","","null","r.organisation","null","null","null","null","null","r.net_weight","r.entered_weight","r.total_tare_weight","null","null","null","r.record_date")
             .replace("null::text container_lines", "(select string_agg(l.quantity || ' x ' || l.container_name || ' @ ' || l.tare_per_unit || ' kg = ' || l.tare_subtotal || ' kg', '; ' order by l.container_type_id) from ewaste_pickup_container l where l.ewaste_pickup_record_id=r.id)::text container_lines"));
+        parts.add(source("scrap_record","SCRAP","RECORD","","null","null","null","null","null","null","null","(r.iron_and_steel_weight+r.aluminium_weight+r.other_non_ferrous_weight+r.mixed_metals_weight+r.ewaste_weight)","null","null","null","null","null","r.reporting_month"));
+        parts.add(source("scrap_record","SCRAP","MATERIAL","","null","null","null","null","null","'Iron and Steel'","null","r.iron_and_steel_weight","null","null","null","null","null","r.reporting_month"));
+        parts.add(source("scrap_record","SCRAP","MATERIAL","","null","null","null","null","null","'Aluminium'","null","r.aluminium_weight","null","null","null","null","null","r.reporting_month"));
+        parts.add(source("scrap_record","SCRAP","MATERIAL","","null","null","null","null","null","'Other Non-Ferrous'","null","r.other_non_ferrous_weight","null","null","null","null","null","r.reporting_month"));
+        parts.add(source("scrap_record","SCRAP","MATERIAL","","null","null","null","null","null","'Mixed Metals'","null","r.mixed_metals_weight","null","null","null","null","null","r.reporting_month"));
+        parts.add(source("scrap_record","SCRAP","MATERIAL","","null","null","null","null","null","'E-waste'","null","r.ewaste_weight","null","null","null","null","null","r.reporting_month"));
         return String.join(" union all ", parts);
     }
 
     private String filtered(ReportFilter f, MapSqlParameterSource p) {
         p.addValue("from",f.from()).addValue("end",f.to().plusDays(1));
-        String where=" record_date >= :from and record_date < :end";
+        String where=" ((workflow <> 'SCRAP' and record_date >= :from) or (workflow='SCRAP' and record_date >= :monthStart)) and record_date < :end";
         if (f.workflow()!=null) { where+=" and workflow=:workflow"; p.addValue("workflow",f.workflow()); }
         if (f.location()!=null) { where+=" and position(lower(:location) in lower(location))>0"; p.addValue("location",f.location()); }
         if (f.testingCategoryId()!=null) { where+=" and category_id=:testingCategory"; p.addValue("testingCategory",f.testingCategoryId()); }
@@ -84,7 +90,7 @@ public class ReportingRepository {
         String sql=filtered(f,p)+"""
             select workflow, direction, container, category_id, category, metric, unit, value from (
               select workflow,direction,container,category_id,category,
-                case when row_type='MATERIAL' then 'Material weight' when workflow='WHITEGOODS' then 'Estimated weight' else 'Net weight' end metric,
+                case when row_type='MATERIAL' then 'Material weight' when workflow='WHITEGOODS' then 'Estimated weight' when workflow='SCRAP' then 'Recorded weight' else 'Net weight' end metric,
                 'kg' unit,sum(kg) value from filtered where kg is not null
                 group by workflow,direction,container,category_id,category,row_type
               union all
@@ -150,6 +156,11 @@ public class ReportingRepository {
                 return new Total(direction==null?context:"SALVAGE",direction,null,rs.getLong(2),rs.getString(3),"Material weight","kg","0.00");
             }));
         templates.stream().filter(t->t.workflow().equals("CRATE_PALLET")).toList().forEach(t->templates.add(new Total("GENERAL_INTAKE",null,null,t.categoryId(),t.category(),"Material weight","kg","0.00")));
+        templates.add(new Total("SCRAP",null,null,null,"Iron and Steel","Material weight","kg","0.00"));
+        templates.add(new Total("SCRAP",null,null,null,"Aluminium","Material weight","kg","0.00"));
+        templates.add(new Total("SCRAP",null,null,null,"Other Non-Ferrous","Material weight","kg","0.00"));
+        templates.add(new Total("SCRAP",null,null,null,"Mixed Metals","Material weight","kg","0.00"));
+        templates.add(new Total("SCRAP",null,null,null,"E-waste","Material weight","kg","0.00"));
         return templates;
     }
     private static String decimal(ResultSet r,String field) throws SQLException {

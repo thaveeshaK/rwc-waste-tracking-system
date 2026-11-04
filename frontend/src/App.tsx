@@ -1,3 +1,4 @@
+import { ScrapPage } from './features/scrap/ScrapPage'
 import { EwastePickupPage } from './features/ewaste-pickup/EwastePickupPage'
 import { settingsSectionFromPath } from './features/settings/sections'
 import type { SettingsSection } from './features/settings/sections'
@@ -155,7 +156,7 @@ function App() {
 
   async function openReportedRecord(row: Row) {
     if (user?.role !== 'ADMIN' || busyRef.current || row.rowType === 'REFERENCE') return
-    const paths: Record<string, string> = { EWASTE_PICKUP: '/api/ewaste-pickups', CRATE_PALLET: '/api/crate-pallet-records', SALVAGE: '/api/salvage-records', PICKUP: '/api/pickup-records', ELECTRICAL_CRATE_PALLET: '/api/electrical-crate-pallet-records', COLLECTABLES: '/api/collectable-records', WHITEGOODS: '/api/whitegoods-records', ELECTRICAL_TESTING: '/api/electrical-testing/tallies' }
+    const paths: Record<string, string> = { SCRAP: '/api/scrap-records', EWASTE_PICKUP: '/api/ewaste-pickups', CRATE_PALLET: '/api/crate-pallet-records', SALVAGE: '/api/salvage-records', PICKUP: '/api/pickup-records', ELECTRICAL_CRATE_PALLET: '/api/electrical-crate-pallet-records', COLLECTABLES: '/api/collectable-records', WHITEGOODS: '/api/whitegoods-records', ELECTRICAL_TESTING: '/api/electrical-testing/tallies' }
     activityChanged(true); setError('')
     try {
       const record = await request<OperationalRecord['record']>(paths[row.workflow]+'/'+row.id)
@@ -184,7 +185,7 @@ function App() {
       {user.role === 'ADMIN' && page === 'reports' && <ReportsPage onOpen={openReportedRecord}/>}
       {user.role === 'ADMIN' && page === 'waste-levy' && <WasteLevySummaryPage/>}
       {hasEntry && <div hidden={page !== 'entry'}>
-        {entryWorkflow === 'EWASTE_PICKUP' ? <EwastePickupPage key={entryKey} editing={editing?.workflow === 'EWASTE_PICKUP' ? editing.record : undefined} onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged} onSaved={record => recordSaved({workflow: 'EWASTE_PICKUP', record})} onCancel={showRecords}/> : entryWorkflow === 'CRATE_PALLET' ? <CratePalletPage key={entryKey}
+        {entryWorkflow === 'SCRAP' ? <ScrapPage key={entryKey} editing={editing?.workflow === 'SCRAP' ? editing.record : undefined} onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged} onSaved={record => recordSaved({workflow: 'SCRAP', record})} onCancel={showRecords}/> : entryWorkflow === 'EWASTE_PICKUP' ? <EwastePickupPage key={entryKey} editing={editing?.workflow === 'EWASTE_PICKUP' ? editing.record : undefined} onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged} onSaved={record => recordSaved({workflow: 'EWASTE_PICKUP', record})} onCancel={showRecords}/> : entryWorkflow === 'CRATE_PALLET' ? <CratePalletPage key={entryKey}
           editing={editing?.workflow === 'CRATE_PALLET' ? editing.record : undefined}
           onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
           onSaved={record => recordSaved({ workflow: 'CRATE_PALLET', record })} onCancel={showRecords} />

@@ -67,13 +67,13 @@ async function click(text, scope = '') {
 // Staff workflow access now starts from Operations cards, never a persistent shortcut row.
 async function staffWorkflow(name) {
   await click('Operations')
-  await until(()=>evaluate("document.querySelectorAll('.staff-operations .workflow-card').length===8"),'Staff workflow cards')
-  const ids={'Crate / Pallet':'CRATE_PALLET',Salvage:'SALVAGE',Pickup:'PICKUP','Electrical Crate / Pallet':'ELECTRICAL_CRATE_PALLET',Collectables:'COLLECTABLES',Whitegoods:'WHITEGOODS','Electrical Testing':'ELECTRICAL_TESTING','E-waste Pickup':'EWASTE_PICKUP'}
+  await until(()=>evaluate("document.querySelectorAll('.staff-operations .workflow-card').length===9"),'Staff workflow cards')
+  const ids={'Crate / Pallet':'CRATE_PALLET',Salvage:'SALVAGE',Pickup:'PICKUP','Electrical Crate / Pallet':'ELECTRICAL_CRATE_PALLET',Collectables:'COLLECTABLES',Whitegoods:'WHITEGOODS','Electrical Testing':'ELECTRICAL_TESTING','E-waste Pickup':'EWASTE_PICKUP',Scrap:'SCRAP'}
   await click(name==='Electrical Testing'?'Open':'New Entry',`.staff-operations [data-workflow="${ids[name]}"]`)
 }
 async function adminWorkflow(name) {
   await click('Workflows')
-  const ids={'Crate / Pallet':'CRATE_PALLET',Salvage:'SALVAGE',Pickup:'PICKUP','Electrical Crate / Pallet':'ELECTRICAL_CRATE_PALLET',Collectables:'COLLECTABLES',Whitegoods:'WHITEGOODS','Electrical Testing':'ELECTRICAL_TESTING','E-waste Pickup':'EWASTE_PICKUP'}
+  const ids={'Crate / Pallet':'CRATE_PALLET',Salvage:'SALVAGE',Pickup:'PICKUP','Electrical Crate / Pallet':'ELECTRICAL_CRATE_PALLET',Collectables:'COLLECTABLES',Whitegoods:'WHITEGOODS','Electrical Testing':'ELECTRICAL_TESTING','E-waste Pickup':'EWASTE_PICKUP',Scrap:'SCRAP'}
   await click('New Entry',`.workflow-card[data-workflow="${ids[name]}"]`)
 }
 async function openSettings(label) {
@@ -174,11 +174,11 @@ try {
   await hasText('No recent submissions.')
   assert.deepEqual(await evaluate("[...document.querySelectorAll('nav button')].map(b=>b.textContent.trim())"),['Operations','Records'])
   assert.equal(await evaluate("document.querySelector('.workflow-navigation')===null"),true)
-  assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card').length"),8)
+  assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card').length"),9)
   assert.equal(await evaluate("document.querySelector('.staff-recent tbody')===null"),true)
   await screenshot('desktop-staff-operations-empty')
   await evaluate('window.fetch=window.__operationsFetch; delete window.__operationsFetch')
-  for(const name of ['Crate / Pallet','Salvage','Pickup','Electrical Crate / Pallet','Collectables','Whitegoods','Electrical Testing','E-waste Pickup']) {
+  for(const name of ['Crate / Pallet','Salvage','Pickup','Electrical Crate / Pallet','Collectables','Whitegoods','Electrical Testing','E-waste Pickup','Scrap']) {
     await staffWorkflow(name)
     await until(()=>evaluate(`document.querySelector('main h1')?.textContent===${JSON.stringify(name)}`),'existing '+name+' form')
     await click('Operations')
@@ -270,7 +270,7 @@ try {
     await until(()=>evaluate("document.documentElement.scrollWidth<=window.innerWidth"),'populated Staff Operations overflow at '+width)
     await screenshot('staff-operations-recent-'+width)
   }
-  console.log('PASS: Staff Operations eight workflow cards, primary navigation only, read-only recent submissions, empty state and desktop/tablet overflow checks.')
+  console.log('PASS: Staff Operations nine workflow cards, primary navigation only, read-only recent submissions, empty state and desktop/tablet overflow checks.')
   await screenshot('staff-operations-with-recent')
   await click('View Records')
   await hasText('Submitted records are read-only for Staff.')
@@ -318,7 +318,7 @@ try {
   assert.deepEqual(await evaluate("[...document.querySelectorAll('[role=menuitem]')].map(b=>b.textContent)"),settingsLabels)
   await click('Workflows')
   await until(()=>evaluate("document.querySelector('[role=menu]')===null"),'menu closes outside')
-  assert.equal(await evaluate("document.querySelectorAll('.workflow-card').length"),8)
+  assert.equal(await evaluate("document.querySelectorAll('.workflow-card').length"),9)
   await evaluate("document.querySelector('.settings-menu-trigger').focus();document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}))")
   await until(()=>evaluate("document.activeElement?.getAttribute('role')==='menuitem'"),'Settings keyboard focus')
   await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}))")
@@ -341,7 +341,7 @@ try {
       assert.deepEqual(await evaluate("[...document.querySelectorAll('.settings-page section[aria-label]')].map(e=>e.getAttribute('aria-label'))"),[settingsLabels[i]])
     }
   }
-  for(const workflow of ['Salvage','Pickup','Electrical Crate / Pallet','Collectables','Whitegoods','Electrical Testing','E-waste Pickup','Crate / Pallet']) {
+  for(const workflow of ['Salvage','Pickup','Electrical Crate / Pallet','Collectables','Whitegoods','Electrical Testing','E-waste Pickup','Scrap','Crate / Pallet']) {
     await adminWorkflow(workflow)
     await until(()=>evaluate(`document.querySelector('main h1')?.textContent===${JSON.stringify(workflow)}`),'existing '+workflow+' form')
   }
@@ -1483,7 +1483,7 @@ try {
   assert.equal(await evaluate("document.querySelectorAll('[data-chart-values=intake] li').length"),1)
   assert.equal(await evaluate("[...document.querySelectorAll('[data-chart-values=testing] li')].find(l=>l.dataset.name==='Tested and Priced').dataset.value"),'3')
   assert.equal(await evaluate("[...document.querySelectorAll('[data-chart-values=testing] li')].find(l=>l.dataset.name==='Diverted to OLS').dataset.value"),'2')
-  assert.equal(await evaluate("document.querySelectorAll('[data-chart-values=trend] li').length"),48)
+  assert.equal(await evaluate("document.querySelectorAll('[data-chart-values=trend] li').length"),54)
   assert.equal(await evaluate("document.querySelectorAll('.dashboard-recent tbody tr').length"),5)
   assert.equal(await evaluate("document.querySelector('.dashboard details').open"),false)
   assert.deepEqual(await evaluate("[...document.querySelectorAll('[data-chart-values=activity] li')].map(l=>l.dataset.value)"),dashBackend.activity.map(a=>String(a.count)))
@@ -1517,7 +1517,7 @@ try {
   await click('View all records')
   await hasText('View submitted loads, correct entries')
   await click('Workflows')
-  assert.equal(await evaluate("document.querySelectorAll('.workflow-card').length"),8)
+  assert.equal(await evaluate("document.querySelectorAll('.workflow-card').length"),9)
   await screenshot('tablet-admin-workflows')
   // Exercise the card action as well as the global dropdown.
   await evaluate("document.querySelector('[data-workflow=CRATE_PALLET] button').click()")
@@ -1776,6 +1776,42 @@ try {
   assert.equal((await browserApi('/api/ewaste-pickups/'+ewasteId)).status,404)
   assert.equal((await browserApi('/api/admin/reports/records?from=2008-03-01&to=2008-03-31&workflow=EWASTE_PICKUP&location=corrected')).body.totalRows,0)
   console.log('PASS: E-waste Pickup no-container and multi-quantity intake, organisation suggestions, exact tare, review/back, UUID retry/guards, historical inactive snapshots, Admin correction/stale/delete, separate filtered reports/exports and responsive layouts.')
+  // Scrap is monthly additive weight recording, entirely separate from electrical intake/processing.
+  await click('Sign out');await hasText('Sign in');await fill('Username',process.env.INITIAL_STAFF_USERNAME);await fill('Password',process.env.INITIAL_STAFF_PASSWORD);await click('Sign in');await enabled('Operations')
+  await staffWorkflow('Scrap');await hasText('Monthly Scrap entry')
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Review record').disabled"),true)
+  const scrapSeed={submissionId:crypto.randomUUID(),reportingMonth:'2009-09',ironAndSteelWeight:'250',aluminiumWeight:'0',otherNonFerrousWeight:'75',mixedMetalsWeight:'10',ewasteWeight:'477'}
+  assert.equal((await browserApi('/api/scrap-records','POST',scrapSeed)).status,201)
+  await fill('Reporting month','2009-09');await fill('Iron and Steel','100');await fill('Other Non-Ferrous','25');await fill('E-waste','100')
+  await fill('Aluminium','-1');assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Review record').disabled"),true);await fill('Aluminium','0')
+  const beforeScrap=(await browserApi('/api/scrap-records')).body.length
+  for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'Scrap entry overflow '+width);await screenshot('scrap-entry-'+width)}
+  await click('Review record');await enabled('Confirm and submit');await hasText('1037.00 kg')
+  const scrapReview=await evaluate("[...document.querySelectorAll('.scrap-review tbody tr')].map(r=>[...r.cells].map(c=>c.textContent))")
+  assert.deepEqual(scrapReview[0],['Iron and Steel','250.00 kg','100.00 kg','350.00 kg']);assert.deepEqual(scrapReview[2],['Other Non-Ferrous','75.00 kg','25.00 kg','100.00 kg']);assert.deepEqual(scrapReview[4],['E-waste','477.00 kg','100.00 kg','577.00 kg'])
+  assert.equal((await browserApi('/api/scrap-records')).body.length,beforeScrap)
+  for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'Scrap review overflow '+width);await screenshot('scrap-review-'+width)}
+  await click('Back to edit');assert.equal(await evaluate("[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('Other Non-Ferrous')).querySelector('input').value"),'25');await click('Review record');await enabled('Confirm and submit')
+  await evaluate(`window.__realFetch=window.fetch;window.__scrapPayloads=[];window.__scrapLost=false;window.__scrapGate=new Promise(r=>window.__releaseScrap=r);window.fetch=async(...args)=>{const submission=args[0]==='/api/scrap-records'&&args[1]?.method==='POST';if(submission){window.__scrapPayloads.push(args[1].body);await window.__scrapGate}const response=await window.__realFetch(...args);if(submission&&response.ok&&!window.__scrapLost){window.__scrapLost=true;throw new TypeError('Simulated lost Scrap response')}return response};`)
+  await click('Confirm and submit');await until(()=>evaluate('window.__scrapPayloads.length===1'),'Scrap request started')
+  for(const label of ['Operations','Records','Sign out'])assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(label)}).disabled`),true)
+  await evaluate('window.__releaseScrap()');await enabled('Retry submission');await click('Check Records');await resumeStaffSubmission();await enabled('Retry submission');await click('Retry submission');await hasText('saved successfully.')
+  const scrapPayloads=await evaluate('window.__scrapPayloads');assert.equal(scrapPayloads.length,2);assert.equal(scrapPayloads[0],scrapPayloads[1]);await evaluate('window.fetch=window.__realFetch')
+  const scrapInput=JSON.parse(scrapPayloads[0]),scrapRows=(await browserApi('/api/scrap-records')).body.filter(r=>r.submissionId===scrapInput.submissionId);assert.equal(scrapRows.length,1);const scrapId=scrapRows[0].id
+  assert.equal((await browserApi('/api/scrap-records/monthly-summary?month=2009-09')).body.totalWeight,'1037.00')
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Correct record'||b.textContent==='Delete record')"),false)
+  await click('Sign out');await hasText('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
+  await click('Records');await fill('Workflow','SCRAP');await enabled('#'+scrapId);await click('#'+scrapId);await enabled('Correct record');await click('Correct record');await hasText('Monthly Scrap entry')
+  await fill('Iron and Steel','125');await click('Review record');await enabled('Confirm correction');await hasText('1062.00 kg');assert.equal(await evaluate("document.querySelector('.scrap-review tbody tr td:nth-child(2)').textContent"),'250.00 kg')
+  await click('Back to edit');await fill('Reporting month','2009-10');await click('Review record');await enabled('Confirm correction');await hasText('250.00 kg');await click('Confirm correction');await hasText('saved successfully.')
+  assert.equal((await browserApi('/api/scrap-records/monthly-summary?month=2009-09')).body.totalWeight,'812.00');assert.equal((await browserApi('/api/scrap-records/monthly-summary?month=2009-10')).body.totalWeight,'250.00')
+  await click('Reports');await hasText('Applied period:');await fill('Report workflow','SCRAP');await fill('From date','2009-10-20');await fill('To date','2009-10-21');await click('Apply report filters');await fill('Weight display','kg');await hasText('250.00')
+  assert.equal(await evaluate("[...document.querySelectorAll('label')].some(l=>l.textContent.startsWith('Material category'))"),false)
+  await evaluate(`window.__scrapExports=[];window.fetch=async(...args)=>{const r=await window.__realFetch(...args);if(String(args[0]).includes('/export?'))window.__scrapExports.push({status:r.status,url:String(args[0])});return r}`)
+  await enabled('Export CSV');await click('Export CSV');await until(()=>evaluate('window.__scrapExports.length===1'),'Scrap CSV export');await enabled('Export Excel');await click('Export Excel');await until(()=>evaluate('window.__scrapExports.length===2'),'Scrap XLSX export');assert.equal(await evaluate('window.__scrapExports.every(r=>r.status===200&&r.url.includes("workflow=SCRAP"))'),true);await evaluate('window.fetch=window.__realFetch')
+  await click('Waste Levy Summary');await hasText('Monthly Waste Levy Summary');await fill('Reporting month','2009-10');await until(()=>evaluate("[...document.querySelectorAll('.report-section h2')].some(h=>h.textContent==='SCRAP')"),'Scrap monthly summary loaded');await fill('Summary units','kg');await hasText('250.00');assert.equal(await evaluate("[...document.querySelectorAll('.report-section')].some(s=>s.querySelector('h2')?.textContent==='SCRAP'&&s.textContent.includes('Other Non-Ferrous'))"),true)
+  await click('Records');await fill('Workflow','SCRAP');await enabled('#'+scrapId);await click('#'+scrapId);await enabled('Delete record');await click('Delete record');await click('Confirm deletion');await hasText('Record #'+scrapId+' deleted.');assert.equal((await browserApi('/api/scrap-records/monthly-summary?month=2009-10')).body.totalWeight,'0.00')
+  console.log('PASS: Scrap five-field additive monthly weights, current/entry/projected review, no preview persistence, validation, retained UUID retry/guards, Staff read-only, Admin correction/month move/delete, independent filtered reports/exports, Waste Levy Summary and desktop/tablet layouts.')
   await click('Sign out')
   await hasText('Sign in')
   await fill('Username',process.env.INITIAL_STAFF_USERNAME)

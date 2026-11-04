@@ -75,11 +75,11 @@ class ReportingIntegrationTests {
         mvc.perform(report("/reports/summary").param("location","x")).andExpect(status().isBadRequest());
         mvc.perform(report("/reports/summary").param("direction","UP")).andExpect(status().isBadRequest());
         mvc.perform(report("/reports/summary").param("workflow","SALVAGE").param("direction","UP")).andExpect(status().isOk());
-        mvc.perform(report("/reports/summary").param("workflow","SCRAP")).andExpect(status().isBadRequest());
+        mvc.perform(report("/reports/summary").param("workflow","UNKNOWN")).andExpect(status().isBadRequest());
     }
     @Test void monthlyCombinesOnlyApprovedGeneralIntake() throws Exception {
         String body=mvc.perform(report("/waste-levy-summary").param("month","2001-02")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        assertThat(body).contains("GENERAL_INTAKE","30.00","E-waste Pickup, Scrap").doesNotContain("DIVERTED_TO_OLS");
+        assertThat(body).contains("GENERAL_INTAKE","30.00","E-waste Pickup and legacy").doesNotContain("DIVERTED_TO_OLS");
         mvc.perform(report("/waste-levy-summary").param("month","2001-13")).andExpect(status().isBadRequest());
     }
     @Test void correctionsAndDeletionChangeReportsWithoutStoredMonthlyTotals() throws Exception {
@@ -160,8 +160,8 @@ class ReportingIntegrationTests {
             .andExpect(jsonPath("$.generalIntake.length()").value(1))
             .andExpect(jsonPath("$.generalIntake[0].category").value("Iron and Steel"))
             .andExpect(jsonPath("$.generalIntake[0].value").value("30.00"))
-            .andExpect(jsonPath("$.activity.length()").value(8))
-            .andExpect(jsonPath("$.trend.length()").value(48))
+            .andExpect(jsonPath("$.activity.length()").value(9))
+            .andExpect(jsonPath("$.trend.length()").value(54))
             .andExpect(jsonPath("$.trend[0].month").value("2000-09"))
             .andExpect(jsonPath("$.recent.length()").value(5))
             .andExpect(jsonPath("$.electricalTesting.length()").value(5))
@@ -180,7 +180,7 @@ class ReportingIntegrationTests {
             .andExpect(jsonPath("$.metrics.salvageRecoveredKg").value("0.00"))
             .andExpect(jsonPath("$.metrics.whitegoodsCount").value("0"))
             .andExpect(jsonPath("$.generalIntake.length()").value(0))
-            .andExpect(jsonPath("$.trend.length()").value(48))
+            .andExpect(jsonPath("$.trend.length()").value(54))
             .andExpect(jsonPath("$.recent.length()").value(5));
     }
     @Test void intakeRecoveryUsesOnlyApprovedSourcesAndStoredCategoryWeights() throws Exception {

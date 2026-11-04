@@ -14,8 +14,8 @@ import static au.org.resourcework.waste_tracking_api.reporting.ReportData.*;
 @Transactional(readOnly=true)
 @PreAuthorize("hasRole('ADMIN')")
 public class ReportService {
-    public static final String NOTE="Monthly working aid only; not a completed Waste Levy return, NRE reconciliation or certified report. E-waste Pickup, Scrap and legacy E-waste reconciliation/carry-over calculations are excluded.";
-    private static final Set<String> WORKFLOWS=Set.of("CRATE_PALLET","SALVAGE","PICKUP","ELECTRICAL_CRATE_PALLET","COLLECTABLES","WHITEGOODS","ELECTRICAL_TESTING","EWASTE_PICKUP");
+    public static final String NOTE="Monthly working aid only; not a completed Waste Levy return, NRE reconciliation or certified report. E-waste Pickup and legacy E-waste reconciliation/carry-over calculations are excluded.";
+    private static final Set<String> WORKFLOWS=Set.of("CRATE_PALLET","SALVAGE","PICKUP","ELECTRICAL_CRATE_PALLET","COLLECTABLES","WHITEGOODS","ELECTRICAL_TESTING","EWASTE_PICKUP","SCRAP");
     private final ReportingRepository repository;
     private final Clock clock;
     private final au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration configuration;
@@ -35,7 +35,7 @@ public class ReportService {
         if (workflow!=null && !WORKFLOWS.contains(workflow)) bad("Unknown workflow.");
         if (location!=null && (!Set.of("PICKUP","EWASTE_PICKUP").contains(workflow==null?"":workflow) || location.length()>255)) bad("Location/organisation filtering requires Pickup or E-waste Pickup and at most 255 characters.");
         if (direction!=null && (!"SALVAGE".equals(workflow) || !Set.of("UP","DOWN").contains(direction))) bad("Direction filtering requires Salvage Up or Down.");
-        if (input.materialCategoryId()!=null && (input.materialCategoryId()<1 || "WHITEGOODS".equals(workflow) || "ELECTRICAL_TESTING".equals(workflow) || "EWASTE_PICKUP".equals(workflow))) bad("Material category is incompatible with this workflow.");
+        if (input.materialCategoryId()!=null && (input.materialCategoryId()<1 || "WHITEGOODS".equals(workflow) || "ELECTRICAL_TESTING".equals(workflow) || "EWASTE_PICKUP".equals(workflow) || "SCRAP".equals(workflow))) bad("Material category is incompatible with this workflow.");
         if (input.testingCategoryId()!=null && (input.testingCategoryId()<1 || !"ELECTRICAL_TESTING".equals(workflow) || input.materialCategoryId()!=null)) bad("Testing category filtering requires Electrical Testing.");
         if (input.materialCategoryId()!=null && repository.options().materials().stream().noneMatch(c->c.id().equals(input.materialCategoryId()))) bad("Unknown material category.");
         if (input.testingCategoryId()!=null && repository.options().testingCategories().stream().noneMatch(c->c.id().equals(input.testingCategoryId()))) bad("Unknown testing category.");
@@ -77,12 +77,12 @@ public class ReportService {
     }
     private void addMissingCategories(List<Total> totals) {
         for (var t:repository.categoryTemplates()) {
-            boolean exists=totals.stream().anyMatch(v->v.workflow().equals(t.workflow()) && Objects.equals(v.direction(),t.direction()) && Objects.equals(v.categoryId(),t.categoryId()) && v.metric().equals("Material weight"));
+            boolean exists=totals.stream().anyMatch(v->v.workflow().equals(t.workflow()) && Objects.equals(v.direction(),t.direction()) && Objects.equals(v.categoryId(),t.categoryId()) && (!t.workflow().equals("SCRAP") || Objects.equals(v.category(),t.category())) && v.metric().equals("Material weight"));
             if (!exists) totals.add(t);
         }
         totals.sort(Comparator.comparing(Total::workflow).thenComparing(t->Objects.toString(t.direction(),"")).thenComparing(t->Objects.toString(t.container(),"")).thenComparing(t->t.categoryId()==null?0L:t.categoryId()).thenComparing(Total::metric));
     }
-    private static final List<String> DASHBOARD_WORKFLOWS=List.of("CRATE_PALLET","SALVAGE","PICKUP","ELECTRICAL_CRATE_PALLET","COLLECTABLES","WHITEGOODS","ELECTRICAL_TESTING","EWASTE_PICKUP");
+    private static final List<String> DASHBOARD_WORKFLOWS=List.of("CRATE_PALLET","SALVAGE","PICKUP","ELECTRICAL_CRATE_PALLET","COLLECTABLES","WHITEGOODS","ELECTRICAL_TESTING","EWASTE_PICKUP","SCRAP");
     private static final List<String> TESTING_STATUSES=List.of("UNTESTED_BROKEN_FAILED","TESTED_AND_PRICED","STOCK_CULL","DIVERTED_TO_OLS","DIVERTED_TO_COLL");
 
     public Overview overview() { return overview(null); }

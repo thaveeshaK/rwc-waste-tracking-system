@@ -40,6 +40,8 @@ public class OperationsRepository {
               union all
               select id,record_date,'EWASTE_PICKUP',organisation,net_weight,null,created_at
                 from ewaste_pickup_record where deleted_at is null
+              union all
+              select id,reporting_month,'SCRAP','Reporting month ' || to_char(reporting_month,'YYYY-MM'),iron_and_steel_weight+aluminium_weight+other_non_ferrous_weight+mixed_metals_weight+ewaste_weight,null,created_at from scrap_record where deleted_at is null
             ) recent order by created_at desc,workflow,id desc limit 5
             """,(rs,n)->new RecentSubmission(rs.getLong("id"),rs.getDate("record_date").toLocalDate(),
                 rs.getString("workflow"),rs.getString("details"),rs.getBigDecimal("weight_kg")==null?null:rs.getBigDecimal("weight_kg").toPlainString(),rs.getObject("count",Long.class)));

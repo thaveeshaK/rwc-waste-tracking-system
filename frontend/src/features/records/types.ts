@@ -1,3 +1,4 @@
+import type { ScrapRecord } from '../scrap/types'
 import type { EwastePickupRecord } from '../ewaste-pickup/types'
 import type { TallyRecord } from '../electrical-testing/types'
 import type { WhitegoodsRecord } from '../whitegoods/types'
@@ -6,5 +7,5 @@ import type { ElectricalCratePalletRecord } from '../electrical-crate-pallet/typ
 import type { PickupRecord } from '../pickup/types'
 import type { CratePalletRecord } from '../crate-pallet/types'
 import type { SalvageRecord } from '../salvage/types'
-export type Workflow = 'EWASTE_PICKUP' | 'CRATE_PALLET' | 'SALVAGE' | 'PICKUP' | 'ELECTRICAL_CRATE_PALLET' | 'COLLECTABLES' | 'WHITEGOODS' | 'ELECTRICAL_TESTING'
-export type OperationalRecord = { workflow: 'EWASTE_PICKUP'; record: EwastePickupRecord } | { workflow: 'CRATE_PALLET'; record: CratePalletRecord } | { workflow: 'SALVAGE'; record: SalvageRecord } | { workflow: 'PICKUP'; record: PickupRecord } | { workflow: 'ELECTRICAL_CRATE_PALLET'; record: ElectricalCratePalletRecord } | { workflow: 'COLLECTABLES'; record: CollectableRecord } | { workflow: 'WHITEGOODS'; record: WhitegoodsRecord } | { workflow: 'ELECTRICAL_TESTING'; record: TallyRecord }
+export type Workflow = 'SCRAP' | 'EWASTE_PICKUP' | 'CRATE_PALLET' | 'SALVAGE' | 'PICKUP' | 'ELECTRICAL_CRATE_PALLET' | 'COLLECTABLES' | 'WHITEGOODS' | 'ELECTRICAL_TESTING'
+export type OperationalRecord = {workflow: 'SCRAP'; record: ScrapRecord} | { workflow: 'EWASTE_PICKUP'; record: EwastePickupRecord } | { workflow: 'CRATE_PALLET'; record: CratePalletRecord } | { workflow: 'SALVAGE'; record: SalvageRecord } | { workflow: 'PICKUP'; record: PickupRecord } | { workflow: 'ELECTRICAL_CRATE_PALLET'; record: ElectricalCratePalletRecord } | { workflow: 'COLLECTABLES'; record: CollectableRecord } | { workflow: 'WHITEGOODS'; record: WhitegoodsRecord } | { workflow: 'ELECTRICAL_TESTING'; record: TallyRecord }
