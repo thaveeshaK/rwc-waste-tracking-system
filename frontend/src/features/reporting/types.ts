@@ -8,3 +8,6 @@ export interface Overview { topIntake: Total[]; recoveredTrend: {month: string; 
 export interface Options { materials: {id: number; name: string}[]; testingCategories: {id: number; name: string}[] }
 export const workflows: Record<string, string> = { SCRAP: 'Scrap', EWASTE_PICKUP: 'E-waste Pickup (intake)', CRATE_PALLET: 'Crate / Pallet', SALVAGE: 'Salvage', PICKUP: 'Pickup', ELECTRICAL_CRATE_PALLET: 'Electrical Crate / Pallet', COLLECTABLES: 'Collectables', WHITEGOODS: 'Whitegoods', ELECTRICAL_TESTING: 'Electrical Testing', GENERAL_INTAKE: 'Combined general intake' }
 export const label = (value: string) => workflows[value] ?? value.replaceAll('_', ' ').toLowerCase()
+
+export interface ReportView {draft: Filters | null; applied: Filters | null; page: number; size: number; mode: string; periodName: string}
+export const initialReportView: ReportView={draft:null,applied:null,page:0,size:10,mode:'summary',periodName:'custom'}

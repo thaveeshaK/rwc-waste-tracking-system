@@ -227,7 +227,7 @@ The runner starts a loopback-only PostgreSQL instance on a free port, generates 
 
 Before Spring bean creation or Flyway migration, a test initializer verifies the database URL, name, account, address, port, and identity token and pins the connection properties again. Integration setup rechecks the actual datasource before modifying data. Teardown only runs after successful verification and rechecks isolation before its updates. Unit tests cover redirected connections, wrong identity tokens, property overrides, and teardown after failed setup.
 
-The runner executes 156 tests (36 unit tests and 120 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
+The runner executes 164 tests (37 unit tests and 127 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
 
 For the complete browser smoke test:
 
@@ -268,7 +268,7 @@ Overview shows submissions created today (Hobart local-midnight boundaries), ope
 
 Reports support daily, Monday-Sunday weekly, calendar-month, July-June financial-year and custom inclusive date ranges. Period presets are based on the From date. Apply filters before exporting. Filters are workflow, material category, Pickup location substring, Salvage direction, and a separate Electrical Testing category. Incompatible backend filter combinations are rejected. Material filters show matching material rows only. Historical inactive reference categories remain reportable.
 
-All operational report dates use `recordDate`; Submitted today uses `created_at`. Sales-reference rows use the reporting month and include each month touched by the filter; they are not prorated, added to tally totals or implicitly filled with zero. Detailed reports have explicit RECORD, DIRECTION, MATERIAL and REFERENCE row types: do not sum parent net weights and their category breakdowns together. A record key is `(workflow, id)`. Detail pages contain up to 50 rows (API maximum 200); exports include all filtered rows, not just the visible page.
+All operational report dates use `recordDate`; Submitted today uses `created_at`. Scrap and sales-reference rows use the reporting month and include each month touched by the filter; they are not prorated, added to tally totals or implicitly filled with zero. Detailed reports have explicit RECORD, DIRECTION, MATERIAL and REFERENCE row types: do not sum parent net weights and their category breakdowns together. A record key is `(workflow, id)`. Records and detailed Reports use server-side pagination: default 10 rows, selectable sizes 10/25/50. Exports include all filtered rows, not just the visible page.
 
 The Monthly Waste Levy Summary is a **monthly working aid for manual entry into the existing workbook**, not a completed Waste Levy return, NRE reconciliation or certified report. Sections are Salvage Down, general intake by workflow/container, combined normal general-intake categories, Salvage Up, Electrical Crate/Pallet and Whitegoods estimates. Stillage Cage is never assigned an invented legacy Crates/Pallets grouping. Combined general intake includes only normal Crate/Pallet, Collectables and Pickup. Electrical categories remain separate. E-waste Pickup, legacy E-waste reconciliation/carry-over, residual reconstruction, 56/44 assumptions, 80/20 C&I/MSW allocation and AnnualReturn/NRE formulas are excluded.
 
@@ -281,7 +281,7 @@ All require Admin session authentication:
 - `GET /api/admin/overview`
 - `GET /api/admin/reports/options`
 - `GET /api/admin/reports/summary`
-- `GET /api/admin/reports/records?page=0&size=50`
+- `GET /api/admin/reports/records?page=0&size=10`
 - `GET /api/admin/reports/electrical-testing`
 - `GET /api/admin/reports/export?report=summary|details|electrical-testing&format=csv|xlsx`
 - `GET /api/admin/waste-levy-summary?month=YYYY-MM`
@@ -392,3 +392,16 @@ Endpoints under `/api/scrap-records`:
 Records, Reports, detailed records and CSV/XLSX exports include Scrap independently. Date ranges include Scrap reporting months touched by the range; export reporting dates use YYYY-MM. Detail exports include a parent total and five labelled material rows, which must not be added to their parent again. Normal material-category filters do not apply to these fixed fields. The Monthly Waste Levy Summary now includes a separate SCRAP section, including zero values for missing activity. E-waste Pickup remains excluded from that working aid. Dashboard workflow activity counts include Scrap, while its weights are excluded from top intake, general intake, Salvage, electrical processing and E-waste Pickup quantities.
 
 `V17__scrap.sql` creates only `scrap_record`, with five non-negative NUMERIC fields, positive overall entry check, UUID/version/metadata and an active reporting-month index. No stored totals or additional operational fields are added. V1-V16 remain unchanged. No carry-over, 56/44, 80/20, residual reconstruction, Monthly Return Crunching or NRE reconciliation is implemented.
+
+
+## Server-side table pagination
+
+Records uses authenticated `GET /api/records?workflow=&from=&to=&page=0&size=10`. Omitting workflow selects all nine operational workflows. One PostgreSQL UNION ALL query applies workflow/date filters and deterministic date-descending, ID-descending, workflow ordering before LIMIT/OFFSET; it does not page and merge separate workflow lists. A separate count uses the same predicates. Only IDs on the requested page are hydrated through existing workflow DTO services. Electrical Testing sales references remain separate from operational tally records. Scrap filters retain reporting-month semantics.
+
+The response is `{items: [{workflow, record}], page, size, totalItems, totalPages}`. Pages are zero-based in APIs and one-based in the UI. Only sizes 10, 25 and 50 are accepted. Negative/unreasonable page values are rejected; a page that no longer exists is normalised to the last valid page (or page zero for an empty dataset). Workflow-specific legacy list/detail APIs remain compatible; the Records screen no longer loads their full lists.
+
+Detailed Reports keeps its existing `{rows, totalRows, page, size, ...}` response and report predicates, now with the same 10-row default and approved sizes. Material/direction/reference rows retain their existing meanings. A final category-name sort makes fixed Scrap material rows deterministic when category IDs are null.
+
+Compact Previous/Next, current-page buttons, ellipses, filtered row counts and rows-per-page controls appear below each paginated table. Filter, report-type and page-size changes reset to the first page. Records and detailed Report filters/page/size are kept in application memory while an Admin corrects a record; saves/deletions refresh the current filtered page, falling back to a valid page when necessary. Existing unresolved-submission/navigation/logout guards remain in place.
+
+CSV/XLSX exports continue to use all matching filtered rows, independent of the selected screen page, with the existing 100,000-row safety limit and formula protection. Recent-submission limits, dashboard charts, monthly summaries and small Settings reference tables are unchanged. No schema migration, new index, framework or caching infrastructure is required.

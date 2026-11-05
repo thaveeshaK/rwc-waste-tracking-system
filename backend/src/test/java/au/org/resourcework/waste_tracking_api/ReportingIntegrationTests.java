@@ -91,7 +91,7 @@ class ReportingIntegrationTests {
     @Test void referencesRemainSeparateAndIncludeTouchedReportingMonths() throws Exception {
         mvc.perform(report("/reports/electrical-testing").param("from","2001-02-28"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.totalRows").value(2));
-        mvc.perform(report("/reports/records").param("size","1")).andExpect(jsonPath("$.rows.length()").value(1));
+        mvc.perform(report("/reports/records").param("size","10")).andExpect(jsonPath("$.rows.length()").value(10));
         mvc.perform(report("/reports/records").param("size","201")).andExpect(status().isBadRequest());
         mvc.perform(get("/api/admin/reports/records").with(user("admin").roles("ADMIN")).param("from","2001-03-01").param("to","2001-02-28")).andExpect(status().isBadRequest());
     }

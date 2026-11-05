@@ -109,7 +109,7 @@ public class ReportingRepository {
 
     public List<Row> rows(ReportFilter f, Integer limit, int offset) {
         var p=new MapSqlParameterSource();
-        String sql=filtered(f,p)+"select * from filtered order by record_date desc,workflow,id desc,row_type,direction,category_id";
+        String sql=filtered(f,p)+"select * from filtered order by record_date desc,workflow,id desc,row_type,direction,category_id,category";
         if (limit!=null) { sql+=" limit :limit offset :offset"; p.addValue("limit",limit).addValue("offset",offset); }
         return jdbc.query(sql,p,(rs,n)->row(rs));
     }

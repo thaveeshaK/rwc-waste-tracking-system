@@ -1,11 +1,12 @@
+import {Pagination} from '../../components/Pagination'
 import { getSettings } from '../settings/api'
 import type { Configuration } from '../settings/types'
 import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent,Dispatch,SetStateAction } from 'react'
 import { request, query, download } from './api'
 import { errorMessage } from '../../api/client'
 import { operationalDate } from '../../utils/decimal'
-import type { Filters, Summary, Details, Options, Row } from './types'
+import type { Filters, Summary, Details, Options, Row, ReportView } from './types'
 import { workflows } from './types'
 import { DetailTable, TotalsTable } from './ReportTables'
 function initial(configuration?: Configuration): Filters {
@@ -15,35 +16,38 @@ function initial(configuration?: Configuration): Filters {
   return {from, to: today, workflow: '', materialCategoryId: '', location: '', direction: '', testingCategoryId: ''}
 }
 function iso(date: Date) { return date.toISOString().slice(0, 10) }
-export function ReportsPage({ onOpen }: {onOpen: (row: Row) => void}) {
+export function ReportsPage({onOpen,view,onViewChange}:{onOpen:(row:Row)=>void;view:ReportView;onViewChange:Dispatch<SetStateAction<ReportView>>}) {
   const [defaults, setDefaults] = useState<Configuration | null>(null)
-  const [draft, setDraft] = useState(initial)
-  const [applied, setApplied] = useState(initial)
-  const [periodName, setPeriodName] = useState('custom')
-  const [mode, setMode] = useState('summary')
-  const [page, setPage] = useState(0)
+  const draft=view.draft??initial(), applied=view.applied??initial()
+  const {page,size,mode,periodName}=view
+  const setDraft=(draft:Filters)=>onViewChange(v=>({...v,draft}))
+  const setApplied=(applied:Filters)=>onViewChange(v=>({...v,applied}))
+  const setPage=(page:number)=>onViewChange(v=>({...v,page}))
+  const setSize=(size:number)=>onViewChange(v=>({...v,size}))
+  const setMode=(mode:string)=>onViewChange(v=>({...v,mode}))
+  const setPeriodName=(periodName:string)=>onViewChange(v=>({...v,periodName}))
   const [options, setOptions] = useState<Options>({materials: [], testingCategories: []})
   const [result, setResult] = useState<{key: string; summary: Summary; details: Details} | null>(null)
   const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [tonnes, setTonnes] = useState(false)
-  const key = query(applied)+`:${page}:${attempt}`
+  const key = query(applied)+`:${page}:${size}:${attempt}`
   const loading = result?.key !== key
   const dirty = query(draft) !== query(applied)
   useEffect(() => {
     let cancelled = false
-    Promise.all([request<Options>('/api/admin/reports/options'), getSettings()]).then(([data, configuration]) => { if (!cancelled) {setOptions(data); setDefaults(configuration); setDraft(initial(configuration)); setApplied(initial(configuration)); setTonnes(configuration.displayUnit === 'tonnes')} }).catch(e => { if (!cancelled) setError(errorMessage(e)) })
+    Promise.all([request<Options>('/api/admin/reports/options'), getSettings()]).then(([data, configuration]) => { if (!cancelled) {setOptions(data); setDefaults(configuration); onViewChange(v=>v.applied?v:{...v,draft:initial(configuration),applied:initial(configuration)}); setTonnes(configuration.displayUnit === 'tonnes')} }).catch(e => { if (!cancelled) setError(errorMessage(e)) })
     return () => { cancelled = true }
-  }, [])
+  }, [onViewChange])
   useEffect(() => {
     if (!defaults) return
     let cancelled = false
-    Promise.all([request<Summary>('/api/admin/reports/summary?'+query(applied)), request<Details>('/api/admin/reports/records?'+query(applied)+`&page=${page}&size=50`)])
-      .then(([summary, details]) => { if (!cancelled) { setResult({key, summary, details}); setError('') } })
+    Promise.all([request<Summary>('/api/admin/reports/summary?'+query(applied)), request<Details>('/api/admin/reports/records?'+query(applied)+`&page=${page}&size=${size}`)])
+      .then(([summary, details]) => { if (!cancelled) { setResult({key, summary, details}); if(details.page!==page)onViewChange(v=>({...v,page:details.page}));setError('') } })
       .catch(e => { if (!cancelled) setError(errorMessage(e)) })
     return () => { cancelled = true }
-  }, [applied, page, key, defaults])
+  }, [applied, page, size, key, defaults,onViewChange])
   function apply(event: FormEvent) { event.preventDefault(); setApplied({...draft}); setPage(0); setAttempt(n => n+1); setError('') }
   function period(value: string) {
     setPeriodName(value)
@@ -75,8 +79,8 @@ export function ReportsPage({ onOpen }: {onOpen: (row: Row) => void}) {
     </div><div className="actions"><button type="submit">Apply report filters</button><button type="button" className="secondary" onClick={() => {setPeriodName('custom'); setDraft(initial(defaults))}}>Reset filters</button></div></form>
     {error && <p className="notice error" role="alert">{error}</p>}
     <div className="panel report-section"><p><strong>Applied period:</strong> {applied.from} to {applied.to} (Australia/Hobart)</p><p className="hint">Material filters show matching breakdown rows only. Record rows hold net/estimated weight; material and direction rows must not be added to their parent again. Sales references use the reporting month, including each month touched by this period; missing values are not zero.</p>
-      <div className="actions"><label>Report view<select value={mode} onChange={e => setMode(e.target.value)}><option value="summary">Summary</option><option value="details">Detailed records</option><option value="electrical-testing" disabled={applied.workflow !== 'ELECTRICAL_TESTING'}>Electrical Testing KPI and references</option></select></label><label>Weight display<select value={tonnes ? 't' : 'kg'} onChange={e => setTonnes(e.target.value === 't')}><option value="kg">kg</option><option value="t">tonnes (summary)</option></select></label><button className="secondary" disabled={dirty || loading || exporting} onClick={() => exportFile('csv')}>Export CSV</button><button className="secondary" disabled={dirty || loading || exporting} onClick={() => exportFile('xlsx')}>Export Excel</button></div>
+      <div className="actions"><label>Report view<select value={mode} onChange={e => {setMode(e.target.value);setPage(0)}}><option value="summary">Summary</option><option value="details">Detailed records</option><option value="electrical-testing" disabled={applied.workflow !== 'ELECTRICAL_TESTING'}>Electrical Testing KPI and references</option></select></label><label>Weight display<select value={tonnes ? 't' : 'kg'} onChange={e => setTonnes(e.target.value === 't')}><option value="kg">kg</option><option value="t">tonnes (summary)</option></select></label><button className="secondary" disabled={dirty || loading || exporting} onClick={() => exportFile('csv')}>Export CSV</button><button className="secondary" disabled={dirty || loading || exporting} onClick={() => exportFile('xlsx')}>Export Excel</button></div>
       {dirty && <p role="status">Filters changed. Apply report filters before exporting.</p>}
-      {loading ? !error && <p role="status">Loading report...</p> : result && <>{mode === 'summary' ? <TotalsTable totals={result.summary.totals} tonnes={tonnes}/> : <>{mode === 'electrical-testing' && <TotalsTable totals={result.summary.totals}/>}<DetailTable rows={result.details.rows} onOpen={onOpen}/><div className="actions"><button className="secondary" disabled={page === 0} onClick={() => setPage(n => n-1)}>Previous report page</button><span>Rows {result.details.totalRows ? page*50+1 : 0}-{Math.min((page+1)*50, result.details.totalRows)} of {result.details.totalRows}</span><button className="secondary" disabled={(page+1)*50 >= result.details.totalRows} onClick={() => setPage(n => n+1)}>Next report page</button></div></>}<p className="hint">Generated {new Date(result.summary.generatedAt).toLocaleString('en-AU', {timeZone: 'Australia/Hobart'})}. Exports include all matching rows, not just this page, and use kg.</p></>}
+      {loading ? !error && <p role="status">Loading report...</p> : result && <>{mode === 'summary' ? <TotalsTable totals={result.summary.totals} tonnes={tonnes}/> : <>{mode === 'electrical-testing' && <TotalsTable totals={result.summary.totals}/>}<DetailTable rows={result.details.rows} onOpen={onOpen}/><Pagination label="Report details" page={page} size={size} totalItems={result.details.totalRows} busy={loading} onPage={setPage} onSize={size=>{setSize(size);setPage(0)}}/></>}<p className="hint">Generated {new Date(result.summary.generatedAt).toLocaleString('en-AU', {timeZone: 'Australia/Hobart'})}. Exports include all matching rows, not just this page, and use kg.</p></>}
     </div></section>
 }

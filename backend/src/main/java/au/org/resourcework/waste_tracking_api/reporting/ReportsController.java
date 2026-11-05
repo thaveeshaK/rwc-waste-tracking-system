@@ -16,9 +16,9 @@ public class ReportsController {
     @GetMapping("/reports/summary") public Result summary(@ModelAttribute ReportFilter input) { return reports.summary(input); }
     @GetMapping("/reports/records")
     public Details details(@ModelAttribute ReportFilter input, @RequestParam(defaultValue="0") int page,
-            @RequestParam(defaultValue="50") int size) { return reports.details(input,page,size); }
+            @RequestParam(defaultValue="10") int size) { return reports.details(input,page,size); }
     @GetMapping("/reports/electrical-testing")
-    public Details testing(@ModelAttribute ReportFilter input, @RequestParam(defaultValue="0") int page, @RequestParam(defaultValue="50") int size) {
+    public Details testing(@ModelAttribute ReportFilter input, @RequestParam(defaultValue="0") int page, @RequestParam(defaultValue="10") int size) {
         return reports.details(new ReportFilter(input.from(),input.to(),"ELECTRICAL_TESTING",null,null,null,input.testingCategoryId()),page,size);
     }
     @GetMapping("/waste-levy-summary") public Monthly monthly(@RequestParam String month) { return reports.monthly(month); }

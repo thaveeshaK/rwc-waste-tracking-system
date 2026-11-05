@@ -41,6 +41,17 @@ class ReportServiceTests {
         }
     }
 
+    @Test void exportLimitRemainsIndependentOfScreenPageSize() {
+        var repository=mock(ReportingRepository.class);
+        var service=new ReportService(repository,Clock.systemUTC(),null);
+        var filter=new ReportFilter(LocalDate.of(2001,1,1),LocalDate.of(2001,1,31),null,null,null,null,null);
+        when(repository.rowCount(filter)).thenReturn(100001L);
+        assertThatThrownBy(()->service.exportRows(filter)).isInstanceOf(org.springframework.web.server.ResponseStatusException.class).hasMessageContaining("100,000");
+        verify(repository,never()).rows(any(),any(),anyInt());
+        when(repository.rowCount(filter)).thenReturn(100000L);when(repository.rows(filter,null,0)).thenReturn(List.of());
+        service.exportRows(filter);verify(repository).rows(filter,null,0);
+    }
+
     private au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration configuration() {
         var config=mock(au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration.class);
         when(config.current()).thenReturn(new au.org.resourcework.waste_tracking_api.settings.SettingsData.Configuration(0L,"RWC","","RWC","kg","CURRENT_MONTH",7,new java.math.BigDecimal("48.00"),null,null));
