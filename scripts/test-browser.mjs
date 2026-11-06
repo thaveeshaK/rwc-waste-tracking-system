@@ -334,7 +334,7 @@ try {
     assert.equal(await evaluate('location.pathname'),'/admin/settings/'+settingsPaths[i])
     assert.equal(await evaluate("document.querySelector('[role=menu]')===null"),true)
     if(i===2) {
-      await hasText('User Management will be configured in the next implementation step.')
+      await hasText('Manage sign-in access.');await enabled('Add User')
       assert.equal(await evaluate("document.querySelectorAll('.settings-page form').length"),0)
     } else {
       await until(()=>evaluate("document.querySelectorAll('.settings-page section[aria-label]').length===1"),'one Settings section only')
@@ -1853,6 +1853,30 @@ try {
   const pageDownloads=await evaluate('window.__pageDownloads');assert.equal(pageDownloads[0].text.trim().split('\n').length,95);assert.equal(pageDownloads.every(r=>r.status===200&&!r.url.includes('&page=')&&!r.url.includes('&size=')),true);await evaluate('window.fetch=window.__pageFetch')
   await fill('From date','2012-01-01');await fill('To date','2012-01-31');await click('Apply report filters');await hasText('Showing 0-0 of 0');await hasText('No matching records.')
   console.log('PASS: server-side unified Records and detailed Reports paging, 10/25/50 sizes, compact controls, global ordering, filter reset, empty states, correction-page retention, deleted-last-page recovery, all-filtered-row exports and desktop/tablet overflow.')
+  // Admin account management uses the existing Settings destination and pagination controls.
+  await openSettings('User Management');await hasText('Manage sign-in access.');await enabled('Add User')
+  const managedName='aaa-browser-'+crypto.randomUUID().slice(0,8),managedPassword=crypto.randomUUID(),resetManagedPassword=crypto.randomUUID()
+  await click('Add User');await fill('Username','  '+managedName+'  ');await fill('Password',managedPassword);await fill('Confirm password','mismatch');await hasText('Passwords do not match.')
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Create user').disabled"),true)
+  await fill('Confirm password',managedPassword);await enabled('Create user');await click('Create user');await hasText('User created successfully.');await enabled('Add User')
+  const managed=(await browserApi('/api/admin/users?size=50')).body.items.find(u=>u.username===managedName);assert.ok(managed);assert.equal(managed.role,'STAFF');assert.equal(managed.active,true)
+  const managedRow='tr[data-user-id="'+managed.id+'"]'
+  await click('Change Role',managedRow);await fill('Role','ADMIN');await hasText('from STAFF to ADMIN?');await click('Confirm role change');await hasText('User updated successfully.');await enabled('Add User')
+  await click('Reset Password',managedRow);await fill('New password',resetManagedPassword);await fill('Confirm password',resetManagedPassword);await click('Reset password');await hasText('User updated successfully.');await enabled('Add User')
+  await click('Deactivate',managedRow);await hasText('Historical records will remain unchanged.');await click('Cancel');assert.equal((await browserApi('/api/admin/users?size=50')).body.items.find(u=>u.id===managed.id).active,true)
+  await click('Deactivate',managedRow);await click('Confirm deactivation');await hasText('User updated successfully.');await enabled('Add User');await hasText('Inactive')
+  await click('Activate',managedRow);await click('Confirm activation');await hasText('User updated successfully.');await enabled('Add User')
+  // A concurrent update must surface a recoverable stale-version error.
+  await click('Change Role',managedRow);await fill('Role','STAFF');const latestManaged=(await browserApi('/api/admin/users?size=50')).body.items.find(u=>u.id===managed.id)
+  assert.equal((await browserApi('/api/admin/users/'+managed.id+'/password','PUT',{password:resetManagedPassword,version:latestManaged.version})).status,200)
+  await click('Confirm role change');await hasText('This user has changed.');await click('Reload users');await enabled('Add User')
+  for(let i=0;i<51;i++)assert.equal((await browserApi('/api/admin/users','POST',{username:'zzz-browser-'+i,password:crypto.randomUUID(),role:'STAFF'})).status,201)
+  await click('Reload users');await enabled('Add User');const usersPager='nav[aria-label="Users pagination"]'
+  assert.equal(await evaluate("document.querySelectorAll('section[aria-label=Users] tbody tr').length"),10)
+  await click('Next',usersPager);await hasText('Showing 11-20 of');await fill('Rows per page','25',usersPager);await hasText('Showing 1-25 of');await fill('Rows per page','50',usersPager);await hasText('Showing 1-50 of')
+  for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'User Management overflow '+width);await screenshot('user-management-'+width)}
+  await click('Add User');for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'User editor overflow '+width);await screenshot('user-management-editor-'+width)}await click('Cancel')
+  console.log('PASS: User Management creation/password confirmation, role changes, password reset, deactivate/cancel/reactivate confirmations, stale conflict/reload, server pagination 10/25/50 and desktop/tablet layouts.')
   await click('Sign out')
   await hasText('Sign in')
   await fill('Username',process.env.INITIAL_STAFF_USERNAME)
@@ -1860,7 +1884,7 @@ try {
   await click('Sign in')
   await enabled('Operations')
   assert.equal(await evaluate("[...document.querySelectorAll('nav button')].some(b=>b.textContent.trim()==='Settings')"),false)
-  for(const path of ['/api/admin/settings','/api/admin/settings/container-types','/api/admin/settings/material-categories']) assert.equal((await browserApi(path)).status,403)
+  for(const path of ['/api/admin/settings','/api/admin/settings/container-types','/api/admin/settings/material-categories','/api/admin/users']) assert.equal((await browserApi(path)).status,403)
   for(const path of ['container-types','material-categories','users','organisation','reporting','whitegoods']) {
     await cdp('Page.navigate',{url:frontend+'/admin/settings/'+path})
     await enabled('Operations')

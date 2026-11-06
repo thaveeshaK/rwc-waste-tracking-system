@@ -21,6 +21,7 @@ public class AuthService {
     public UserResponse currentUser(String username) {
         var user = users.findByUsername(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Please sign in."));
+        if(!user.isActive())throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"Please sign in.");
         return new UserResponse(user.getId(), user.getUsername(), user.getRole(), LocalDate.now(clock));
     }
 

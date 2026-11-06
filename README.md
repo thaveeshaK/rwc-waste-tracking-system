@@ -1,6 +1,6 @@
 # RWC Waste Tracking System
 
-Implemented workflows are **normal Crate / Pallet**, **Salvage**, **Pickup**, **Electrical Crate / Pallet**, **Collectables**, **Whitegoods**, **Electrical Testing**, **E-waste Pickup**, and **Scrap**: sign in, enter an operational record, review calculated weights, submit, and view saved records. Admins can correct and soft-delete submitted records. Admin Overview, Reports and a Monthly Waste Levy Summary working aid are available. Admin Settings is available. User Management functionality is not implemented.
+Implemented workflows are **normal Crate / Pallet**, **Salvage**, **Pickup**, **Electrical Crate / Pallet**, **Collectables**, **Whitegoods**, **Electrical Testing**, **E-waste Pickup**, and **Scrap**: sign in, enter an operational record, review calculated weights, submit, and view saved records. Admins can correct and soft-delete submitted records. Admin Overview, Reports and a Monthly Waste Levy Summary working aid are available. Admin Settings is available. Admin User Management is available under Settings.
 
 Requirements: [AGENTS.md](AGENTS.md) and the approved [SRS](docs/SRS-%20Waste%20Tracking%20Operations%20System%20for%20Resource%20Work%20Cooperative.pdf), supplemented by the approved workflow decisions and source datasheets in `docs`.
 
@@ -33,7 +33,7 @@ Set-Location backend
 mvn.cmd spring-boot:run
 ```
 
-Provisioning hashes passwords with BCrypt. It creates missing accounts and never resets existing passwords. Supply both username and password for a role, or omit both. A conflicting role or second shared Staff account causes startup to fail. Remove initial-account password variables from later launches after provisioning. Do not put credentials or hashes into migrations or tracked files. `.env` files are ignored by Git but are not loaded automatically by Spring Boot.
+Provisioning hashes passwords with BCrypt. It creates missing accounts and never resets existing passwords. Supply both username and password for a role, or omit both. Existing accounts retain their current role, status and password. Provisioning a second missing initial shared Staff account causes startup to fail; additional accounts are managed through Admin Settings. Remove initial-account password variables from later launches after provisioning. Do not put credentials or hashes into migrations or tracked files. `.env` files are ignored by Git but are not loaded automatically by Spring Boot.
 
 In a second terminal:
 
@@ -227,7 +227,7 @@ The runner starts a loopback-only PostgreSQL instance on a free port, generates 
 
 Before Spring bean creation or Flyway migration, a test initializer verifies the database URL, name, account, address, port, and identity token and pins the connection properties again. Integration setup rechecks the actual datasource before modifying data. Teardown only runs after successful verification and rechecks isolation before its updates. Unit tests cover redirected connections, wrong identity tokens, property overrides, and teardown after failed setup.
 
-The runner executes 164 tests (37 unit tests and 127 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
+The runner executes 176 tests (37 unit tests and 139 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
 
 For the complete browser smoke test:
 
@@ -296,9 +296,9 @@ Reporting tests cover Admin boundaries, category/direction/count separation, fil
 
 ## Admin Settings
 
-Admin navigation has a top-right **Settings** dropdown, separate from the primary Overview/Workflows/Reports/Waste Levy Summary/Records links. Staff have neither the dropdown nor access to Settings pages. `/api/admin/**` authorization and controller/service role checks protect every Settings endpoint; CSRF is required for writes. Existing Staff operational summaries remain available. User Management has only a neutral placeholder page; no user APIs or functionality are implemented. Electrical Testing category configuration is not included.
+Admin navigation has a top-right **Settings** dropdown, separate from the primary Overview/Workflows/Reports/Waste Levy Summary/Records links. Staff have neither the dropdown nor access to Settings pages. `/api/admin/**` authorization and controller/service role checks protect every Settings endpoint; CSRF is required for writes. Existing Staff operational summaries remain available. User Management is Admin-only and supports creation, role changes, activation/deactivation and password resets. Electrical Testing category configuration is not included.
 
-Settings opens one focused page at a time at `/admin/settings/container-types`, `/admin/settings/material-categories`, `/admin/settings/organisation`, `/admin/settings/reporting`, or `/admin/settings/whitegoods`. `/admin/settings/users` is a placeholder only. These direct URLs load the selected page for Admin; Staff remain on Operations. No routing library is added. Settings contains five functional sections:
+Settings opens one focused page at a time at `/admin/settings/container-types`, `/admin/settings/material-categories`, `/admin/settings/organisation`, `/admin/settings/reporting`, or `/admin/settings/whitegoods`. `/admin/settings/users` provides User Management. These direct URLs load the selected page for Admin; Staff remain on Operations. No routing library is added. Settings contains five functional sections:
 
 - **Container Types:** add, edit display name/tare, change applicability (`CRATE_PALLET`, `ELECTRICAL_CRATE_PALLET`, `EWASTE_PICKUP`), activate/deactivate and view status. Tares allow 0 to 99,999,999.99 kg with at most two decimals. Active references need at least one workflow. Names are case-insensitively unique, including inactive identities, to avoid historical ambiguity. No delete endpoint exists.
 - **Material Categories:** add, activate/deactivate and change applicability for Crate/Pallet, Salvage Up/Down, Pickup and Collectables. Names are immutable; add a distinct replacement rather than rename historical meaning. The electrical TVs/Monitors/Projectors and Everything Else categories are read-only and cannot be merged into normal waste categories. E-waste, Lead Acid Batteries and Whitegoods/Large Appliances retain their approved Salvage restrictions. Electrical Testing uses its separate unchanged fifteen-category table.
@@ -331,7 +331,7 @@ V14 migration history is restored to the originally applied checksum **-54834357
 
 ## Admin Dashboard V2
 
-Admin primary navigation contains Overview, Workflows, Reports, Waste Levy Summary and Records. The top-right **Settings** menu opens six focused destinations, including the User Management placeholder. It closes after selection, an outside pointer/click or focus departure, and supports arrow keys, Home/End and Escape with focus restoration. Admin operational entry is available through the existing **Workflows** cards; the former global + New Entry menu is removed. Busy submissions disable navigation; unresolved submissions permit only resuming their current workflow. Workflows is a responsive grid of eight operational cards with descriptions and New Entry actions. Staff use Operations and Records navigation. Operations provides nine workflow cards and the latest five active operational submissions, ordered by submission time across all dates; the same read-only records are accessible regardless of submitting role. Electrical Testing sales references remain on their operational screen rather than in this recent-tally list. Staff retain existing operational summaries; no Admin menu or management pages are exposed. An unresolved entry can be resumed from its Operations card without losing the payload or submission ID. The authenticated GET /api/operations/recent-submissions endpoint returns only compact record details, not reporting aggregates.
+Admin primary navigation contains Overview, Workflows, Reports, Waste Levy Summary and Records. The top-right **Settings** menu opens six focused destinations, including User Management. It closes after selection, an outside pointer/click or focus departure, and supports arrow keys, Home/End and Escape with focus restoration. Admin operational entry is available through the existing **Workflows** cards; the former global + New Entry menu is removed. Busy submissions disable navigation; unresolved submissions permit only resuming their current workflow. Workflows is a responsive grid of eight operational cards with descriptions and New Entry actions. Staff use Operations and Records navigation. Operations provides nine workflow cards and the latest five active operational submissions, ordered by submission time across all dates; the same read-only records are accessible regardless of submitting role. Electrical Testing sales references remain on their operational screen rather than in this recent-tally list. Staff retain existing operational summaries; no Admin menu or management pages are exposed. An unresolved entry can be resumed from its Operations card without losing the payload or submission ID. The authenticated GET /api/operations/recent-submissions endpoint returns only compact record details, not reporting aggregates.
 
 Overview defaults to the current Hobart calendar month and optionally selects another past month. Its four primary cards show record count, council-provided Salvage Down weight, council-provided Salvage Up weight, and received Whitegoods count with stored estimated weight. Submitted today is a secondary indicator across all operational dates. The label Whitegoods processed refers to the existing received-count entries; no new processing/inventory state is inferred.
 
@@ -405,3 +405,24 @@ Detailed Reports keeps its existing `{rows, totalRows, page, size, ...}` respons
 Compact Previous/Next, current-page buttons, ellipses, filtered row counts and rows-per-page controls appear below each paginated table. Filter, report-type and page-size changes reset to the first page. Records and detailed Report filters/page/size are kept in application memory while an Admin corrects a record; saves/deletions refresh the current filtered page, falling back to a valid page when necessary. Existing unresolved-submission/navigation/logout guards remain in place.
 
 CSV/XLSX exports continue to use all matching filtered rows, independent of the selected screen page, with the existing 100,000-row safety limit and formula protection. Recent-submission limits, dashboard charts, monthly summaries and small Settings reference tables are unchanged. No schema migration, new index, framework or caching infrastructure is required.
+
+## Admin User Management
+
+Open **Settings ? User Management** as an Admin. The server-paginated table uses 10, 25 or 50 rows with deterministic username/ID ordering. Staff cannot access the page or its APIs.
+
+- Create STAFF or ADMIN accounts. New usernames are trimmed and immutable; uniqueness and sign-in remain case-sensitive, matching existing authentication.
+- Passwords follow the existing non-blank policy and BCrypt's maximum of 72 UTF-8 bytes. Confirmation is checked in the frontend; passwords are hashed and never returned by APIs.
+- Change another account's role, deactivate/reactivate it, or reset its password. Accounts are never hard-deleted. Ask another Admin to reset your own password.
+- Self-deactivation and self-demotion are prohibited. Backend transactions serialize account changes and always retain at least one active Admin, including concurrent changes.
+- Role, status and password changes expire the affected account's sessions after commit. Deactivated accounts cannot sign in; password reset immediately replaces the old password.
+- Stale versions return HTTP 409; use **Reload users** to recover. Existing operational ownership and historical references remain unchanged.
+
+Endpoints (all Admin-only; CSRF required for writes):
+
+- `GET /api/admin/users?page=0&size=10`
+- `POST /api/admin/users`
+- `PUT /api/admin/users/{id}/role`
+- `PATCH /api/admin/users/{id}/status`
+- `PUT /api/admin/users/{id}/password`
+
+Migration **V18__user_management.sql** reuses `app_user`, adding active status, optimistic version and nullable creation/update actor/timestamp metadata. Existing accounts remain active. Unknown legacy timestamps display **Not recorded** rather than invented dates. The former single-STAFF index is removed to support approved account creation and role changes; no second user table is created. V1?V17 remain unchanged. No email reset, MFA or external identity service is introduced.

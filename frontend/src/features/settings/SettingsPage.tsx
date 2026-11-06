@@ -1,3 +1,4 @@
+import {UserManagementPage} from '../users/UserManagementPage'
 import { useEffect, useState } from 'react'
 import { getSettings, getReferences, saveSettings } from './api'
 import type { Configuration, Reference } from './types'
@@ -30,7 +31,7 @@ export function SettingsPage({section,onChanged}: {section: SettingsSection;onCh
     setData({configuration});setMessage('Settings saved successfully.');onChanged()
   }
   return <section className="settings-page" data-settings-section={section}><div className="page-heading"><div><p className="eyebrow">Settings</p><h1>{title}</h1></div>{section!=='users'&&<button className="secondary" onClick={()=>{setData(null);setError('');setMessage('');setAttempt(n=>n+1)}}>Reload settings</button>}</div>
-    {section==='users'?<div className="panel"><p>User Management will be configured in the next implementation step.</p></div>:<>
+    {section==='users'?<UserManagementPage/>:<>
       {message&&<p role="status" className="notice success">{message}</p>}{error&&<p role="alert" className="notice error">{error}</p>}
       {!data&&!error&&<p role="status">Loading settings...</p>}
       {data?.rows&&<ReferenceSettings container={section==='container-types'} rows={data.rows} onSaved={load}/>}

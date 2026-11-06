@@ -209,3 +209,5 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 .pagination label {display:flex;align-items:center;gap:.5rem}
 .pagination select {width:auto;min-width:78px}
 @media(max-width:800px){.pagination{align-items:flex-start}.pagination-pages{flex-basis:100%;order:3}}
+
+.user-editor {margin-top:1rem}.user-actions {display:flex;gap:.5rem;flex-wrap:wrap}.user-actions button {min-height:44px;text-align:left}

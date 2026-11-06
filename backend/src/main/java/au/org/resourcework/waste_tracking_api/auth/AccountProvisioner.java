@@ -43,12 +43,7 @@ public class AccountProvisioner implements ApplicationRunner {
             throw new IllegalStateException("Initial " + role + " username and password must both be supplied.");
         }
         var existing = users.findByUsername(username);
-        if (existing.isPresent()) {
-            if (!existing.get().getRole().equals(role)) {
-                throw new IllegalStateException("Initial account has an unexpected role.");
-            }
-            return;
-        }
+        if (existing.isPresent()) return;
         if (role.equals("STAFF") && users.existsByRole("STAFF")) {
             throw new IllegalStateException("A shared STAFF account already exists.");
         }

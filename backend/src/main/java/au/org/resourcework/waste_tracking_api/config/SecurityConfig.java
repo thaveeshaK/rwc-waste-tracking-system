@@ -14,10 +14,16 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.session.SessionRegistryImpl;
+import org.springframework.security.web.session.HttpSessionEventPublisher;
 
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
+    @Bean SessionRegistry sessionRegistry() { return new SessionRegistryImpl(); }
+    @Bean HttpSessionEventPublisher sessionEvents() { return new HttpSessionEventPublisher(); }
+
     @Bean
     Clock operationalClock() {
         return Clock.system(ZoneId.of("Australia/Hobart"));
@@ -34,12 +40,12 @@ public class SecurityConfig {
             var user = users.findByUsername(username)
                     .orElseThrow(() -> new UsernameNotFoundException("Invalid credentials"));
             return User.withUsername(user.getUsername()).password(user.getPasswordHash())
-                    .roles(user.getRole()).build();
+                    .roles(user.getRole()).disabled(!user.isActive()).build();
         };
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, SessionRegistry sessions) throws Exception {
         // Keep the default session-backed CSRF protection, including on login/logout.
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/csrf", "/api/auth/login").permitAll()
@@ -67,7 +73,13 @@ public class SecurityConfig {
                     response.setContentType("application/problem+json");
                     response.getWriter().write("{\"status\":403,\"detail\":\"Access denied or security token expired. Refresh and try again.\"}");
                 }))
-            .requestCache(cache -> cache.disable());
+            .requestCache(cache -> cache.disable())
+            .sessionManagement(session -> session.maximumSessions(-1).sessionRegistry(sessions)
+                .expiredSessionStrategy(event -> {
+                    var response=event.getResponse();
+                    response.setStatus(401);response.setContentType("application/problem+json");
+                    response.getWriter().write("{\"status\":401,\"detail\":\"Your account changed. Please sign in again.\"}");
+                }));
         return http.build();
     }
 }
