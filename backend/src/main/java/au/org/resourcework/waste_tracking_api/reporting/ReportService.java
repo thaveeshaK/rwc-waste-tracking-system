@@ -44,6 +44,13 @@ public class ReportService {
     public Result summary(ReportFilter input) {
         var f=validate(input); return new Result(f,"Australia/Hobart",clock.instant(),repository.totals(f));
     }
+    public SummaryPage summary(ReportFilter input,int page,int size) {
+        au.org.resourcework.waste_tracking_api.records.PageResult.validate(page,size);
+        var f=validate(input);long total=repository.totalCount(f);
+        int actual=Math.min(page,au.org.resourcework.waste_tracking_api.records.PageResult.lastPage(total,size));
+        return new SummaryPage(f,"Australia/Hobart",clock.instant(),repository.totals(f,size,actual*size),total,
+                (int)((total+size-1)/size),actual,size);
+    }
     public Details details(ReportFilter input, int page, int size) {
         au.org.resourcework.waste_tracking_api.records.PageResult.validate(page,size);
         var f=validate(input);

@@ -85,9 +85,8 @@ public class ReportingRepository {
         return "with data as ("+DATA+"), filtered as (select * from data where ("+where+")"+refs+") ";
     }
 
-    public List<Total> totals(ReportFilter f) {
-        var p=new MapSqlParameterSource();
-        String sql=filtered(f,p)+"""
+    private String totalsSql(ReportFilter f, MapSqlParameterSource p) {
+        return filtered(f,p)+"""
             select workflow, direction, container, category_id, category, metric, unit, value from (
               select workflow,direction,container,category_id,category,
                 case when row_type='MATERIAL' then 'Material weight' when workflow='WHITEGOODS' then 'Estimated weight' when workflow='SCRAP' then 'Recorded weight' else 'Net weight' end metric,
@@ -101,8 +100,17 @@ public class ReportingRepository {
                 from filtered where count is not null and row_type <> 'REFERENCE' group by workflow,category_id,category,status
               union all
               select workflow,null,null,null,null,'Applied factor','kg/item',factor from filtered where workflow='WHITEGOODS' group by workflow,factor
-            ) t order by workflow,direction nulls first,container nulls first,category_id nulls first,metric
+            ) t order by workflow,direction nulls first,container nulls first,category_id nulls first,metric,category nulls first,unit,value
             """;
+    }
+    public long totalCount(ReportFilter f) {
+        var p=new MapSqlParameterSource();
+        return jdbc.queryForObject("select count(*) from ("+totalsSql(f,p)+") summary_rows",p,Long.class);
+    }
+    public List<Total> totals(ReportFilter f) { return totals(f,null,0); }
+    public List<Total> totals(ReportFilter f,Integer limit,int offset) {
+        var p=new MapSqlParameterSource();String sql=totalsSql(f,p);
+        if(limit!=null){sql+=" limit :limit offset :offset";p.addValue("limit",limit).addValue("offset",offset);}
         return jdbc.query(sql,p,(rs,n)->new Total(rs.getString("workflow"),rs.getString("direction"),rs.getString("container"),
                 rs.getObject("category_id",Long.class),rs.getString("category"),rs.getString("metric"),rs.getString("unit"),decimal(rs,"value")));
     }

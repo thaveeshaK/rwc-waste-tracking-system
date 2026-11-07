@@ -227,7 +227,7 @@ The runner starts a loopback-only PostgreSQL instance on a free port, generates 
 
 Before Spring bean creation or Flyway migration, a test initializer verifies the database URL, name, account, address, port, and identity token and pins the connection properties again. Integration setup rechecks the actual datasource before modifying data. Teardown only runs after successful verification and rechecks isolation before its updates. Unit tests cover redirected connections, wrong identity tokens, property overrides, and teardown after failed setup.
 
-The runner executes 176 tests (37 unit tests and 139 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
+The runner executes 179 tests (37 unit tests and 142 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
 
 For the complete browser smoke test:
 
@@ -426,3 +426,11 @@ Endpoints (all Admin-only; CSRF required for writes):
 - `PUT /api/admin/users/{id}/password`
 
 Migration **V18__user_management.sql** reuses `app_user`, adding active status, optimistic version and nullable creation/update actor/timestamp metadata. Existing accounts remain active. Unknown legacy timestamps display **Not recorded** rather than invented dates. The former single-STAFF index is removed to support approved account creation and role changes; no second user table is created. V1?V17 remain unchanged. No email reset, MFA or external identity service is introduced.
+
+## Summary table pagination
+
+Reports Summary uses server-side aggregate pagination: `GET /api/admin/reports/summary` accepts `page` (zero-based, default 0) and `size` (10/25/50, default 10), returning `totals`, `totalItems`, `totalPages`, `page` and `size` alongside the existing filter/time metadata. Filters and aggregation run before pagination, with deterministic ordering. Applied filter and page-size changes reset to page one; invalid final pages fall back to the last valid page.
+
+The Monthly Waste Levy Summary independently paginates **MSW / general intake**, **Combined general intake categories**, and **Electrical Crate / Pallet - operational** in the browser using the complete monthly aggregate response. These sections grow by configured categories/containers, not individual record count. Each uses the shared 10/25/50 controls and resets on month change. Scrap has at most seven fixed aggregate rows (five materials plus weight/record-count subtotals); Salvage and Whitegoods are also compact and remain unpaginated. Empty sections show ?No records for this period.? without controls.
+
+Pagination changes screen display only. CSV/XLSX exports retain all matching summary rows and all selected-month sections in their existing order and structure. The existing 100,000-row detailed-export safety limit remains unchanged. No schema or migration change is required.

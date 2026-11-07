@@ -104,4 +104,38 @@ class PaginationIntegrationTests {
         byte[] data=mvc.perform(get(url+"xlsx&page=1&size=10").with(user("admin").roles("ADMIN"))).andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
         try(var book=new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(data))){int rows=0;for(var row:book.getSheet("Whitegoods"))if(row.getCell(0)!=null&&row.getCell(0).toString().equals("RECORD"))rows++;assertThat(rows).isEqualTo(63);}
     }
+    private MockHttpServletRequestBuilder summary(){return get("/api/admin/reports/summary").with(user("admin").roles("ADMIN")).param("from","2001-02-01").param("to","2001-02-28");}
+    @Test void summaryPagesAggregateBeforePagingWithStableCompleteOrdering()throws Exception {
+        var f=new ReportFilter(LocalDate.parse("2001-02-01"),LocalDate.parse("2001-02-28"),null,null,null,null,null);
+        var expected=json.readTree(json.writeValueAsString(repository.totals(f)));int count=expected.size();assertThat(count).isGreaterThan(10);
+        var first=body(summary());assertThat(first.get("totals").size()).isEqualTo(10);assertThat(first.get("size").asInt()).isEqualTo(10);
+        for(int size:List.of(10,25,50)) {
+            var rows=json.createArrayNode();for(int page=0;page<(count+size-1)/size;page++){
+                var r=body(summary().param("page",""+page).param("size",""+size));assertThat(r.get("totalItems").asInt()).isEqualTo(count);assertThat(r.get("totalPages").asInt()).isEqualTo((count+size-1)/size);
+                r.get("totals").forEach(rows::add);
+            }assertThat(rows).isEqualTo(expected);
+        }
+        assertThat(body(summary()).get("totals")).isEqualTo(first.get("totals"));
+        var last=body(summary().param("page","999"));assertThat(last.get("page").asInt()).isEqualTo((count-1)/10);
+    }
+    @Test void summaryFiltersEmptyPagesAndDeletedAggregatesRemainCorrect()throws Exception {
+        var r=body(summary().param("workflow","PICKUP").param("location","missing"));assertThat(r.get("totalItems").asInt()).isZero();assertThat(r.get("totalPages").asInt()).isZero();assertThat(r.get("page").asInt()).isZero();
+        var before=body(summary().param("workflow","WHITEGOODS"));assertThat(before.get("totalItems").asInt()).isEqualTo(before.get("totals").size());
+        jdbc.update("update whitegoods_record set deleted_at=now(),deleted_by=?",actor);
+        assertThat(body(summary().param("workflow","WHITEGOODS")).get("totalItems").asInt()).isZero();
+        for(String size:List.of("0","1","100"))mvc.perform(summary().param("size",size)).andExpect(status().isBadRequest());
+        mvc.perform(summary().param("page","-1")).andExpect(status().isBadRequest());
+    }
+    @Test void summaryAndMonthlyExportsIgnoreVisiblePages()throws Exception {
+        int count=body(summary()).get("totalItems").asInt();
+        String url="/api/admin/reports/export?from=2001-02-01&to=2001-02-28&report=summary&page=1&size=10&format=";
+        var csv=mvc.perform(get(url+"csv").with(user("admin").roles("ADMIN"))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();assertThat(csv.lines().count()).isEqualTo(count+1);
+        var data=mvc.perform(get(url+"xlsx").with(user("admin").roles("ADMIN"))).andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        try(var book=new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(data))){int rows=0;for(var row:book.getSheet("Summary"))if(row.getCell(0)!=null&&Set.of("CRATE_PALLET","PICKUP","SALVAGE","COLLECTABLES","ELECTRICAL_CRATE_PALLET","WHITEGOODS","ELECTRICAL_TESTING","EWASTE_PICKUP","SCRAP").contains(row.getCell(0).toString()))rows++;assertThat(rows).isEqualTo(count);}
+        int monthly=body(get("/api/admin/waste-levy-summary?month=2001-02").with(user("admin").roles("ADMIN"))).get("totals").size();
+        var monthlyCsv=mvc.perform(get("/api/admin/waste-levy-summary/export?month=2001-02&format=csv&page=1&size=10").with(user("admin").roles("ADMIN"))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();assertThat(monthlyCsv.lines().count()).isEqualTo(monthly+1);
+        var monthlyData=mvc.perform(get("/api/admin/waste-levy-summary/export?month=2001-02&format=xlsx&page=1&size=10").with(user("admin").roles("ADMIN"))).andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        try(var book=new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(monthlyData))){int rows=0;for(var row:book.getSheet("Monthly Summary"))if(row.getCell(0)!=null&&Set.of("CRATE_PALLET","PICKUP","SALVAGE","COLLECTABLES","ELECTRICAL_CRATE_PALLET","WHITEGOODS","GENERAL_INTAKE","SCRAP").contains(row.getCell(0).toString()))rows++;assertThat(rows).isEqualTo(monthly);}
+    }
+
 }

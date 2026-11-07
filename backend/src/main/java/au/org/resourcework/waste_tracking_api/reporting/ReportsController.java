@@ -13,7 +13,8 @@ public class ReportsController {
     public ReportsController(ReportService reports) { this.reports=reports; }
     @GetMapping("/overview") public Overview overview(@RequestParam(required=false) String month) { return reports.overview(month); }
     @GetMapping("/reports/options") public Options options() { return reports.options(); }
-    @GetMapping("/reports/summary") public Result summary(@ModelAttribute ReportFilter input) { return reports.summary(input); }
+    @GetMapping("/reports/summary") public SummaryPage summary(@ModelAttribute ReportFilter input,@RequestParam(defaultValue="0") int page,
+            @RequestParam(defaultValue="10") int size) { return reports.summary(input,page,size); }
     @GetMapping("/reports/records")
     public Details details(@ModelAttribute ReportFilter input, @RequestParam(defaultValue="0") int page,
             @RequestParam(defaultValue="10") int size) { return reports.details(input,page,size); }

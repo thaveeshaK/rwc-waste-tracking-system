@@ -13,6 +13,8 @@ public final class ReportData {
     public record Total(String workflow, String direction, String container, Long categoryId,
             String category, String metric, String unit, String value) {}
     public record Result(ReportFilter filters, String timezone, Instant generatedAt, List<Total> totals) {}
+    public record SummaryPage(ReportFilter filters,String timezone,Instant generatedAt,List<Total> totals,
+            long totalItems,int totalPages,int page,int size) {}
     public record Details(ReportFilter filters, String timezone, Instant generatedAt, List<Row> rows,
             long totalRows, int page, int size) {}
     public record Monthly(String month, String timezone, Instant generatedAt, String note, List<Total> totals) {}

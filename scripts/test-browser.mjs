@@ -1853,6 +1853,48 @@ try {
   const pageDownloads=await evaluate('window.__pageDownloads');assert.equal(pageDownloads[0].text.trim().split('\n').length,95);assert.equal(pageDownloads.every(r=>r.status===200&&!r.url.includes('&page=')&&!r.url.includes('&size=')),true);await evaluate('window.fetch=window.__pageFetch')
   await fill('From date','2012-01-01');await fill('To date','2012-01-31');await click('Apply report filters');await hasText('Showing 0-0 of 0');await hasText('No matching records.')
   console.log('PASS: server-side unified Records and detailed Reports paging, 10/25/50 sizes, compact controls, global ordering, filter reset, empty states, correction-page retention, deleted-last-page recovery, all-filtered-row exports and desktop/tablet overflow.')
+  // Aggregate paging: server-side report summary, independent monthly sections, full exports.
+  const aggregateMaterials=(await browserApi('/api/material-categories?context=PICKUP')).body
+  const aggregateBreakdown=aggregateMaterials.map((c,i)=>({materialCategoryId:c.id,percentage:String(i===aggregateMaterials.length-1?101-aggregateMaterials.length:1)}))
+  assert.equal((await browserApi('/api/pickup-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',pickupLocation:'Aggregate paging',netWeight:'100',materials:aggregateBreakdown})).status,201)
+  const aggregateElectrical=(await browserApi('/api/material-categories?context=ELECTRICAL_CRATE_PALLET')).body
+  for(let i=0;i<3;i++){
+    const container=await browserApi('/api/admin/settings/container-types','POST',{name:'Aggregate container '+i,tareWeight:'1.00',active:true,contexts:['ELECTRICAL_CRATE_PALLET']});assert.equal(container.status,200)
+    assert.equal((await browserApi('/api/electrical-crate-pallet-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',containerTypeId:container.body.id,grossWeight:'101',materials:aggregateElectrical.map(c=>({materialCategoryId:c.id,percentage:'50'}))})).status,201)
+  }
+  const summaryFilter='/api/admin/reports/summary?from=2013-03-01&to=2013-03-31',summaryAll=(await browserApi(summaryFilter+'&size=50')).body
+  assert.ok(summaryAll.totalItems>10);assert.ok(summaryAll.totalItems<=50)
+  await click('Reports');await hasText('Applied period:');await fill('Report workflow','');await fill('From date','2013-03-01');await fill('To date','2013-03-31');await click('Apply report filters');await fill('Report view','summary')
+  const summaryPager='nav[aria-label="Report summary pagination"]'
+  await hasText('Showing 1-10 of '+summaryAll.totalItems);assert.equal(await evaluate("document.querySelector('.report-section tbody').rows.length"),10)
+  const summaryFirst=await evaluate("document.querySelector('.report-section tbody').textContent")
+  await click('Next',summaryPager);await hasText('Showing 11-20 of '+summaryAll.totalItems);assert.notEqual(await evaluate("document.querySelector('.report-section tbody').textContent"),summaryFirst)
+  await fill('Rows per page','25',summaryPager);await hasText('Showing 1-25 of '+summaryAll.totalItems);await fill('Rows per page','50',summaryPager);await enabled('Export CSV')
+  assert.equal(await evaluate("document.querySelector('.report-section tbody').rows.length"),summaryAll.totalItems)
+  await fill('Rows per page','10',summaryPager);await hasText('Showing 1-10 of '+summaryAll.totalItems);await click('Next',summaryPager);await hasText('Showing 11-20 of '+summaryAll.totalItems);await enabled('Export CSV')
+  await evaluate(`window.__aggregateDownloads=[];window.__aggregateFetch=window.fetch;window.fetch=async(...args)=>{const r=await window.__aggregateFetch(...args);if(String(args[0]).includes('/export?'))window.__aggregateDownloads.push({url:String(args[0]),status:r.status,text:String(args[0]).includes('format=csv')?await r.clone().text():null});return r}`)
+  await click('Export CSV');await until(()=>evaluate('window.__aggregateDownloads.length===1'),'summary full CSV');await enabled('Export Excel');await click('Export Excel');await until(()=>evaluate('window.__aggregateDownloads.length===2'),'summary full XLSX')
+  assert.equal((await evaluate('window.__aggregateDownloads[0].text')).trim().split('\n').length,summaryAll.totalItems+1)
+  assert.equal(await evaluate('window.__aggregateDownloads.every(r=>r.status===200&&!r.url.includes("&page="))'),true)
+  for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'Summary pagination overflow '+width);await screenshot('report-summary-pagination-'+width)}
+  await fill('Report workflow','PICKUP');await click('Apply report filters');await until(()=>evaluate(`document.querySelector('${summaryPager} [aria-current="page"]')?.textContent==='1'`),'summary filter resets page')
+  await fill('Pickup location contains','no matching aggregate source');await click('Apply report filters');await hasText('No records for this period.');assert.equal(await evaluate(`document.querySelector('${summaryPager}')===null`),true)
+  await click('Waste Levy Summary');await fill('Reporting month','2013-03');await enabled('Export CSV')
+  const mswPager='nav[aria-label="MSW / general intake pagination"]',combinedPager='nav[aria-label="Combined general intake categories pagination"]',electricalPager='nav[aria-label="Electrical Crate / Pallet - operational pagination"]'
+  const currentPage=scope=>evaluate(`document.querySelector('${scope} [aria-current="page"]')?.textContent`)
+  assert.equal(await currentPage(mswPager),'1');assert.equal(await currentPage(combinedPager),'1');assert.equal(await currentPage(electricalPager),'1')
+  await click('Next',mswPager);assert.equal(await currentPage(mswPager),'2');assert.equal(await currentPage(combinedPager),'1');assert.equal(await currentPage(electricalPager),'1')
+  await click('Next',combinedPager);assert.equal(await currentPage(combinedPager),'2');assert.equal(await currentPage(mswPager),'2')
+  await click('Next',electricalPager);assert.equal(await currentPage(electricalPager),'2');assert.equal(await currentPage(mswPager),'2')
+  await fill('Rows per page','25',mswPager);assert.equal(await currentPage(mswPager),'1');assert.equal(await currentPage(combinedPager),'2');await fill('Rows per page','50',mswPager);await fill('Rows per page','10',mswPager)
+  assert.equal(await evaluate("[...document.querySelectorAll('.report-section')].filter(s=>['SCRAP','Whitegoods - estimated','OWF / Salvage Down','RTL / Salvage Up'].includes(s.querySelector('h2')?.textContent)).every(s=>!s.querySelector('.pagination'))"),true)
+  const fullMonthly=(await browserApi('/api/admin/waste-levy-summary?month=2013-03')).body.totals.length
+  await click('Export CSV');await until(()=>evaluate('window.__aggregateDownloads.length===3'),'monthly full CSV');await enabled('Export Excel');await click('Export Excel');await until(()=>evaluate('window.__aggregateDownloads.length===4'),'monthly full XLSX')
+  assert.equal((await evaluate('window.__aggregateDownloads[2].text')).trim().split('\n').length,fullMonthly+1)
+  for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'Monthly section pagination overflow '+width);await screenshot('waste-levy-section-pagination-'+width)}
+  await fill('Reporting month','2013-04');await enabled('Export CSV');for(const scope of [mswPager,combinedPager,electricalPager])assert.equal(await currentPage(scope),'1')
+  await evaluate('window.fetch=window.__aggregateFetch')
+  console.log('PASS: aggregate Summary server paging/filter resets/empty state, independent Waste Levy section pages/sizes/month reset, compact sections unchanged, complete CSV/XLSX exports and desktop/tablet overflow.')
   // Admin account management uses the existing Settings destination and pagination controls.
   await openSettings('User Management');await hasText('Manage sign-in access.');await enabled('Add User')
   const managedName='aaa-browser-'+crypto.randomUUID().slice(0,8),managedPassword=crypto.randomUUID(),resetManagedPassword=crypto.randomUUID()

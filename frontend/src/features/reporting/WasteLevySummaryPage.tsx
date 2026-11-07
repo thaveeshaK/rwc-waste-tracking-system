@@ -4,7 +4,7 @@ import { request, download } from './api'
 import { errorMessage } from '../../api/client'
 import { operationalDate } from '../../utils/decimal'
 import type { Monthly } from './types'
-import { TotalsTable } from './ReportTables'
+import { TotalsTable,SectionTotalsTable } from './ReportTables'
 export function WasteLevySummaryPage() {
   const [month, setMonth] = useState(() => operationalDate().slice(0, 7))
   const defaultsApplied = useRef(false)
@@ -38,6 +38,6 @@ export function WasteLevySummaryPage() {
     <p className="notice">Working aid only. Not a completed Waste Levy return, NRE reconciliation or regulatory/certified report. E-waste Pickup is currently excluded. Legacy E-waste reconciliation/carry-over calculations are excluded.</p>
     <div className="panel filter-bar"><label>Reporting month<input type="month" required min="0001-01" max="9998-12" value={month} onChange={e => {if (e.target.value) setMonth(e.target.value)}}/></label><label>Summary units<select value={tonnes ? 't' : 'kg'} onChange={e => setTonnes(e.target.value === 't')}><option value="kg">kg (two decimals)</option><option value="t">tonnes (five decimals)</option></select></label><button className="secondary" onClick={() => setAttempt(n => n+1)}>Refresh monthly figures</button><button className="secondary" disabled={loading || exporting} onClick={() => exportFile('csv')}>Export CSV</button><button className="secondary" disabled={loading || exporting} onClick={() => exportFile('xlsx')}>Export Excel</button></div>
     {error && <p className="notice error" role="alert">{error}</p>}
-    {loading ? !error && <p role="status">Loading monthly figures...</p> : result && <><p className="hint">Measured net/direction weights and rounded material-category weights are separate totals. Small rounding differences are retained. Per-container subtotals do not assign Stillage Cage to a legacy Crates/Pallets group. Exports use kg.</p>{sections.map(([title, match]) => <section className="panel report-section" key={title}><h2>{title}</h2><TotalsTable totals={result.data.totals.filter(t => match(t.workflow, t.direction))} tonnes={tonnes}/></section>)}</>}
+    {loading ? !error && <p role="status">Loading monthly figures...</p> : result && <><p className="hint">Measured net/direction weights and rounded material-category weights are separate totals. Small rounding differences are retained. Per-container subtotals do not assign Stillage Cage to a legacy Crates/Pallets group. Exports use kg.</p>{sections.map(([title, match]) => <section className="panel report-section" key={title}><h2>{title}</h2>{['MSW / general intake','Combined general intake categories','Electrical Crate / Pallet - operational'].includes(title)?<SectionTotalsTable key={month+title} label={title} totals={result.data.totals.filter(t=>match(t.workflow,t.direction))} tonnes={tonnes}/>:<TotalsTable totals={result.data.totals.filter(t=>match(t.workflow,t.direction))} tonnes={tonnes} emptyMessage="No records for this period."/>}</section>)}</>}
   </section>
 }
