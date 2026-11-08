@@ -30,9 +30,12 @@ public class UserManagementService {
     public UserManagementService(AppUserRepository users,JdbcTemplate jdbc,PasswordEncoder encoder,SessionRegistry sessions,Clock clock) {
         this.users=users;this.jdbc=jdbc;this.encoder=encoder;this.sessions=sessions;this.clock=clock;
     }
-    public PageResult<UserResponse> list(int page,int size) {
-        PageResult.validate(page,size);long total=users.count();int actual=Math.min(page,PageResult.lastPage(total,size));
-        var items=users.findAll(PageRequest.of(actual,size,Sort.by("username").ascending().and(Sort.by("id").ascending())))
+    public PageResult<UserResponse> list(int page,int size,String query) {
+        PageResult.validate(page,size);
+        String search=query==null?"":query.strip();
+        if(search.length()>100)bad("Username search must contain at most 100 characters.");
+        long total=users.countByUsernameContainingIgnoreCase(search);int actual=Math.min(page,PageResult.lastPage(total,size));
+        var items=users.findByUsernameContainingIgnoreCase(search,PageRequest.of(actual,size,Sort.by("username").ascending().and(Sort.by("id").ascending())))
             .getContent().stream().map(this::response).toList();
         return new PageResult<>(items,actual,size,total,(total+size-1)/size);
     }
@@ -41,7 +44,7 @@ public class UserManagementService {
         validatePassword(input.password());var actor=lockAndActor(principal);
         String username=input.username().strip();
         if(username.isEmpty()||username.length()>100)bad("Username is required (maximum 100 characters).");
-        if(users.existsByUsername(username))throw new ResponseStatusException(HttpStatus.CONFLICT,"This username already exists.");
+        if(users.existsByUsernameIgnoringCase(username))throw new ResponseStatusException(HttpStatus.CONFLICT,"This username already exists (usernames must be unique regardless of case).");
         var user=new AppUser();user.setUsername(username);user.setPasswordHash(encoder.encode(input.password()));user.setRole(input.role().name());
         user.setCreatedAt(clock.instant());user.setUpdatedAt(user.getCreatedAt());user.setCreatedBy(actor);user.setUpdatedBy(actor);
         return response(users.saveAndFlush(user));

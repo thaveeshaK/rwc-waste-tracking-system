@@ -48,7 +48,9 @@ class UserManagementSessionTests {
   mvc.perform(post("/api/auth/login").with(csrf()).param("username",name).param("password",old)).andExpect(status().isUnauthorized());session=login(name,fresh);
   target=manage("PUT","/"+id+"/role",Map.of("role","ADMIN","version",target.get("version").asLong()));mvc.perform(get("/api/auth/me").session(session)).andExpect(status().isUnauthorized());session=login(name,fresh);mvc.perform(get("/api/admin/users").session(session)).andExpect(status().isOk());
   target=manage("PATCH","/"+id+"/status",Map.of("active",false,"version",target.get("version").asLong()));mvc.perform(get("/api/admin/users").session(session)).andExpect(status().isUnauthorized());
-  mvc.perform(post("/api/auth/login").with(csrf()).param("username",name).param("password",fresh)).andExpect(status().isUnauthorized());target=manage("PATCH","/"+id+"/status",Map.of("active",true,"version",target.get("version").asLong()));login(name,fresh);
+  mvc.perform(post("/api/auth/login").with(csrf()).param("username",name).param("password",fresh)).andExpect(status().isUnauthorized());target=manage("PATCH","/"+id+"/status",Map.of("active",true,"version",target.get("version").asLong()));session=login(name,fresh);
+  manage("PUT","/"+id+"/role",Map.of("role","STAFF","version",target.get("version").asLong()));mvc.perform(get("/api/admin/users").session(session)).andExpect(status().isUnauthorized());
+  session=login(name,fresh);mvc.perform(get("/api/admin/users").session(session)).andExpect(status().isForbidden());mvc.perform(get("/api/auth/me").session(session)).andExpect(status().isOk());
  }
  @Test void concurrentCrossDeactivationCannotRemoveBothRemainingAdmins()throws Exception {
   var a=create("ADMIN",UUID.randomUUID().toString());var b=create("ADMIN",UUID.randomUUID().toString());jdbc.update("update app_user set active=false where id=?",adminId);
@@ -58,6 +60,21 @@ class UserManagementSessionTests {
    int successes=(first.get(20,TimeUnit.SECONDS)?1:0)+(second.get(20,TimeUnit.SECONDS)?1:0);assertThat(successes).isEqualTo(1);
    assertThat(jdbc.queryForObject("select count(*) from app_user where active and role='ADMIN'",Integer.class)).isEqualTo(1);
   } finally {executor.shutdownNow();jdbc.update("update app_user set active=true where id=?",adminId);}
+ }
+
+ @Test void concurrentCaseVariantCreationProducesOnlyOneAccount()throws Exception {
+  String name="Concurrent-"+UUID.randomUUID();var gate=new CountDownLatch(1);var executor=Executors.newFixedThreadPool(2);
+  try {
+   var a=executor.submit(()->createVariant(gate,name));var b=executor.submit(()->createVariant(gate,name.toLowerCase(Locale.ROOT)));gate.countDown();
+   assertThat((a.get(20,TimeUnit.SECONDS)?1:0)+(b.get(20,TimeUnit.SECONDS)?1:0)).isEqualTo(1);
+   created.addAll(jdbc.queryForList("select id from app_user where lower(username)=lower(?)",Long.class,name));assertThat(created).hasSize(1);
+  } finally {executor.shutdownNow();}
+ }
+ boolean createVariant(CountDownLatch gate,String name)throws Exception {
+  gate.await();SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(admin,null,List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
+  try{service.create(new UserData.Create(name,UUID.randomUUID().toString(),UserData.Role.STAFF),admin);return true;}
+  catch(org.springframework.web.server.ResponseStatusException e){assertThat(e.getStatusCode().value()).isEqualTo(409);return false;}
+  finally{SecurityContextHolder.clearContext();}
  }
  boolean deactivate(CountDownLatch gate,JsonNode actor,JsonNode target)throws Exception {
   gate.await();SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(actor.get("username").asText(),null,List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));

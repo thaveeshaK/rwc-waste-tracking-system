@@ -15,7 +15,7 @@ import static au.org.resourcework.waste_tracking_api.users.UserData.*;
 public class UserManagementController {
     private final UserManagementService service;
     public UserManagementController(UserManagementService service){this.service=service;}
-    @GetMapping public PageResult<UserResponse> list(@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="10") int size){return service.list(page,size);}
+    @GetMapping public PageResult<UserResponse> list(@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="10") int size,@RequestParam(required=false) String query){return service.list(page,size,query);}
     @PostMapping public ResponseEntity<UserResponse> create(@Valid @RequestBody Create input,Principal principal){var user=service.create(input,principal.getName());return ResponseEntity.created(URI.create("/api/admin/users/"+user.id())).body(user);}
     @PutMapping("/{id}/role") public UserResponse role(@PathVariable Long id,@Valid @RequestBody ChangeRole input,Principal principal){return service.role(id,input,principal.getName());}
     @PatchMapping("/{id}/status") public UserResponse status(@PathVariable Long id,@Valid @RequestBody Status input,Principal principal){return service.status(id,input,principal.getName());}

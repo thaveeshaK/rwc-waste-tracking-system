@@ -44,6 +44,9 @@ public class AccountProvisioner implements ApplicationRunner {
         }
         var existing = users.findByUsername(username);
         if (existing.isPresent()) return;
+        if (users.existsByUsernameIgnoringCase(username)) {
+            throw new IllegalStateException("An account with this initial username already exists with different casing. Use the existing spelling.");
+        }
         if (role.equals("STAFF") && users.existsByRole("STAFF")) {
             throw new IllegalStateException("A shared STAFF account already exists.");
         }

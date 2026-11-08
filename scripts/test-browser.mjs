@@ -157,7 +157,7 @@ try {
   await cdp('Runtime.enable')
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false })
   await cdp('Page.navigate', { url: frontend })
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username', process.env.INITIAL_STAFF_USERNAME)
   await fill('Password', process.env.INITIAL_STAFF_PASSWORD)
   await click('Sign in')
@@ -301,7 +301,7 @@ try {
   await click('Back to Records')
   await evaluate('window.fetch = window.__realFetch')
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username', process.env.INITIAL_ADMIN_USERNAME)
   await fill('Password', process.env.INITIAL_ADMIN_PASSWORD)
   await click('Sign in')
@@ -335,7 +335,7 @@ try {
     assert.equal(await evaluate("document.querySelector('[role=menu]')===null"),true)
     if(i===2) {
       await hasText('Manage sign-in access.');await enabled('Add User')
-      assert.equal(await evaluate("document.querySelectorAll('.settings-page form').length"),0)
+      assert.equal(await evaluate("document.querySelectorAll('.settings-page .user-editor').length"),0)
     } else {
       await until(()=>evaluate("document.querySelectorAll('.settings-page section[aria-label]').length===1"),'one Settings section only')
       assert.deepEqual(await evaluate("[...document.querySelectorAll('.settings-page section[aria-label]')].map(e=>e.getAttribute('aria-label'))"),[settingsLabels[i]])
@@ -421,7 +421,7 @@ try {
 
   // Salvage has its own material contexts and one crew for the complete trip.
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username', process.env.INITIAL_STAFF_USERNAME)
   await fill('Password', process.env.INITIAL_STAFF_PASSWORD)
   await click('Sign in')
@@ -565,7 +565,7 @@ try {
     assert.equal(saved.down.materials.length, down === '0.00' ? 0 : 1)
   }
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username', process.env.INITIAL_ADMIN_USERNAME)
   await fill('Password', process.env.INITIAL_ADMIN_PASSWORD)
   await click('Sign in')
@@ -637,7 +637,7 @@ try {
   await evaluate('window.fetch = window.__realFetch')
   // Pickup uses one final positive weight and its own reference context.
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username', process.env.INITIAL_STAFF_USERNAME)
   await fill('Password', process.env.INITIAL_STAFF_PASSWORD)
   await click('Sign in')
@@ -718,7 +718,7 @@ try {
   await click('Apply dates / refresh')
   await enabled('#' + pickupId)
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username', process.env.INITIAL_ADMIN_USERNAME)
   await fill('Password', process.env.INITIAL_ADMIN_PASSWORD)
   await click('Sign in')
@@ -773,7 +773,7 @@ try {
   await evaluate('window.fetch = window.__realFetch')
   // Electrical Crate/Pallet requires gross strictly above tare and both approved categories.
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username', process.env.INITIAL_STAFF_USERNAME)
   await fill('Password', process.env.INITIAL_STAFF_PASSWORD)
   await click('Sign in')
@@ -885,7 +885,7 @@ try {
   await click('Apply dates / refresh')
   await enabled('#' + electricalId)
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username', process.env.INITIAL_ADMIN_USERNAME)
   await fill('Password', process.env.INITIAL_ADMIN_PASSWORD)
   await click('Sign in')
@@ -946,7 +946,7 @@ try {
   await evaluate('window.fetch = window.__realFetch')
   // Collectables: one tub, fixed 2 kg tare, operational duplicate avoidance only.
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username', process.env.INITIAL_STAFF_USERNAME)
   await fill('Password', process.env.INITIAL_STAFF_PASSWORD)
   await click('Sign in')
@@ -1032,7 +1032,7 @@ try {
   await click('Apply dates / refresh')
   await enabled('#' + collectableId)
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username', process.env.INITIAL_ADMIN_USERNAME)
   await fill('Password', process.env.INITIAL_ADMIN_PASSWORD)
   await click('Sign in')
@@ -1087,7 +1087,7 @@ try {
   await evaluate('window.fetch = window.__realFetch')
   // Whitegoods: daily quantities, zero and same-day entries, derived calendar-month summaries.
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username', process.env.INITIAL_STAFF_USERNAME)
   await fill('Password', process.env.INITIAL_STAFF_PASSWORD)
   await click('Sign in')
@@ -1179,7 +1179,7 @@ try {
   await click('Retry monthly summary')
   await expectWhitegoodsSummary('2001-03', 0, '0.00')
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username', process.env.INITIAL_ADMIN_USERNAME)
   await fill('Password', process.env.INITIAL_ADMIN_PASSWORD)
   await click('Sign in')
@@ -1233,7 +1233,7 @@ try {
   await evaluate('window.fetch = window.__realFetch')
   // Electrical Testing: category counters, independent overall diversions, monthly sales references.
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username', process.env.INITIAL_STAFF_USERNAME)
   await fill('Password', process.env.INITIAL_STAFF_PASSWORD)
   await click('Sign in')
@@ -1391,7 +1391,7 @@ try {
   await hasText('This is an additive operational tally')
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent === 'Correct record')"),false)
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username',process.env.INITIAL_ADMIN_USERNAME)
   await fill('Password',process.env.INITIAL_ADMIN_PASSWORD)
   await click('Sign in')
@@ -1716,7 +1716,7 @@ try {
   assert.equal(mixedMonth.estimatedWeight,'200.50')
   assert.equal(mixedMonth.kgPerItem,null)
   // Dedicated E-waste collection is independent of internal electrical processing.
-  await click('Sign out');await hasText('Sign in')
+  await click('Sign out');await enabled('Sign in')
   await fill('Username',process.env.INITIAL_STAFF_USERNAME);await fill('Password',process.env.INITIAL_STAFF_PASSWORD);await click('Sign in');await enabled('Operations')
   await staffWorkflow('E-waste Pickup')
   await hasText('No active E-waste Pickup containers are configured.')
@@ -1729,14 +1729,14 @@ try {
   await click('Review record');await enabled('Confirm and submit');await click('Confirm and submit');await hasText('saved successfully.')
   assert.equal(await evaluate("document.querySelector('.ewaste-review').textContent.includes('Next Band')"),true)
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Correct record')"),false)
-  await click('Sign out');await hasText('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
+  await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
   const ewasteRefs=(await browserApi('/api/admin/settings/container-types')).body
   const ewastePlastic=ewasteRefs.find(c=>c.name==='Plastic Pallet'),ewastePine=ewasteRefs.find(c=>c.name==='Pine Pallet')
   for(const c of [ewastePlastic,ewastePine])assert.equal((await browserApi('/api/admin/settings/container-types/'+c.id,'PUT',{version:c.version,name:c.name,tareWeight:c.tareWeight,active:true,contexts:[...new Set([...c.contexts,'EWASTE_PICKUP'])]})).status,200)
   await openSettings('Container Types');await enabled('Edit Plastic Pallet');await click('Edit Plastic Pallet')
   assert.equal(await evaluate("[...document.querySelectorAll('.settings-contexts label')].some(l=>l.textContent==='EWASTE PICKUP'&&l.querySelector('input').checked)"),true)
   await click('Cancel edit')
-  await click('Sign out');await hasText('Sign in');await fill('Username',process.env.INITIAL_STAFF_USERNAME);await fill('Password',process.env.INITIAL_STAFF_PASSWORD);await click('Sign in');await enabled('Operations')
+  await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_STAFF_USERNAME);await fill('Password',process.env.INITIAL_STAFF_PASSWORD);await click('Sign in');await enabled('Operations')
   await staffWorkflow('E-waste Pickup');await until(()=>evaluate("document.querySelector('form select')?.options.length>=3"),'configured E-waste containers')
   await fill('Record date','2008-03-15');await fill('Organisation','nExT b')
   await until(()=>evaluate("[...document.querySelectorAll('#ewaste-organisations option')].some(o=>o.value==='Next Band')"),'case-insensitive organisation suggestion')
@@ -1756,7 +1756,7 @@ try {
   await evaluate('window.__releaseEwaste()');await enabled('Retry submission');await click('Check Records');await resumeStaffSubmission();await enabled('Retry submission');await click('Retry submission');await hasText('saved successfully.')
   const ewastePayloads=await evaluate('window.__ewastePayloads');assert.equal(ewastePayloads.length,2);assert.equal(ewastePayloads[0],ewastePayloads[1]);await evaluate('window.fetch=window.__realFetch')
   const ewasteInput=JSON.parse(ewastePayloads[0]);const ewasteRows=(await browserApi('/api/ewaste-pickups')).body.filter(r=>r.submissionId===ewasteInput.submissionId);assert.equal(ewasteRows.length,1);const ewasteId=ewasteRows[0].id
-  await click('Sign out');await hasText('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
+  await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
   const currentEwastePlastic=(await browserApi('/api/admin/settings/container-types')).body.find(c=>c.id===ewastePlastic.id)
   assert.equal((await browserApi('/api/admin/settings/container-types/'+ewastePlastic.id,'PUT',{version:currentEwastePlastic.version,name:'Renamed E-waste Pallet',tareWeight:'9.00',active:false,contexts:currentEwastePlastic.contexts})).status,200)
   const historicalEwaste=(await browserApi('/api/ewaste-pickups/'+ewasteId)).body
@@ -1777,7 +1777,7 @@ try {
   assert.equal((await browserApi('/api/admin/reports/records?from=2008-03-01&to=2008-03-31&workflow=EWASTE_PICKUP&location=corrected')).body.totalRows,0)
   console.log('PASS: E-waste Pickup no-container and multi-quantity intake, organisation suggestions, exact tare, review/back, UUID retry/guards, historical inactive snapshots, Admin correction/stale/delete, separate filtered reports/exports and responsive layouts.')
   // Scrap is monthly additive weight recording, entirely separate from electrical intake/processing.
-  await click('Sign out');await hasText('Sign in');await fill('Username',process.env.INITIAL_STAFF_USERNAME);await fill('Password',process.env.INITIAL_STAFF_PASSWORD);await click('Sign in');await enabled('Operations')
+  await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_STAFF_USERNAME);await fill('Password',process.env.INITIAL_STAFF_PASSWORD);await click('Sign in');await enabled('Operations')
   await staffWorkflow('Scrap');await hasText('Monthly Scrap entry')
   assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Review record').disabled"),true)
   const scrapSeed={submissionId:crypto.randomUUID(),reportingMonth:'2009-09',ironAndSteelWeight:'250',aluminiumWeight:'0',otherNonFerrousWeight:'75',mixedMetalsWeight:'10',ewasteWeight:'477'}
@@ -1800,7 +1800,7 @@ try {
   const scrapInput=JSON.parse(scrapPayloads[0]),scrapRows=(await browserApi('/api/scrap-records')).body.filter(r=>r.submissionId===scrapInput.submissionId);assert.equal(scrapRows.length,1);const scrapId=scrapRows[0].id
   assert.equal((await browserApi('/api/scrap-records/monthly-summary?month=2009-09')).body.totalWeight,'1037.00')
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Correct record'||b.textContent==='Delete record')"),false)
-  await click('Sign out');await hasText('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
+  await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
   await click('Records');await fill('Workflow','SCRAP');await enabled('#'+scrapId);await click('#'+scrapId);await enabled('Correct record');await click('Correct record');await hasText('Monthly Scrap entry')
   await fill('Iron and Steel','125');await click('Review record');await enabled('Confirm correction');await hasText('1062.00 kg');assert.equal(await evaluate("document.querySelector('.scrap-review tbody tr td:nth-child(2)').textContent"),'250.00 kg')
   await click('Back to edit');await fill('Reporting month','2009-10');await click('Review record');await enabled('Confirm correction');await hasText('250.00 kg');await click('Confirm correction');await hasText('saved successfully.')
@@ -1902,6 +1902,7 @@ try {
   assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Create user').disabled"),true)
   await fill('Confirm password',managedPassword);await enabled('Create user');await click('Create user');await hasText('User created successfully.');await enabled('Add User')
   const managed=(await browserApi('/api/admin/users?size=50')).body.items.find(u=>u.username===managedName);assert.ok(managed);assert.equal(managed.role,'STAFF');assert.equal(managed.active,true)
+  await click('Add User');await fill('Username',managedName.toUpperCase());await fill('Password',managedPassword);await fill('Confirm password',managedPassword);await click('Create user');await until(()=>evaluate("[...document.querySelectorAll('[role=alert]')].some(e=>e.textContent.includes('unique regardless of case'))"),'duplicate username error');await enabled('Cancel');await click('Cancel');await click('Reload users');await enabled('Add User')
   const managedRow='tr[data-user-id="'+managed.id+'"]'
   await click('Change Role',managedRow);await fill('Role','ADMIN');await hasText('from STAFF to ADMIN?');await click('Confirm role change');await hasText('User updated successfully.');await enabled('Add User')
   await click('Reset Password',managedRow);await fill('New password',resetManagedPassword);await fill('Confirm password',resetManagedPassword);await click('Reset password');await hasText('User updated successfully.');await enabled('Add User')
@@ -1916,11 +1917,14 @@ try {
   await click('Reload users');await enabled('Add User');const usersPager='nav[aria-label="Users pagination"]'
   assert.equal(await evaluate("document.querySelectorAll('section[aria-label=Users] tbody tr').length"),10)
   await click('Next',usersPager);await hasText('Showing 11-20 of');await fill('Rows per page','25',usersPager);await hasText('Showing 1-25 of');await fill('Rows per page','50',usersPager);await hasText('Showing 1-50 of')
+  await click('Next',usersPager);await hasText('Showing 51-');await fill('Search username',managedName.toUpperCase());await click('Search users');await hasText('Showing 1-1 of 1');await hasText(managedName)
+  assert.equal(await evaluate("document.querySelectorAll('section[aria-label=Users] tbody tr').length"),1)
+  await fill('Search username','no-matching-managed-account');await click('Search users');await hasText('No users found.');await click('Clear search');await hasText('Showing 1-50 of')
   for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'User Management overflow '+width);await screenshot('user-management-'+width)}
   await click('Add User');for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'User editor overflow '+width);await screenshot('user-management-editor-'+width)}await click('Cancel')
-  console.log('PASS: User Management creation/password confirmation, role changes, password reset, deactivate/cancel/reactivate confirmations, stale conflict/reload, server pagination 10/25/50 and desktop/tablet layouts.')
+  console.log('PASS: User Management creation/password confirmation, role changes, password reset, deactivate/cancel/reactivate confirmations, stale conflict/reload, case-insensitive duplicate rejection and username search, server pagination 10/25/50 and desktop/tablet layouts.')
   await click('Sign out')
-  await hasText('Sign in')
+  await enabled('Sign in')
   await fill('Username',process.env.INITIAL_STAFF_USERNAME)
   await fill('Password',process.env.INITIAL_STAFF_PASSWORD)
   await click('Sign in')

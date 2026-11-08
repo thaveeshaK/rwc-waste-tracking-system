@@ -227,7 +227,7 @@ The runner starts a loopback-only PostgreSQL instance on a free port, generates 
 
 Before Spring bean creation or Flyway migration, a test initializer verifies the database URL, name, account, address, port, and identity token and pins the connection properties again. Integration setup rechecks the actual datasource before modifying data. Teardown only runs after successful verification and rechecks isolation before its updates. Unit tests cover redirected connections, wrong identity tokens, property overrides, and teardown after failed setup.
 
-The runner executes 179 tests (37 unit tests and 142 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
+The runner executes 185 tests (37 unit tests and 148 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
 
 For the complete browser smoke test:
 
@@ -298,7 +298,7 @@ Reporting tests cover Admin boundaries, category/direction/count separation, fil
 
 Admin navigation has a top-right **Settings** dropdown, separate from the primary Overview/Workflows/Reports/Waste Levy Summary/Records links. Staff have neither the dropdown nor access to Settings pages. `/api/admin/**` authorization and controller/service role checks protect every Settings endpoint; CSRF is required for writes. Existing Staff operational summaries remain available. User Management is Admin-only and supports creation, role changes, activation/deactivation and password resets. Electrical Testing category configuration is not included.
 
-Settings opens one focused page at a time at `/admin/settings/container-types`, `/admin/settings/material-categories`, `/admin/settings/organisation`, `/admin/settings/reporting`, or `/admin/settings/whitegoods`. `/admin/settings/users` provides User Management. These direct URLs load the selected page for Admin; Staff remain on Operations. No routing library is added. Settings contains five functional sections:
+Settings opens one focused page at a time at `/admin/settings/container-types`, `/admin/settings/material-categories`, `/admin/settings/organisation`, `/admin/settings/reporting`, or `/admin/settings/whitegoods`. `/admin/settings/users` provides User Management. These direct URLs load the selected page for Admin; Staff remain on Operations. No routing library is added. Settings contains five configuration sections, plus User Management described below:
 
 - **Container Types:** add, edit display name/tare, change applicability (`CRATE_PALLET`, `ELECTRICAL_CRATE_PALLET`, `EWASTE_PICKUP`), activate/deactivate and view status. Tares allow 0 to 99,999,999.99 kg with at most two decimals. Active references need at least one workflow. Names are case-insensitively unique, including inactive identities, to avoid historical ambiguity. No delete endpoint exists.
 - **Material Categories:** add, activate/deactivate and change applicability for Crate/Pallet, Salvage Up/Down, Pickup and Collectables. Names are immutable; add a distinct replacement rather than rename historical meaning. The electrical TVs/Monitors/Projectors and Everything Else categories are read-only and cannot be merged into normal waste categories. E-waste, Lead Acid Batteries and Whitegoods/Large Appliances retain their approved Salvage restrictions. Electrical Testing uses its separate unchanged fifteen-category table.
@@ -408,9 +408,9 @@ CSV/XLSX exports continue to use all matching filtered rows, independent of the 
 
 ## Admin User Management
 
-Open **Settings ? User Management** as an Admin. The server-paginated table uses 10, 25 or 50 rows with deterministic username/ID ordering. Staff cannot access the page or its APIs.
+Open **Settings > User Management** as an Admin. The server-paginated table uses 10, 25 or 50 rows with deterministic username/ID ordering. Staff cannot access the page or its APIs.
 
-- Create STAFF or ADMIN accounts. New usernames are trimmed and immutable; uniqueness and sign-in remain case-sensitive, matching existing authentication.
+- Create STAFF or ADMIN accounts. New usernames are trimmed, immutable and case-insensitively unique, including inactive accounts. Sign-in continues to use the stored spelling, matching existing authentication.
 - Passwords follow the existing non-blank policy and BCrypt's maximum of 72 UTF-8 bytes. Confirmation is checked in the frontend; passwords are hashed and never returned by APIs.
 - Change another account's role, deactivate/reactivate it, or reset its password. Accounts are never hard-deleted. Ask another Admin to reset your own password.
 - Self-deactivation and self-demotion are prohibited. Backend transactions serialize account changes and always retain at least one active Admin, including concurrent changes.
@@ -419,7 +419,7 @@ Open **Settings ? User Management** as an Admin. The server-paginated table uses
 
 Endpoints (all Admin-only; CSRF required for writes):
 
-- `GET /api/admin/users?page=0&size=10`
+- `GET /api/admin/users?page=0&size=10&query=staff`
 - `POST /api/admin/users`
 - `PUT /api/admin/users/{id}/role`
 - `PATCH /api/admin/users/{id}/status`
@@ -434,3 +434,7 @@ Reports Summary uses server-side aggregate pagination: `GET /api/admin/reports/s
 The Monthly Waste Levy Summary independently paginates **MSW / general intake**, **Combined general intake categories**, and **Electrical Crate / Pallet - operational** in the browser using the complete monthly aggregate response. These sections grow by configured categories/containers, not individual record count. Each uses the shared 10/25/50 controls and resets on month change. Scrap has at most seven fixed aggregate rows (five materials plus weight/record-count subtotals); Salvage and Whitegoods are also compact and remain unpaginated. Empty sections show ?No records for this period.? without controls.
 
 Pagination changes screen display only. CSV/XLSX exports retain all matching summary rows and all selected-month sections in their existing order and structure. The existing 100,000-row detailed-export safety limit remains unchanged. No schema or migration change is required.
+
+User Management includes case-insensitive literal username search. Search is applied before server-side pagination; applying/clearing search resets the list to page one. The existing STAFF/ADMIN creation, role/status confirmations, password reset, stale-update handling, last-active-Admin protection and historical identity references remain available. Own password resets continue to require another Admin.
+
+**V19__usernames_case_insensitive_unique.sql** adds a unique index on `lower(username)` to the existing `app_user` table. No user columns or second user table are added. Existing migrations V1?V18 are unchanged. If legacy accounts differ only by case, V19 stops with an explicit error; it never automatically merges, renames or deletes accounts. Account identities must be resolved deliberately before retrying the migration. Bootstrap provisioning also rejects a new initial username that differs only by case from an existing account.

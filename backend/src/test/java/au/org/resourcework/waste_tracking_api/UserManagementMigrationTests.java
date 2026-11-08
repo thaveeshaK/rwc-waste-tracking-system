@@ -17,6 +17,26 @@ class UserManagementMigrationTests {
  @Test void freshV1ThroughV18CreatesManagementColumns()throws Exception {
   var settings=IsolatedTestDatabase.settings();try(var c=DriverManager.getConnection(settings.url(),settings.username(),settings.password())){IsolatedTestDatabase.verify(c,settings);String schema="users_fresh_"+UUID.randomUUID().toString().replace("-","");var f=flyway(settings,schema,"18");assertThat(f.migrate().migrationsExecuted).isEqualTo(18);f.validate();c.setSchema(schema);assertThat(hashes(c)).hasSize(18);try(var s=c.createStatement();var rs=s.executeQuery("select count(*) from app_user")){assertThat(rs.next()).isTrue();assertThat(rs.getInt(1)).isZero();}}
  }
+
+ @Test void v18ToV19PreservesIdentitiesAndEnforcesCaseInsensitiveUniqueness()throws Exception {
+  var settings=IsolatedTestDatabase.settings();try(var c=DriverManager.getConnection(settings.url(),settings.username(),settings.password())){
+   IsolatedTestDatabase.verify(c,settings);String schema="users_ci_"+UUID.randomUUID().toString().replace("-","");flyway(settings,schema,"18").migrate();c.setSchema(schema);var applied=hashes(c);
+   try(var stmt=c.createStatement()){stmt.executeUpdate("insert into app_user(username,password_hash,role) values ('Historic-Admin','unused','ADMIN')");}
+   var latest=flyway(settings,schema,"19");assertThat(latest.migrate().migrationsExecuted).isEqualTo(1);latest.validate();assertThat(hashes(c)).containsAllEntriesOf(applied);
+   try(var stmt=c.createStatement()){assertThatThrownBy(()->stmt.executeUpdate("insert into app_user(username,password_hash,role) values ('historic-admin','unused','STAFF')")).isInstanceOf(SQLException.class);}
+   try(var stmt=c.createStatement();var rs=stmt.executeQuery("select username,active from app_user")){assertThat(rs.next()).isTrue();assertThat(rs.getString(1)).isEqualTo("Historic-Admin");assertThat(rs.getBoolean(2)).isTrue();assertThat(rs.next()).isFalse();}
+   String fresh="users_ci_fresh_"+UUID.randomUUID().toString().replace("-","");assertThat(flyway(settings,fresh,"19").migrate().migrationsExecuted).isEqualTo(19);
+  }
+ }
+ @Test void v19RefusesLegacyCaseCollisionsWithoutMergingOrRenamingAccounts()throws Exception {
+  var settings=IsolatedTestDatabase.settings();try(var c=DriverManager.getConnection(settings.url(),settings.username(),settings.password())){
+   IsolatedTestDatabase.verify(c,settings);String schema="users_ci_conflict_"+UUID.randomUUID().toString().replace("-","");flyway(settings,schema,"18").migrate();c.setSchema(schema);
+   try(var stmt=c.createStatement()){stmt.executeUpdate("insert into app_user(username,password_hash,role) values ('Existing','unused','ADMIN'),('existing','unused','STAFF')");}
+   assertThatThrownBy(()->flyway(settings,schema,"19").migrate()).hasStackTraceContaining("Case-insensitive duplicate usernames exist");
+   try(var stmt=c.createStatement();var rs=stmt.executeQuery("select count(*) from app_user where username in ('Existing','existing')")){assertThat(rs.next()).isTrue();assertThat(rs.getInt(1)).isEqualTo(2);}
+   assertThat(hashes(c)).doesNotContainKey("19");
+  }
+ }
  private Flyway flyway(IsolatedTestDatabase.Settings s,String schema,String target){return Flyway.configure().dataSource(s.url(),s.username(),s.password()).schemas(schema).defaultSchema(schema).cleanDisabled(true).target(target).load();}
  private Map<String,Integer> hashes(Connection c)throws Exception{var result=new HashMap<String,Integer>();try(var s=c.createStatement();var rs=s.executeQuery("select version,checksum from flyway_schema_history where success and version is not null")){while(rs.next())result.put(rs.getString(1),rs.getInt(2));}return result;}
 }

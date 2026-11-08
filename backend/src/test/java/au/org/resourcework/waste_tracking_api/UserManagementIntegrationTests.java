@@ -43,6 +43,7 @@ class UserManagementIntegrationTests {
    mvc.perform(request(method,url).with(csrf()).contentType("application/json").content("{}")).andExpect(status().isUnauthorized());
    mvc.perform(request(method,url).with(user(staff).roles("STAFF")).with(csrf()).contentType("application/json").content("{}")).andExpect(status().isForbidden());
   }
+  mvc.perform(put("/api/admin/users/1/password").with(csrf()).contentType("application/json").content("{}")).andExpect(status().isUnauthorized());
   mvc.perform(put("/api/admin/users/1/password").with(user(staff).roles("STAFF")).with(csrf()).contentType("application/json").content("{}")).andExpect(status().isForbidden());
   mvc.perform(post("/api/admin/users").with(user(admin).roles("ADMIN")).contentType("application/json").content("{}")).andExpect(status().isForbidden());mvc.perform(list()).andExpect(status().isOk());
  }
@@ -57,7 +58,7 @@ class UserManagementIntegrationTests {
   send("POST","",Map.of("username"," ","password",password(),"role","STAFF")).andExpect(status().isBadRequest());send("POST","",Map.of("username","missing-role","password",password())).andExpect(status().isBadRequest());
   assertThat(jdbc.queryForObject("select count(*) from app_user",Long.class)).isEqualTo(count);
   create("Duplicate","STAFF",password());send("POST","",Map.of("username"," Duplicate ","password",password(),"role","ADMIN")).andExpect(status().isConflict());
-  create("duplicate","STAFF",password()); // Existing authentication is intentionally case-sensitive.
+  send("POST","",Map.of("username","duplicate","password",password(),"role","STAFF")).andExpect(status().isConflict());
  }
  @Test void rolesCanChangeWithoutRenamingOrRewritingHistoricalOwnership()throws Exception {
   var row=create("historic-user","STAFF",password());long id=row.get("id").asLong();
@@ -91,4 +92,26 @@ class UserManagementIntegrationTests {
   var first=json.readTree(mvc.perform(list()).andReturn().getResponse().getContentAsString());var second=json.readTree(mvc.perform(list().param("page","1")).andReturn().getResponse().getContentAsString());assertThat(first.get("items").get(9).get("username").asText()).isLessThan(second.get("items").get(0).get("username").asText());
   assertThat(first.toString()).doesNotContain("password","passwordHash");
  }
+ @Test void invalidRoleIsRejectedWithoutCreatingAnAccount()throws Exception {
+  send("POST","",Map.of("username","bad-role","password",password(),"role","MANAGER")).andExpect(status().isBadRequest());
+  assertThat(jdbc.queryForObject("select count(*) from app_user where username='bad-role'",Integer.class)).isZero();
+ }
+ @Test void usernameSearchIsCaseInsensitiveLiteralAndAppliedBeforePaging()throws Exception {
+  String hash=encoder.encode(password());for(int n=0;n<31;n++)jdbc.update("insert into app_user(username,password_hash,role) values (?,?,'STAFF')",String.format("Search-User-%02d",n),hash);
+  mvc.perform(list().param("query"," search-USER ")).andExpect(jsonPath("$.totalItems").value(31)).andExpect(jsonPath("$.totalPages").value(4)).andExpect(jsonPath("$.items.length()").value(10));
+  mvc.perform(list().param("query","SEARCH-user").param("page","1")).andExpect(jsonPath("$.items[0].username").value("Search-User-10"));
+  mvc.perform(list().param("query","Search-user").param("size","25")).andExpect(jsonPath("$.items.length()").value(25));
+  mvc.perform(list().param("query","no-such-user").param("page","99")).andExpect(jsonPath("$.page").value(0)).andExpect(jsonPath("$.totalItems").value(0));
+  create("literal_%","STAFF",password());mvc.perform(list().param("query","_%")).andExpect(jsonPath("$.totalItems").value(1)).andExpect(jsonPath("$.items[0].username").value("literal_%"));
+  mvc.perform(list().param("query","x".repeat(101))).andExpect(status().isBadRequest());
+ }
+ @Test void anotherAdminCanBeDeactivatedAndDemotedWhenAnActiveAdminRemains()throws Exception {
+  var other=create("other-admin","ADMIN",password());long id=other.get("id").asLong();
+  var inactive=send("PATCH","/"+id+"/status",Map.of("active",false,"version",other.get("version").asLong())).andExpect(status().isOk()).andExpect(jsonPath("$.active").value(false));
+  long version=jdbc.queryForObject("select version from app_user where id=?",Long.class,id);
+  send("PATCH","/"+id+"/status",Map.of("active",true,"version",version)).andExpect(status().isOk());
+  version=jdbc.queryForObject("select version from app_user where id=?",Long.class,id);send("PUT","/"+id+"/role",Map.of("role","STAFF","version",version)).andExpect(status().isOk());
+  assertThat(jdbc.queryForObject("select count(*) from app_user where active and role='ADMIN'",Integer.class)).isEqualTo(1);
+ }
+
 }
