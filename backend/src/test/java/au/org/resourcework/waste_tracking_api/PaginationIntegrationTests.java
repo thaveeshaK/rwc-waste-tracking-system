@@ -68,7 +68,7 @@ class PaginationIntegrationTests {
         for(int page=0;page<8;page++){var r=body(records().param("page",""+page));assertThat(r.get("items").size()).isLessThanOrEqualTo(10);for(var item:r.get("items")){String w=item.get("workflow").asText();long id=item.get("record").get("id").asLong();workflows.add(w);keys.add(w+id);String date=w.equals("SCRAP")?item.get("record").get("reportingMonth").asText()+"-01":item.get("record").get("recordDate").asText();ordered.add(date+"|"+String.format("%020d",id)+"|"+w);}}
         assertThat(keys).hasSize(71).doesNotHaveDuplicates();assertThat(workflows).hasSize(9);
         var sorted=new ArrayList<>(ordered);sorted.sort((a,b)->{int d=b.substring(0,31).compareTo(a.substring(0,31));return d!=0?d:a.substring(31).compareTo(b.substring(31));});assertThat(ordered).isEqualTo(sorted);
-        var expected=jdbc.queryForList("select id from whitegoods_record where deleted_at is null order by record_date desc,id desc limit 10 offset 10",Long.class);
+        var expected=jdbc.queryForList("select id from whitegoods_record where deleted_at is null and record_date between date '2001-02-01' and date '2001-02-28' order by record_date desc,id desc limit 10 offset 10",Long.class);
         var second=body(records().param("workflow","WHITEGOODS").param("page","1"));var actual=new ArrayList<Long>();second.get("items").forEach(i->actual.add(i.get("record").get("id").asLong()));assertThat(actual).isEqualTo(expected);
     }
     @Test void dateWorkflowSoftDeletionAndScrapMonthPredicatesPrecedePaging()throws Exception {

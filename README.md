@@ -227,7 +227,7 @@ The runner starts a loopback-only PostgreSQL instance on a free port, generates 
 
 Before Spring bean creation or Flyway migration, a test initializer verifies the database URL, name, account, address, port, and identity token and pins the connection properties again. Integration setup rechecks the actual datasource before modifying data. Teardown only runs after successful verification and rechecks isolation before its updates. Unit tests cover redirected connections, wrong identity tokens, property overrides, and teardown after failed setup.
 
-The runner executes 185 tests (37 unit tests and 148 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
+The runner executes 187 tests (37 unit tests and 150 integration tests), packages the backend, and stops PostgreSQL. Salvage tests cover all four zero/positive combinations, mandatory times, independent totals/rounding, correction transitions, exact category sets and API restrictions, historical applicability, concurrency, metadata/permissions, soft deletion, and rollback after an injected material-write failure. Supply `-PostgresBin` to override the default PostgreSQL 18 binary directory. Generated test clusters/logs remain under ignored `backend/target`.
 
 For the complete browser smoke test:
 
@@ -438,3 +438,122 @@ Pagination changes screen display only. CSV/XLSX exports retain all matching sum
 User Management includes case-insensitive literal username search. Search is applied before server-side pagination; applying/clearing search resets the list to page one. The existing STAFF/ADMIN creation, role/status confirmations, password reset, stale-update handling, last-active-Admin protection and historical identity references remain available. Own password resets continue to require another Admin.
 
 **V19__usernames_case_insensitive_unique.sql** adds a unique index on `lower(username)` to the existing `app_user` table. No user columns or second user table are added. Existing migrations V1?V18 are unchanged. If legacy accounts differ only by case, V19 stops with an explicit error; it never automatically merges, renames or deletes accounts. Account identities must be resolved deliberately before retrying the migration. Bootstrap provisioning also rejects a new initial username that differs only by case from an existing account.
+
+## DEV Cloud Run deployment (prepared; not deployed)
+
+One Cloud Run service serves the Vite production build and Spring Boot REST API from the same origin. Vite remains the local development server/proxy; normal local PostgreSQL settings are unchanged. No Actuator, external session store or new migration is added. Operational dates remain Australia/Hobart.
+
+`Dockerfile` builds with Node 24, Maven/Java 21, then copies only the executable jar into a Java 21 JRE image running as UID/GID 10001. Frontend assets are packaged under Spring Boot static resources. The existing six Settings deep links forward to index.html; API and missing asset paths never use SPA fallback. The HTML/assets are public so login can load; API authentication, Admin authorization and CSRF remain enforced.
+
+### Existing DEV resources and runtime configuration
+
+- Project: `rwc-waste-tracking-dev`; region: `australia-southeast2`.
+- Artifact Registry repository: `rwc-waste-tracking`.
+- Image: `australia-southeast2-docker.pkg.dev/rwc-waste-tracking-dev/rwc-waste-tracking/rwc-waste-tracking:BUILD_ID`.
+- Cloud Run service: `rwc-waste-tracking-dev`.
+- Runtime service account: `rwc-cloud-run-dev@rwc-waste-tracking-dev.iam.gserviceaccount.com` (existing Cloud SQL Client and Secret Accessor grants).
+- Cloud SQL: `rwc-waste-db-dev`; database `rwc_waste_tracking`; database user `rwc_app`.
+
+| Environment variable | DEV value/source |
+| --- | --- |
+| `SPRING_PROFILES_ACTIVE` | `prod` |
+| `PORT` | Injected by Cloud Run; prod falls back to 8080 |
+| `DB_URL` | Explicit PostgreSQL socket JDBC URL below |
+| `DB_USERNAME` | `rwc_app` |
+| `DB_PASSWORD` | Secret `rwc-db-password` |
+| `INITIAL_ADMIN_USERNAME` | Cloud Build `_ADMIN_USERNAME`, default `admin` |
+| `INITIAL_ADMIN_PASSWORD` | Secret `rwc-initial-admin-password` |
+| `INITIAL_STAFF_USERNAME` | Cloud Build `_STAFF_USERNAME`, default `staff` |
+| `INITIAL_STAFF_PASSWORD` | Secret `rwc-initial-staff-password` |
+
+The usernames are non-secret DEV defaults, configurable through substitutions. Existing account spellings must be reused. Passwords are supplied only by runtime Secret Manager mappings, never by Docker build arguments or source files. DEV uses `rwc-db-password:latest`, `rwc-initial-admin-password:latest` and `rwc-initial-staff-password:latest`. The newest version of each secret must be enabled and accessible. [Secret Manager `latest`](https://docs.cloud.google.com/secret-manager/docs/reference/rest/v1/projects.secrets.versions/access) means the most recently created version; it does not skip disabled versions to find an older enabled one. No secret-version substitutions are needed. Runtime service-account credentials come from Cloud Run, never a committed JSON key.
+
+Production `DB_URL`:
+
+```text
+jdbc:postgresql:///rwc_waste_tracking?socketFactory=com.google.cloud.sql.postgres.SocketFactory&cloudSqlInstance=rwc-waste-tracking-dev:australia-southeast2:rwc-waste-db-dev&unixSocketPath=/cloudsql/rwc-waste-tracking-dev:australia-southeast2:rwc-waste-db-dev/.s.PGSQL.5432&sslmode=disable
+```
+
+Cloud Run attaches `rwc-waste-tracking-dev:australia-southeast2:rwc-waste-db-dev` and supplies its authenticated Cloud SQL proxy socket. The Google PostgreSQL socket-factory dependency opens that local Unix socket; no Cloud Run IP allowlist is needed. `sslmode=disable` applies only to the local Unix socket hop; the managed Cloud SQL proxy protects the remote connection. This configuration assumes the standard public-IP Cloud SQL proxy path. If the instance is private-IP-only, confirm existing VPC connectivity first; this repository does not create a VPC.
+
+The prod profile requires DB_URL/DB_USERNAME/DB_PASSWORD rather than falling back to a local database. It uses PORT, a five-connection maximum pool, HTTPS-only session cookies and forwarded HTTPS headers. Local default properties are unchanged. Do not set SESSION_COOKIE_SECURE=false on Cloud Run.
+
+First startup runs the existing Flyway V1-V19 migrations before Hibernate schema validation. An empty database receives the full schema; later startups apply only missing migrations. Ensure `rwc_app` has USAGE/CREATE on the application's public schema and ownership/DDL rights for its migrated objects; Cloud SQL Client IAM alone does not grant PostgreSQL schema privileges. No repair, clean, reset or migration rewrite is used. Bootstrap creates absent initial users and never resets existing passwords, roles or status. Provision both initial accounts on the first launch; remove bootstrap passwords from later revision configuration when no longer needed.
+
+### Cloud Build and first-deployment prerequisites
+
+`cloudbuild.yaml` performs, in order:
+
+1. Build/run the `backend-tests` Docker target: all tests against a newly created, identity-verified local PostgreSQL cluster using `scripts/test-backend-linux.sh`. It explicitly overrides datasource/Flyway settings and never connects to Cloud SQL. Integration tests are not skipped.
+2. Build the frontend target (`npm ci`, lint, build).
+3. Build the runtime image using cached build layers.
+4. Push the uniquely tagged BUILD_ID image to Artifact Registry.
+5. Deploy that exact image/tag to the DEV service with its dedicated runtime identity, Cloud SQL attachment and secret mappings.
+
+The GitHub trigger must target this file on an approved deployment branch. A build submission WILL deploy once tests pass; no Cloud Build was submitted during repository preparation.
+
+Before first submission, manually verify (do not grant these roles to the runtime identity merely to make builds work):
+
+- GitHub repository connection/Cloud Build trigger and required APIs are enabled (`cloudbuild`, `artifactregistry`, `run`, `sqladmin`, `secretmanager`).
+- The selected **build service account** has Artifact Registry Writer on the repository, Cloud Run deployment/IAM-policy permissions (for example Cloud Run Admin), Service Account User on the runtime account, and Logs Writer for CLOUD_LOGGING_ONLY. These are separate from the already granted runtime Cloud SQL/secret roles. The submitting user must be allowed to submit builds/use that build identity.
+- The latest secret versions are enabled and accessible; database/schema privileges and Cloud SQL connectivity match the configuration above. Public unauthenticated invocation must be permitted by project/org policy.
+- Review the deployment diff and approve deployment before submitting or enabling automatic deploy triggers.
+
+After approval, a manual PowerShell submission from the repository root is:
+
+```powershell
+gcloud builds submit . --project=rwc-waste-tracking-dev --region=australia-southeast2 --config=cloudbuild.yaml --substitutions=_ADMIN_USERNAME=admin,_STAFF_USERNAME=staff
+```
+
+Both GitHub-triggered and manual builds use Cloud Build BUILD_ID tags, not latest. Commit SHA is recorded as an image label when supplied by the source trigger. `.dockerignore` and `.gcloudignore` exclude local secrets, build output, dependencies and test artefacts. Build/runtime base versions are explicit; refresh them deliberately as part of maintenance.
+
+For review, the equivalent deploy command (DO NOT execute until deployment approval) is:
+
+```powershell
+$image = 'australia-southeast2-docker.pkg.dev/rwc-waste-tracking-dev/rwc-waste-tracking/rwc-waste-tracking:BUILD_ID'
+$jdbcUrl = 'jdbc:postgresql:///rwc_waste_tracking?socketFactory=com.google.cloud.sql.postgres.SocketFactory&cloudSqlInstance=rwc-waste-tracking-dev:australia-southeast2:rwc-waste-db-dev&unixSocketPath=/cloudsql/rwc-waste-tracking-dev:australia-southeast2:rwc-waste-db-dev/.s.PGSQL.5432&sslmode=disable'
+gcloud run deploy rwc-waste-tracking-dev `
+  --project=rwc-waste-tracking-dev --region=australia-southeast2 --platform=managed `
+  --image=$image `
+  --service-account=rwc-cloud-run-dev@rwc-waste-tracking-dev.iam.gserviceaccount.com `
+  --add-cloudsql-instances=rwc-waste-tracking-dev:australia-southeast2:rwc-waste-db-dev `
+  --set-env-vars="SPRING_PROFILES_ACTIVE=prod,DB_USERNAME=rwc_app,INITIAL_ADMIN_USERNAME=admin,INITIAL_STAFF_USERNAME=staff,DB_URL=$jdbcUrl" `
+  --set-secrets=DB_PASSWORD=rwc-db-password:latest,INITIAL_ADMIN_PASSWORD=rwc-initial-admin-password:latest,INITIAL_STAFF_PASSWORD=rwc-initial-staff-password:latest `
+  --min-instances=0 --max-instances=1 --cpu=1 --memory=512Mi --timeout=300s `
+  --allow-unauthenticated --quiet
+```
+
+Replace BUILD_ID with the pushed build tag and select the reviewed username substitutions. Secret references remain `latest`. No secret values are present in this command.
+
+The complete generated deploy command is the `deploy-dev` step in `cloudbuild.yaml`. It uses min instances 0, **max instances 1 (approved first-DEV cap)**, CPU 1, memory 512 MiB, timeout 300 seconds, default concurrency, and allow-unauthenticated Cloud Run invocation; the application still authenticates API calls. No GCP resources were changed during preparation.
+
+Sessions and account-change revocation remain in process memory. Max 1 avoids normal multi-instance session routing/revocation inconsistencies, but restarts, scale-to-zero and revision rollouts still require users to sign in again. Do not enable traffic splitting or assume sessions/drafts survive deployments. Shared sessions and reliable multi-instance revocation are outside this slice. Cloud Run limits are not an availability/session-persistence guarantee. Heap is capped at 50% of container RAM; start DEV at 512 MiB if local validation passes, monitor memory/export workloads, and raise to 1 GiB if representative large XLSX exports approach the limit. Local startup smoke tests are not a production load test.
+
+### Local deployment validation
+
+With Docker Desktop running (no GCP access is used):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-backend.ps1
+npm.cmd --prefix frontend run lint
+npm.cmd --prefix frontend run build
+docker build --target backend-tests -t rwc-backend-tests:dev-validation .
+docker build -t rwc-waste-tracking:dev-validation .
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-container.ps1
+```
+
+The container smoke test uses an isolated Docker network, new PostgreSQL container and random test credentials in temporary ignored env files. It tests the prod profile at PORT=9090, static shell/assets/deep link, API 401/403, authentication/CSRF, XLSX export, startup migrations, non-root execution, 512 MiB memory and bootstrap password retention after restart. It removes only its own containers/network/env files. It temporarily overrides secure cookies only for its loopback HTTP test. Cloud Run keeps secure cookies enabled. Container logs/memory samples remain under ignored backend/target. Actual Cloud SQL/Secret Manager connectivity must be confirmed at the first approved deployment.
+
+### Logs and rollback (commands for later approved operations)
+
+```powershell
+gcloud run services logs read rwc-waste-tracking-dev --project=rwc-waste-tracking-dev --region=australia-southeast2 --limit=100
+gcloud builds log BUILD_ID --project=rwc-waste-tracking-dev --region=australia-southeast2
+gcloud run revisions list --service=rwc-waste-tracking-dev --project=rwc-waste-tracking-dev --region=australia-southeast2
+# Mutates traffic: execute only when rollback is intended/approved.
+gcloud run services update-traffic rwc-waste-tracking-dev --to-revisions=PRIOR_REVISION=100 --project=rwc-waste-tracking-dev --region=australia-southeast2
+```
+
+A traffic rollback does not undo database migrations. Keep revisions schema-compatible, retain the prior image, verify that the current latest secret values are compatible with the prior revision, and review database backup/recovery before future schema-changing deployments. Runtime logs go to stdout/stderr and Cloud Logging; never log credentials or put secret values into build substitutions.
+
+Deployment references: [Google Cloud SQL Unix socket sample](https://docs.cloud.google.com/sql/docs/postgres/samples/cloud-sql-postgres-servlet-connect-unix), [Cloud Build deployment configuration](https://docs.cloud.google.com/build/docs/deploying-builds/deploy-cloud-run), and [Cloud Run session-affinity limitations](https://docs.cloud.google.com/run/docs/configuring/session-affinity).

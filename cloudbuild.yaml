@@ -1,0 +1,48 @@
+# Prepared configuration only. Submitting this build WILL deploy after successful checks.
+steps:
+  - id: backend-tests
+    name: gcr.io/cloud-builders/docker
+    env: ['DOCKER_BUILDKIT=1']
+    args: ['build', '--target', 'backend-tests', '-t', 'rwc-backend-tests:$BUILD_ID', '.']
+  - id: frontend-checks
+    name: gcr.io/cloud-builders/docker
+    env: ['DOCKER_BUILDKIT=1']
+    args: ['build', '--target', 'frontend-build', '-t', 'rwc-frontend-checks:$BUILD_ID', '.']
+  - id: build-image
+    name: gcr.io/cloud-builders/docker
+    env: ['DOCKER_BUILDKIT=1']
+    args: ['build', '--label', 'org.opencontainers.image.revision=$COMMIT_SHA', '-t', '${_IMAGE}:$BUILD_ID', '.']
+  - id: push-image
+    name: gcr.io/cloud-builders/docker
+    args: ['push', '${_IMAGE}:$BUILD_ID']
+  - id: deploy-dev
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - rwc-waste-tracking-dev
+      - --project=rwc-waste-tracking-dev
+      - --region=australia-southeast2
+      - --platform=managed
+      - --image=${_IMAGE}:$BUILD_ID
+      - --service-account=rwc-cloud-run-dev@rwc-waste-tracking-dev.iam.gserviceaccount.com
+      - --add-cloudsql-instances=rwc-waste-tracking-dev:australia-southeast2:rwc-waste-db-dev
+      - --set-env-vars=SPRING_PROFILES_ACTIVE=prod,DB_USERNAME=rwc_app,INITIAL_ADMIN_USERNAME=${_ADMIN_USERNAME},INITIAL_STAFF_USERNAME=${_STAFF_USERNAME},DB_URL=jdbc:postgresql:///rwc_waste_tracking?socketFactory=com.google.cloud.sql.postgres.SocketFactory&cloudSqlInstance=rwc-waste-tracking-dev:australia-southeast2:rwc-waste-db-dev&unixSocketPath=/cloudsql/rwc-waste-tracking-dev:australia-southeast2:rwc-waste-db-dev/.s.PGSQL.5432&sslmode=disable
+      - --set-secrets=DB_PASSWORD=rwc-db-password:latest,INITIAL_ADMIN_PASSWORD=rwc-initial-admin-password:latest,INITIAL_STAFF_PASSWORD=rwc-initial-staff-password:latest
+      - --min-instances=0
+      # Approved first-DEV cap: sessions and revocation are process-local.
+      - --max-instances=1
+      - --cpu=1
+      - --memory=512Mi
+      - --timeout=300s
+      - --allow-unauthenticated
+      - --quiet
+images: ['${_IMAGE}:$BUILD_ID']
+substitutions:
+  _IMAGE: australia-southeast2-docker.pkg.dev/rwc-waste-tracking-dev/rwc-waste-tracking/rwc-waste-tracking
+  _ADMIN_USERNAME: admin
+  _STAFF_USERNAME: staff
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1800s

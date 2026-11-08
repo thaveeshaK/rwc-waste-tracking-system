@@ -48,6 +48,9 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http, SessionRegistry sessions) throws Exception {
         // Keep the default session-backed CSRF protection, including on login/logout.
         http.authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/favicon.ico",
+                        "/admin/settings/container-types", "/admin/settings/material-categories", "/admin/settings/users",
+                        "/admin/settings/organisation", "/admin/settings/reporting", "/admin/settings/whitegoods").permitAll()
                 .requestMatchers("/api/auth/csrf", "/api/auth/login").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/crate-pallet-records/**", "/api/salvage-records/**", "/api/pickup-records/**", "/api/electrical-crate-pallet-records/**", "/api/collectable-records/**", "/api/whitegoods-records/**", "/api/electrical-testing/**", "/api/ewaste-pickups/**", "/api/scrap-records/**").hasRole("ADMIN")

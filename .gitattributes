@@ -1,0 +1,3 @@
+
+# Container/Cloud Build shell scripts must run after Windows checkouts.
+*.sh text eol=lf

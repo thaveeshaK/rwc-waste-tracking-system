@@ -1,0 +1,15 @@
+.git
+.gitignore
+#!include:.gitignore
+**/node_modules
+backend/target
+frontend/dist
+.env
+.env.*
+**/*.pem
+**/*.key
+**/*credentials*.json
+**/*service-account*.json
+.codex
+.agents
+docs
