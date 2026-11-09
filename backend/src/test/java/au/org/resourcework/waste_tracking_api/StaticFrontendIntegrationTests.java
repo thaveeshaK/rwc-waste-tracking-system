@@ -32,4 +32,13 @@ class StaticFrontendIntegrationTests {
   mvc.perform(get("/api/not-a-route").with(user("admin").roles("ADMIN"))).andExpect(status().isNotFound());
   mvc.perform(get("/assets/missing.js").with(user("admin").roles("ADMIN"))).andExpect(status().isNotFound());
  }
+ @Test void originalBrandingImagesArePublicAndMissingImagesDoNotReturnTheSpa()throws Exception {
+  for(String file:new String[]{"rwc_logo.png","rwc_favicon.jpg"}) {
+   byte[] expected=new org.springframework.core.io.ClassPathResource("img/"+file).getContentAsByteArray();
+   mvc.perform(get("/assets/branding/"+file)).andExpect(status().isOk())
+     .andExpect(content().contentType(file.endsWith("png")?"image/png":"image/jpeg"))
+     .andExpect(content().bytes(expected));
+  }
+  mvc.perform(get("/assets/branding/missing.png")).andExpect(status().isNotFound());
+ }
 }

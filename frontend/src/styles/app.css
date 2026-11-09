@@ -23,8 +23,9 @@ legend { width: 100%; font-size: 1.15rem; font-weight: 700; border-bottom: 1px s
 .header-inner { max-width: 1200px; margin: auto; padding: 1.1rem 2rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .brand, .account { display: flex; align-items: center; gap: 1rem; }
 .brand strong { display: block; font-size: .95rem; }
-.brand span:not(.brand-mark) { font-size: .85rem; color: #5c6f62; }
-.brand-mark { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: #245c43; color: white; font-size: .8rem; font-weight: 800; }
+.brand span { font-size: .85rem; color: #5c6f62; }
+.brand-logo { display: block; width: 104px; height: auto; object-fit: contain; flex-shrink: 0; }
+.brand-site { display: block; color: #5c6f62; font-size: .75rem; }
 .account { font-size: .9rem; }
 .role-badge { display: inline-block; background: #e8eee7; padding: .1rem .45rem; margin-left: .3rem; border-radius: 4px; font-size: .75rem; }
 .app-shell { max-width: 1150px; margin: auto; padding: 0 2rem; }
@@ -71,7 +72,9 @@ th, td { padding: .75rem .7rem; border-bottom: 1px solid #e4e9e0; }
 .detail-heading h2 { margin: 0; }
 footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 .login-layout { min-height: 100vh; max-width: 1000px; margin: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-content: center; align-items: center; padding: 3rem 2rem; }
-.login-intro h1 { font-size: 3rem; }
+.login-intro h1 { font-size: clamp(2rem, 3.5vw, 3rem); }
+.login-logo { width: 160px; margin-bottom: 1.5rem; }
+.login-layout > footer { grid-column: 1 / -1; padding: 0; }
 .login-intro > p:last-child { color: #617164; }
 .login-panel label { margin-bottom: 1.2rem; }
 .login-panel button { width: 100%; }
@@ -121,7 +124,7 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 .settings-menu button { display: block; width: 100%; text-align: left; border: 0; background: white; color: #20382f; font-size: .92rem; padding: .7rem; }
 .settings-menu button:hover:not(:disabled), .settings-menu button:focus-visible { background: #eaf1e8; outline: 2px solid #245c43; outline-offset: -2px; }
 .settings-menu button[aria-current="page"] { background: #eaf1e8; font-weight: 700; }
-.workflow-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+.workflow-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 .workflow-card { display: flex; flex-direction: column; align-items: flex-start; }
 .workflow-card p { flex: 1; color: #5c6f62; }
 .dashboard-heading { align-items: flex-end; }
@@ -157,10 +160,8 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 
 .dashboard-chart[data-chart="activity"] { grid-column: 1 / -1; }
 
-.staff-operations .workflow-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .staff-recent .detail-heading { flex-wrap: wrap; gap: .75rem; }
-@media (max-width: 1000px) { .staff-operations .workflow-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 650px) { .staff-operations .workflow-card-grid { grid-template-columns: 1fr; } }
+@media (max-width: 650px) { .workflow-card-grid { grid-template-columns: 1fr; } }
 
 .salvage-steps { display: flex; flex-wrap: wrap; gap: .65rem; list-style: none; padding: 0; margin: 0 0 1.25rem; }
 .salvage-steps .step-label { display: inline-flex; align-items: center; min-height: 44px; border: 1px solid #d7e1d4; font-weight: 600; }

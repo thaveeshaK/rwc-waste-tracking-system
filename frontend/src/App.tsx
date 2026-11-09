@@ -6,6 +6,8 @@ import { EwastePickupPage } from './features/ewaste-pickup/EwastePickupPage'
 import { settingsSectionFromPath } from './features/settings/sections'
 import type { SettingsSection } from './features/settings/sections'
 import { StaffOperationsPage } from './features/operations/StaffOperationsPage'
+import { BrandLogo } from './components/BrandLogo'
+import { AppFooter } from './components/AppFooter'
 import { WorkflowsPage } from './features/operations/WorkflowsPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { getOperationalConfiguration } from './features/settings/api'
@@ -176,10 +178,10 @@ function App() {
     finally { activityChanged(false) }
   }
 
-  if (loading) return <main className="app-shell"><p role="status">Loading waste tracking...</p></main>
+  if (loading) return <main className="app-shell"><p role="status">Loading Waste Tracking Management System...</p></main>
   if (!user) return <>{error && <p className="notice error" role="alert">{error}</p>}<LoginPage onLogin={user => { setError(''); setPage(user.role === 'ADMIN' ? (settingsSectionFromPath(window.location.pathname) ? 'settings' : 'overview') : 'operations'); setUser(user) }} /></>
   return <><header className="app-header"><div className="header-inner">
-    <div className="brand"><span className="brand-mark" aria-hidden="true">RWC</span><div><strong>{configuration?.organisationName ?? 'Resource Work Cooperative'}</strong><span>{configuration?.siteName || 'Waste tracking'}</span></div></div>
+    <div className="brand"><BrandLogo/><div><strong>{configuration?.organisationName ?? 'Resource Work Cooperative'}</strong><span>Waste Tracking Management System</span>{configuration?.siteName && <small className="brand-site">{configuration.siteName}</small>}</div></div>
     <div className="account"><span>{user.username} <span className="role-badge">{user.role === 'ADMIN' ? 'Admin' : 'Staff'}</span></span>
       <button className="secondary" disabled={signingOut || busy || unresolved || pendingTallies} onClick={signOut}>{signingOut ? 'Signing out...' : 'Sign out'}</button></div>
   </div></header>
@@ -230,7 +232,7 @@ function App() {
           setHasEntry(true)
           setPage('entry')
         }} />}
-      <footer>{user.role === 'ADMIN' ? 'Resource Work Cooperative - Operational dates and times use Australia/Hobart.' : 'Resource Work Cooperative'}</footer>
+      <AppFooter/>
     </main></>
 }
 

@@ -74,7 +74,7 @@ async function staffWorkflow(name) {
 async function adminWorkflow(name) {
   await click('Workflows')
   const ids={'Crate / Pallet':'CRATE_PALLET',Salvage:'SALVAGE',Pickup:'PICKUP','Electrical Crate / Pallet':'ELECTRICAL_CRATE_PALLET',Collectables:'COLLECTABLES',Whitegoods:'WHITEGOODS','Electrical Testing':'ELECTRICAL_TESTING','E-waste Pickup':'EWASTE_PICKUP',Scrap:'SCRAP'}
-  await click('New Entry',`.workflow-card[data-workflow="${ids[name]}"]`)
+  await click(name==='Electrical Testing'?'Open':'New Entry',`.workflow-card[data-workflow="${ids[name]}"]`)
 }
 async function openSettings(label) {
   await click('Settings')
@@ -105,6 +105,34 @@ const enabled = text => until(() => evaluate(`[...document.querySelectorAll('but
 async function screenshot(name) {
   const result = await cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })
   writeFileSync(join(output, name + '.png'), Buffer.from(result.data, 'base64'))
+}
+
+const orderedWorkflows=['CRATE_PALLET','SALVAGE','ELECTRICAL_CRATE_PALLET','PICKUP','EWASTE_PICKUP','COLLECTABLES','WHITEGOODS','ELECTRICAL_TESTING','SCRAP']
+async function checkBranding(view) {
+  await until(()=>evaluate("[...document.querySelectorAll('.brand-logo')].length===1 && [...document.querySelectorAll('.brand-logo')].every(image=>image.complete&&image.naturalWidth>0)"),'branding logo loaded '+view)
+  assert.equal(await evaluate('document.title'),'Waste Tracking Management System')
+  assert.equal(await evaluate("document.querySelector('footer').textContent"),'© Resource Work Cooperative 2026')
+  assert.equal(await evaluate("document.querySelector('.brand-mark')===null"),true)
+  if(view==='login')assert.equal(await evaluate("document.querySelector('h1').textContent"),'Waste Tracking Management System')
+  else {
+    assert.equal(await evaluate("document.querySelector('.brand strong').textContent"),'Resource Work Cooperative')
+    assert.equal(await evaluate("document.querySelector('.brand span').textContent"),'Waste Tracking Management System')
+    assert.equal(await evaluate("document.querySelector('main h1').textContent"),'Workflows')
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('.workflow-card')].map(card=>card.dataset.workflow)"),orderedWorkflows)
+    assert.equal(await evaluate("document.querySelector('[data-workflow=ELECTRICAL_TESTING] button').textContent"),'Open')
+  }
+  const assets=await evaluate(`(async()=>{const paths=[document.querySelector('.brand-logo').src,document.querySelector('link[rel=icon]').href];return Promise.all(paths.map(async path=>{const response=await fetch(path);const bytes=new Uint8Array(await response.arrayBuffer());return {path:new URL(path).pathname,status:response.status,type:response.headers.get('content-type'),signature:[...bytes.slice(0,2)]}}))})()`)
+  assert.deepEqual(assets.map(asset=>asset.path),['/assets/branding/rwc_logo.png','/assets/branding/rwc_favicon.jpg'])
+  assert.deepEqual(assets.map(asset=>asset.status),[200,200])
+  assert.equal(assets[0].type,'image/png');assert.equal(assets[1].type,'image/jpeg')
+  assert.deepEqual(assets[0].signature,[137,80]);assert.deepEqual(assets[1].signature,[255,216])
+  for(const width of [1280,1024,768]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
+    await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'branding overflow '+view+' '+width)
+    assert.equal(await evaluate("(()=>{const image=document.querySelector('.brand-logo');const box=image.getBoundingClientRect();return Math.abs(box.width/box.height-image.naturalWidth/image.naturalHeight)<0.02})()"),true)
+    if(view!=='login')assert.equal(await evaluate("getComputedStyle(document.querySelector('.workflow-card-grid')).gridTemplateColumns.split(' ').length"),3)
+    await screenshot('branding-'+view+'-'+width)
+  }
 }
 
 async function browserApi(path, method = 'GET', body) {
@@ -158,11 +186,13 @@ try {
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false })
   await cdp('Page.navigate', { url: frontend })
   await enabled('Sign in')
+  await checkBranding('login')
   await fill('Username', process.env.INITIAL_STAFF_USERNAME)
   await fill('Password', process.env.INITIAL_STAFF_PASSWORD)
   await click('Sign in')
   await enabled('Records')
-  await hasText('Staff Operations')
+  await hasText('Workflows')
+  await checkBranding('staff')
   await until(()=>evaluate("document.querySelector('.staff-recent tbody')!==null"),'existing recent submissions')
   const initialRecent=(await browserApi('/api/operations/recent-submissions')).body
   assert.equal(await evaluate("document.querySelectorAll('.staff-recent tbody tr').length"),initialRecent.length)
@@ -319,6 +349,7 @@ try {
   await click('Workflows')
   await until(()=>evaluate("document.querySelector('[role=menu]')===null"),'menu closes outside')
   assert.equal(await evaluate("document.querySelectorAll('.workflow-card').length"),9)
+  await checkBranding('admin')
   await evaluate("document.querySelector('.settings-menu-trigger').focus();document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}))")
   await until(()=>evaluate("document.activeElement?.getAttribute('role')==='menuitem'"),'Settings keyboard focus')
   await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}))")
@@ -2020,6 +2051,7 @@ try {
     assert.equal(await evaluate("document.querySelector('.settings-menu-trigger')===null"),true)
   }
   console.log('PASS: Admin Settings navigation/authorization, container/category configuration and validation, immutable history, organisation header, reporting defaults, configurable future Whitegoods factors, mixed-factor summaries and direct Staff navigation denial.')
+  console.log('PASS: Shared branding/logo/favicon, exact workflow order, Electrical Testing Open for both roles, Workflows headings, login/footer text and three-column cards without overflow at 1280/1024/768.')
   console.log('PASS: Admin navigation/API boundaries, Overview, report periods and applied filters, filtered CSV/XLSX downloads, detail links, monthly figures/tonnes/exclusions, soft-delete refresh and tablet layout.')
   console.log('PASS: Electrical Testing selected-month counters/date contributions, Staff historical read-only, date/month synchronization, date-scoped Admin reductions, zero floor, empty months, unsaved guards, addition/reduction lost-response retries, separate sales references, Records/reporting and 1280/1024/768 layouts.')
   console.log('PASS: Whitegoods zero/same-day entries, fixed factor, review/save, retry/navigation, independent monthly summary and error recovery, Admin month/count corrections, stale versions and deletion-driven totals.')

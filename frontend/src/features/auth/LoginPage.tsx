@@ -3,6 +3,8 @@ import type { FormEvent } from 'react'
 import { errorMessage } from '../../api/client'
 import { login } from './api'
 import type { User } from './api'
+import { BrandLogo } from '../../components/BrandLogo'
+import { AppFooter } from '../../components/AppFooter'
 
 export function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
   const [username, setUsername] = useState('')
@@ -18,8 +20,8 @@ export function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
     finally { setBusy(false) }
   }
   return <main className="login-layout">
-    <div className="login-intro"><p className="eyebrow">RESOURCE WORK COOPERATIVE</p>
-      <h1>Waste tracking</h1><p>Record incoming materials and keep your operational records together.</p></div>
+    <div className="login-intro"><BrandLogo className="login-logo"/><p className="eyebrow">Resource Work Cooperative</p>
+      <h1>Waste Tracking Management System</h1><p>Record incoming materials and keep your operational records together.</p></div>
     <form className="panel login-panel" onSubmit={submit}>
       <h2>Sign in</h2><p>Use the shared Staff account or your individual Admin account.</p>
       {error && <p className="notice error" role="alert">{error}</p>}
@@ -29,5 +31,6 @@ export function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
         onChange={event => setPassword(event.target.value)} /></label>
       <button disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
     </form>
+    <AppFooter/>
   </main>
 }

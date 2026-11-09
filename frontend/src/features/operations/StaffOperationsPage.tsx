@@ -24,7 +24,7 @@ export function StaffOperationsPage({onNew, onRecords, busy, unresolved, current
       .catch(e => {if (!cancelled) setError(errorMessage(e))}).finally(() => {if (!cancelled) setLoading(false)})
     return () => {cancelled = true}
   }, [attempt])
-  return <section className="staff-operations"><div className="page-heading"><div><h1>Staff Operations</h1><p>Choose a workflow to start a new record.</p></div></div>
+  return <section className="staff-operations"><div className="page-heading"><div><h1>Workflows</h1><p>Choose a workflow to start a new record.</p></div></div>
     <div className="workflow-card-grid">{workflowEntries.map(w => <article className="panel workflow-card" key={w.id} data-workflow={w.id}><h2>{w.name}</h2><p>{descriptions[w.id]}</p>
       <button disabled={busy || (unresolved && currentWorkflow !== w.id)} aria-label={`${w.id === 'ELECTRICAL_TESTING' ? 'Open' : 'New entry'}: ${w.name}`} onClick={() => onNew(w.id)}>{unresolved && currentWorkflow === w.id ? 'Resume submission' : w.id === 'ELECTRICAL_TESTING' ? 'Open' : 'New Entry'}</button>
     </article>)}</div>
