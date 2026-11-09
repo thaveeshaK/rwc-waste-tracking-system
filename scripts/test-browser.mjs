@@ -193,6 +193,12 @@ try {
   await enabled('Records')
   await hasText('Workflows')
   await checkBranding('staff')
+  // Standalone browser runs start with an empty isolated database, unlike integration runs.
+  if((await browserApi('/api/operations/recent-submissions')).body.length===0) {
+    const today=(await browserApi('/api/auth/me')).body.operationalDate
+    assert.equal((await browserApi('/api/whitegoods-records','POST',{submissionId:crypto.randomUUID(),recordDate:today,count:0})).status,201)
+    await click('Records');await click('Operations')
+  }
   await until(()=>evaluate("document.querySelector('.staff-recent tbody')!==null"),'existing recent submissions')
   const initialRecent=(await browserApi('/api/operations/recent-submissions')).body
   assert.equal(await evaluate("document.querySelectorAll('.staff-recent tbody tr').length"),initialRecent.length)
@@ -290,8 +296,9 @@ try {
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b => b.textContent === 'Correct record')"), false)
   const savedId = await evaluate("document.querySelector('.detail-heading h2').textContent.split('#')[1]")
   await click('Operations')
-  await until(()=>evaluate("document.querySelectorAll('.staff-recent tbody tr').length===5"),'recent Staff submission')
   const recentStaff=(await browserApi('/api/operations/recent-submissions')).body
+  assert.ok(recentStaff.length>0&&recentStaff.length<=5)
+  await until(()=>evaluate(`document.querySelectorAll('.staff-recent tbody tr').length===${recentStaff.length}`),'recent Staff submission')
   assert.equal(String(recentStaff[0].id),savedId)
   assert.equal(await evaluate("document.querySelector('.staff-recent tbody tr').textContent.includes('100.00 kg')"),true)
   assert.equal(await evaluate("[...document.querySelectorAll('.staff-recent button')].some(b=>/edit|delete|correct/i.test(b.textContent))"),false)
@@ -1992,22 +1999,69 @@ try {
   for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'Summary pagination overflow '+width);await screenshot('report-summary-pagination-'+width)}
   await fill('Report workflow','PICKUP');await click('Apply report filters');await until(()=>evaluate(`document.querySelector('${summaryPager} [aria-current="page"]')?.textContent==='1'`),'summary filter resets page')
   await fill('Pickup location contains','no matching aggregate source');await click('Apply report filters');await hasText('No records for this period.');assert.equal(await evaluate(`document.querySelector('${summaryPager}')===null`),true)
-  await click('Waste Levy Summary');await fill('Reporting month','2013-03');await enabled('Export CSV')
-  const mswPager='nav[aria-label="MSW / general intake pagination"]',combinedPager='nav[aria-label="Combined general intake categories pagination"]',electricalPager='nav[aria-label="Electrical Crate / Pallet - operational pagination"]'
-  const currentPage=scope=>evaluate(`document.querySelector('${scope} [aria-current="page"]')?.textContent`)
-  assert.equal(await currentPage(mswPager),'1');assert.equal(await currentPage(combinedPager),'1');assert.equal(await currentPage(electricalPager),'1')
-  await click('Next',mswPager);assert.equal(await currentPage(mswPager),'2');assert.equal(await currentPage(combinedPager),'1');assert.equal(await currentPage(electricalPager),'1')
-  await click('Next',combinedPager);assert.equal(await currentPage(combinedPager),'2');assert.equal(await currentPage(mswPager),'2')
-  await click('Next',electricalPager);assert.equal(await currentPage(electricalPager),'2');assert.equal(await currentPage(mswPager),'2')
-  await fill('Rows per page','25',mswPager);assert.equal(await currentPage(mswPager),'1');assert.equal(await currentPage(combinedPager),'2');await fill('Rows per page','50',mswPager);await fill('Rows per page','10',mswPager)
-  assert.equal(await evaluate("[...document.querySelectorAll('.report-section')].filter(s=>['SCRAP','Whitegoods - estimated','OWF / Salvage Down','RTL / Salvage Up'].includes(s.querySelector('h2')?.textContent)).every(s=>!s.querySelector('.pagination'))"),true)
-  const fullMonthly=(await browserApi('/api/admin/waste-levy-summary?month=2013-03')).body.totals.length
+  // Monthly worksheet: presentation-only matrices over the complete existing response.
+  const worksheetIron=aggregateMaterials.find(c=>c.name==='Iron and Steel').id
+  const worksheetAluminium=aggregateMaterials.find(c=>c.name==='Aluminium').id
+  const worksheetContainer=await browserApi('/api/admin/settings/container-types','POST',{name:'Worksheet intake container',tareWeight:'1.00',active:true,contexts:['CRATE_PALLET']})
+  assert.equal(worksheetContainer.status,200)
+  assert.equal((await browserApi('/api/crate-pallet-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',containerTypeId:worksheetContainer.body.id,grossWeight:'11.01',materials:[{materialCategoryId:worksheetIron,percentage:'33.33'},{materialCategoryId:worksheetAluminium,percentage:'66.67'}]})).status,201)
+  assert.equal((await browserApi('/api/collectable-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',grossWeight:'4.00',materials:[{materialCategoryId:worksheetIron,percentage:'100'}]})).status,201)
+  assert.equal((await browserApi('/api/salvage-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',crew:'Worksheet crew',up:{time:'09:00',kg:'10.00',materials:[{materialCategoryId:worksheetIron,percentage:'100'}]},down:{time:'10:00',kg:'0.01',materials:[{materialCategoryId:worksheetIron,percentage:'50'},{materialCategoryId:worksheetAluminium,percentage:'50'}]}})).status,201)
+  assert.equal((await browserApi('/api/scrap-records','POST',{submissionId:crypto.randomUUID(),reportingMonth:'2013-03',ironAndSteelWeight:'1.11',aluminiumWeight:'2.22',otherNonFerrousWeight:'3.33',mixedMetalsWeight:'4.44',ewasteWeight:'5.55'})).status,201)
+  const worksheetWhitegoods=(await browserApi('/api/whitegoods-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',count:2})).body
+  const worksheetEwaste=(await browserApi('/api/ewaste-pickups','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',organisation:'Worksheet excluded intake',enteredWeight:'12345.67',containers:[]}));assert.equal(worksheetEwaste.status,201)
+  const worksheetDeleted=(await browserApi('/api/pickup-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',pickupLocation:'Deleted worksheet fixture',netWeight:'999.00',materials:[{materialCategoryId:worksheetIron,percentage:'100'}]})).body
+  assert.equal((await browserApi('/api/pickup-records/'+worksheetDeleted.id,'DELETE')).status,204)
+  const worksheetBefore=(await browserApi('/api/admin/waste-levy-summary?month=2013-03')).body
+  assert.equal(worksheetBefore.totals.some(row=>row.workflow==='EWASTE_PICKUP'),false)
+  await click('Waste Levy Summary');await fill('Reporting month','2013-03');await enabled('Export CSV');await fill('Summary units','kg')
+  const levySection=id=>'[data-levy-section="'+id+'"]'
+  const levyRows=id=>evaluate(`[...document.querySelectorAll('${levySection(id)} tbody tr')].map(row=>[...row.cells].map(cell=>cell.textContent.trim()))`)
+  const levyFooter=id=>evaluate(`[...document.querySelectorAll('${levySection(id)} tfoot tr')].map(row=>[...row.cells].map(cell=>cell.textContent.trim()))`)
+  const levyFacts=id=>evaluate(`Object.fromEntries([...document.querySelectorAll('${levySection(id)} dl > div')].map(row=>[row.querySelector('dt').textContent,row.querySelector('dd').textContent]))`)
+  assert.equal(await evaluate("document.querySelectorAll('.levy-worksheet .pagination').length"),0)
+  assert.equal(await evaluate("[...document.querySelectorAll('.levy-worksheet thead th')].some(cell=>['Workflow / direction','Metric','Unit'].includes(cell.textContent))"),false)
+  const downRows=await levyRows('owf');assert.equal(downRows.length,14)
+  assert.deepEqual(downRows.find(row=>row[0]==='Iron and Steel'),['Iron and Steel','0.01'])
+  assert.deepEqual(downRows.find(row=>row[0]==='Aluminium'),['Aluminium','0.01'])
+  assert.equal(downRows.some(row=>/records|net weight/i.test(row[0])),false)
+  assert.deepEqual(await levyFacts('owf'),{'Total weight':'0.01 kg',Records:'1'}) // measured total, not rounded breakdown sum
+  assert.deepEqual((await levyRows('rtl')).find(row=>row[0]==='Iron and Steel'),['Iron and Steel','10.00'])
+  assert.deepEqual(await levyFacts('rtl'),{'Total weight':'10.00 kg',Records:'1'})
+  const matrixRows=await levyRows('msw')
+  assert.ok(matrixRows.length>10)
+  assert.deepEqual(matrixRows.find(row=>row[0]==='Iron and Steel'),['Iron and Steel','3.34','2.00','1.00','6.34'])
+  assert.deepEqual(matrixRows.find(row=>row[0]==='Aluminium'),['Aluminium','6.67','0.00','1.00','7.67'])
+  const worksheetCents=value=>BigInt(value.replace('.',''))
+  for(const row of matrixRows)assert.equal(worksheetCents(row[4]),row.slice(1,4).reduce((total,value)=>total+worksheetCents(value),0n))
+  assert.deepEqual(await levyFooter('msw'),[['Total weight','10.01','2.00','100.00','112.01']])
+  assert.deepEqual((await levyRows('combined')).find(row=>row[0]==='Iron and Steel'),['Iron and Steel','6.34'])
+  assert.equal((await levyRows('combined')).every(row=>row.length===2),true)
+  assert.deepEqual(await levyFooter('combined'),[['Total weight','112.01']])
+  assert.deepEqual(await evaluate(` [...document.querySelectorAll('${levySection('electrical')} thead th')].map(cell=>cell.textContent)`),['Container','TVs / Monitors / Projectors','Everything Else','Total'])
+  assert.deepEqual(await levyRows('electrical'),[0,1,2].map(i=>['Aggregate container '+i,'50.00','50.00','100.00']))
+  assert.deepEqual(await levyFooter('electrical'),[['Total weight','150.00','150.00','300.00']])
+  assert.deepEqual(await levyRows('scrap'),[['Iron and Steel','1.11'],['Aluminium','2.22'],['Other Non-Ferrous Metals','3.33'],['Mixed Metals','4.44'],['E-waste','5.55']])
+  assert.deepEqual(await levyFooter('scrap'),[['Total weight','16.65']])
+  assert.deepEqual(await levyFacts('whitegoods'),{'Whitegoods count':'2','Estimated weight':worksheetWhitegoods.estimatedWeight+' kg','Applied factor':worksheetWhitegoods.kgPerItem+' kg/item'})
+  await fill('Summary units','t')
+  assert.deepEqual((await levyRows('msw')).find(row=>row[0]==='Iron and Steel'),['Iron and Steel','0.00334','0.00200','0.00100','0.00634'])
+  assert.equal((await levyFacts('owf'))['Total weight'],'0.00001 tonnes')
+  await fill('Summary units','kg')
+  const fullMonthly=worksheetBefore.totals.length
   await click('Export CSV');await until(()=>evaluate('window.__aggregateDownloads.length===3'),'monthly full CSV');await enabled('Export Excel');await click('Export Excel');await until(()=>evaluate('window.__aggregateDownloads.length===4'),'monthly full XLSX')
   assert.equal((await evaluate('window.__aggregateDownloads[2].text')).trim().split('\n').length,fullMonthly+1)
-  for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'Monthly section pagination overflow '+width);await screenshot('waste-levy-section-pagination-'+width)}
-  await fill('Reporting month','2013-04');await enabled('Export CSV');for(const scope of [mswPager,combinedPager,electricalPager])assert.equal(await currentPage(scope),'1')
+  assert.equal(await evaluate('window.__aggregateDownloads.slice(2).every(row=>row.status===200&&!row.url.includes("page="))'),true)
+  for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'Monthly worksheet overflow '+width);await screenshot('waste-levy-worksheet-'+width)}
+  await fill('Reporting month','2013-04');await enabled('Export CSV')
+  assert.equal((await levyRows('msw')).every(row=>row.slice(1).every(value=>value==='0.00')),true)
+  await hasText('No records for this period.')
+  assert.deepEqual(await levyFacts('whitegoods'),{'Whitegoods count':'0','Estimated weight':'0.00 kg','Applied factor':'No entries'})
+  await fill('Reporting month','2007-02');await enabled('Export CSV')
+  const mixedFacts=await levyFacts('whitegoods');assert.equal(mixedFacts['Whitegoods count'],'4');assert.equal(mixedFacts['Estimated weight'],'200.50 kg');assert.equal(mixedFacts['Applied factors'],'48.00 / 52.25 kg/item')
+  assert.deepEqual((await browserApi('/api/admin/waste-levy-summary?month=2013-03')).body.totals,worksheetBefore.totals)
   await evaluate('window.fetch=window.__aggregateFetch')
-  console.log('PASS: aggregate Summary server paging/filter resets/empty state, independent Waste Levy section pages/sizes/month reset, compact sections unchanged, complete CSV/XLSX exports and desktop/tablet overflow.')
+  console.log('PASS: Report Summary pagination unchanged; monthly worksheet direction/category totals, intake/electrical matrices, Scrap/Whitegoods, mixed historical factors, kg/tonnes, full CSV/XLSX exports, empty months, no section pagination and 1280/1024/768 overflow.')
   // Admin account management uses the existing Settings destination and pagination controls.
   await openSettings('User Management');await hasText('Manage sign-in access.');await enabled('Add User')
   const managedName='aaa-browser-'+crypto.randomUUID().slice(0,8),managedPassword=crypto.randomUUID(),resetManagedPassword=crypto.randomUUID()

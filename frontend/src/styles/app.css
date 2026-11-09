@@ -110,6 +110,23 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 .report-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; }
 .table-scroll { overflow-x: auto; max-width: 100%; }
 .report-section table { min-width: 660px; }
+.levy-worksheet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.levy-section { min-width: 0; margin: 0; padding: 1rem 1.2rem; }
+.levy-wide { grid-column: 1 / -1; }
+.levy-section h2 { font-size: 1.05rem; margin: 0 0 .7rem; }
+.levy-section table { min-width: 0; font-size: .85rem; }
+.levy-section th, .levy-section td { padding: .45rem .6rem; }
+.levy-section tbody th { background: none; font-size: inherit; font-weight: 400; color: inherit; }
+.levy-section tfoot th, .levy-section tfoot td { background: #edf3e9; font-weight: 700; border-top: 2px solid #ccd9c7; }
+.levy-total { font-weight: 650; background: #f6f8f3; }
+.levy-matrix table { min-width: 620px; }
+.levy-matrix:focus-visible { outline: 2px solid #245c43; outline-offset: 2px; }
+.levy-summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .6rem 1.5rem; border-top: 2px solid #ccd9c7; margin: .6rem 0 0; padding-top: .65rem; }
+.levy-summary dt { color: #617164; font-size: .8rem; }
+.levy-summary dd { margin: .15rem 0 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.levy-whitegoods { margin: 0; border: 0; padding: 0; justify-content: flex-start; gap: 1rem 3rem; }
+.levy-record-count { font-size: .8rem; color: #617164; margin: .6rem 0 0; }
+@media (max-width: 900px) { .levy-worksheet { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) { .metric-grid { grid-template-columns: 1fr; } }
 
 .settings-editor { margin: 1rem 0; padding: 1rem; background: #f4f6f2; border-radius: 6px; }
