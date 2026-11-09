@@ -16,9 +16,9 @@ public final class SettingsData {
             String updatedBy, Instant updatedAt) {}
     public record ReferenceInput(Long version, @NotBlank @Size(max=100) String name,
             @DecimalMin("0") @Digits(integer=8,fraction=2) BigDecimal tareWeight,
-            boolean active, @NotNull Set<String> contexts) {}
+            boolean active, @NotNull Set<String> contexts, String summaryGroup) {}
     public record Reference(Long id, Long version, String name, String tareWeight, boolean active,
-            Set<String> contexts, boolean restricted) {}
+            Set<String> contexts, boolean restricted, String summaryGroup) {}
     public record Operational(String organisationName, String siteName, String reportDisplayName,
             String whitegoodsKgPerItem, String timezone) {}
 }

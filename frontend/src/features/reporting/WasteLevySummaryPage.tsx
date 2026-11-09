@@ -26,9 +26,9 @@ export function WasteLevySummaryPage() {
     catch (e) { setError(errorMessage(e)) } finally { setExporting(false) }
   }
   return <section><div className="page-heading"><div><p className="eyebrow">ADMIN</p><h1>Monthly Waste Levy Summary</h1><p>Monthly figures for manual entry into the existing workbook.</p></div></div>
-    <p className="notice">Working aid only. Not a completed Waste Levy return, NRE reconciliation or regulatory/certified report. E-waste Pickup is currently excluded. Legacy E-waste reconciliation/carry-over calculations are excluded.</p>
+    <p className="notice">Monthly working summary for manual entry into the existing Waste Levy workbook. Not a completed Waste Levy return, NRE reconciliation, or regulatory/certified report. E-waste Pickup and legacy E-waste reconciliation/carry-over calculations are excluded.</p>
     <div className="panel filter-bar"><label>Reporting month<input type="month" required min="0001-01" max="9998-12" value={month} onChange={e => {if (e.target.value) setMonth(e.target.value)}}/></label><label>Summary units<select value={tonnes ? 't' : 'kg'} onChange={e => setTonnes(e.target.value === 't')}><option value="kg">kg (two decimals)</option><option value="t">tonnes (five decimals)</option></select></label><button className="secondary" onClick={() => setAttempt(n => n+1)}>Refresh monthly figures</button><button className="secondary" disabled={loading || exporting} onClick={() => exportFile('csv')}>Export CSV</button><button className="secondary" disabled={loading || exporting} onClick={() => exportFile('xlsx')}>Export Excel</button></div>
     {error && <p className="notice error" role="alert">{error}</p>}
-    {loading ? !error && <p role="status">Loading monthly figures...</p> : result && <><p className="hint">Material weights retain stored rounding and may differ slightly from measured totals. Exports use kg.</p><LevyWorksheet totals={result.data.totals} tonnes={tonnes}/></>}
+    {loading ? !error && <p role="status">Loading monthly figures...</p> : result && <><p className="hint">Material weights retain stored rounding and may differ slightly from measured totals. Exports use kg.</p><LevyWorksheet totals={result.data.totals} containerMaterials={result.data.containerMaterials} tonnes={tonnes}/></>}
   </section>
 }

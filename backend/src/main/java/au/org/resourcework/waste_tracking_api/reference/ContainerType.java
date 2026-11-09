@@ -15,6 +15,8 @@ public class ContainerType {
     private String name;
     @Column(name = "tare_weight", nullable = false, precision = 10, scale = 2)
     private BigDecimal tareWeight;
+    @Column(name = "summary_group", nullable = false, length = 6)
+    private String summaryGroup = "OTHER";
     @Column(nullable = false)
     private boolean active = true;
 }

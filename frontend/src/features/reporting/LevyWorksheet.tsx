@@ -1,6 +1,6 @@
 import { decimalHundredths } from '../../utils/decimal'
 import { amount } from './format'
-import type { Total } from './types'
+import type { Total, ContainerMaterial } from './types'
 
 interface Props { totals: Total[]; tonnes: boolean }
 interface CategoryWeight { key: string; id: number | null; name: string; weight: bigint }
@@ -50,12 +50,15 @@ function SalvageSection({ rows, direction, tonnes }: { rows: Total[]; direction:
 function IntakeMatrix({ totals, tonnes }: Props) {
   const rows = materialRows(totals.filter(row => intakeWorkflows.includes(row.workflow)))
   const labels = categories(rows)
-  const values = (key: string, workflow: string) => sum(rows.filter(row => categoryKey(row) === key && row.workflow === workflow))
-  const columns = intakeWorkflows.map(workflow => sum(rows.filter(row => row.workflow === workflow)))
+  const columnFor = (row: Total) => row.workflow !== 'CRATE_PALLET' ? row.workflow
+    : row.summaryGroup === 'CRATE' ? 'Crates' : row.summaryGroup === 'PALLET' ? 'Pallets' : 'Other containers'
+  const columnNames = ['Crates', 'Pallets', ...(rows.some(row => columnFor(row) === 'Other containers' && exact(row.value) > 0n) ? ['Other containers'] : []), 'COLLECTABLES', 'PICKUP']
+  const values = (key: string, column: string) => sum(rows.filter(row => categoryKey(row) === key && columnFor(row) === column))
+  const columns = columnNames.map(column => sum(rows.filter(row => columnFor(row) === column)))
   return <section className="panel report-section levy-section levy-wide" data-levy-section="msw"><h2>MSW / general intake</h2><p className="hint">Direct intake material weights ({tonnes ? 'tonnes' : 'kg'}).</p>
-    {!labels.length ? <p>No records for this period.</p> : <div className="table-scroll levy-matrix" tabIndex={0} role="region" aria-label="General intake material matrix"><table><thead><tr><th scope="col">Category</th><th scope="col" className="numeric">Crate / Pallet</th><th scope="col" className="numeric">Collectables</th><th scope="col" className="numeric">Pickup</th><th scope="col" className="numeric">Total</th></tr></thead>
-      <tbody>{labels.map(row => <tr key={row.key}><th scope="row">{row.name}</th>{intakeWorkflows.map(workflow => <td className="numeric" key={workflow}>{weight(values(row.key, workflow), tonnes)}</td>)}<td className="numeric levy-total">{weight(row.weight, tonnes)}</td></tr>)}</tbody>
-      <tfoot><tr><th scope="row">Total weight</th>{columns.map((value, index) => <td className="numeric" key={intakeWorkflows[index]}>{weight(value, tonnes)}</td>)}<td className="numeric">{weight(sum(rows), tonnes)}</td></tr></tfoot>
+    {!labels.length ? <p>No records for this period.</p> : <div className="table-scroll levy-matrix" tabIndex={0} role="region" aria-label="General intake material matrix"><table><thead><tr><th scope="col">Category</th>{columnNames.map(column => <th scope="col" className="numeric" key={column}>{column === 'COLLECTABLES' ? 'Collectables' : column === 'PICKUP' ? 'Pickup' : column}</th>)}<th scope="col" className="numeric">Total</th></tr></thead>
+      <tbody>{labels.map(row => <tr key={row.key}><th scope="row">{row.name}</th>{columnNames.map(column => <td className="numeric" key={column}>{weight(values(row.key, column), tonnes)}</td>)}<td className="numeric levy-total">{weight(row.weight, tonnes)}</td></tr>)}</tbody>
+      <tfoot><tr><th scope="row">Total weight</th>{columns.map((value, index) => <td className="numeric" key={columnNames[index]}>{weight(value, tonnes)}</td>)}<td className="numeric">{weight(sum(rows), tonnes)}</td></tr></tfoot>
     </table></div>}
   </section>
 }
@@ -84,11 +87,11 @@ function WhitegoodsSummary({ totals, tonnes }: Props) {
   </section>
 }
 
-export function LevyWorksheet({ totals, tonnes }: Props) {
+export function LevyWorksheet({ totals, tonnes, containerMaterials }: Props & { containerMaterials: ContainerMaterial[] }) {
   return <div className="levy-worksheet">
     <SalvageSection rows={totals.filter(row => row.workflow === 'SALVAGE' && row.direction === 'DOWN')} direction="DOWN" tonnes={tonnes}/>
     <SalvageSection rows={totals.filter(row => row.workflow === 'SALVAGE' && row.direction === 'UP')} direction="UP" tonnes={tonnes}/>
-    <IntakeMatrix totals={totals} tonnes={tonnes}/>
+    <IntakeMatrix totals={[...totals.filter(row => row.workflow !== 'CRATE_PALLET' || row.metric !== 'Material weight' || exact(row.value) === 0n), ...containerMaterials.map(row => ({...row, workflow: 'CRATE_PALLET', direction: null, container: null, metric: 'Material weight', unit: 'kg'}))]} tonnes={tonnes}/>
     <section className="panel report-section levy-section" data-levy-section="combined"><h2>Combined general intake categories</h2><CategoryTable rows={categories(totals.filter(row => row.workflow === 'GENERAL_INTAKE'))} tonnes={tonnes} total/></section>
     <section className="panel report-section levy-section" data-levy-section="scrap"><h2>SCRAP</h2><CategoryTable rows={categories(totals.filter(row => row.workflow === 'SCRAP'), scrapOrder)} tonnes={tonnes} scrap total/></section>
     <ElectricalMatrix totals={totals} tonnes={tonnes}/>

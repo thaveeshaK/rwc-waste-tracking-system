@@ -17,7 +17,9 @@ public final class ReportData {
             long totalItems,int totalPages,int page,int size) {}
     public record Details(ReportFilter filters, String timezone, Instant generatedAt, List<Row> rows,
             long totalRows, int page, int size) {}
-    public record Monthly(String month, String timezone, Instant generatedAt, String note, List<Total> totals) {}
+    public record ContainerMaterial(String summaryGroup, Long categoryId, String category, String value) {}
+    public record Monthly(String month, String timezone, Instant generatedAt, String note, List<Total> totals,
+            List<ContainerMaterial> containerMaterials) {}
     public record Activity(String workflow, long count) {}
     public record Trend(String month, String workflow, long count) {}
     public record DashboardMetrics(String salvageRecoveredKg, String landfillKg, String whitegoodsCount, String whitegoodsEstimatedKg) {}

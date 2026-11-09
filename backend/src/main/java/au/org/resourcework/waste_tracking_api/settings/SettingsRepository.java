@@ -28,16 +28,16 @@ public class SettingsRepository {
     private String link(boolean container) { return table(container)+"_applicability"; }
     private String key(boolean container) { return container?"container_type_id":"material_category_id"; }
     public List<Reference> references(boolean container) {
-        String sql="select r.id,r.settings_version,r.name,r.active,"+(container?"r.tare_weight":"null::numeric tare_weight")+", coalesce(string_agg(a.context,',' order by a.context) filter(where a.active),'') contexts from "+table(container)+" r left join "+link(container)+" a on a."+key(container)+"=r.id group by r.id order by r.id";
-        return jdbc.query(sql,Map.of(),(r,n)->new Reference(r.getLong("id"),r.getLong("settings_version"),r.getString("name"),r.getBigDecimal("tare_weight")==null?null:r.getBigDecimal("tare_weight").toPlainString(),r.getBoolean("active"),r.getString("contexts").isEmpty()?Set.of():new TreeSet<>(List.of(r.getString("contexts").split(","))),!container && Set.of("TVs / Monitors / Projectors","Everything Else").contains(r.getString("name"))));
+        String sql="select r.id,r.settings_version,r.name,r.active,"+(container?"r.tare_weight,r.summary_group":"null::numeric tare_weight,null::text summary_group")+", coalesce(string_agg(a.context,',' order by a.context) filter(where a.active),'') contexts from "+table(container)+" r left join "+link(container)+" a on a."+key(container)+"=r.id group by r.id order by r.id";
+        return jdbc.query(sql,Map.of(),(r,n)->new Reference(r.getLong("id"),r.getLong("settings_version"),r.getString("name"),r.getBigDecimal("tare_weight")==null?null:r.getBigDecimal("tare_weight").toPlainString(),r.getBoolean("active"),r.getString("contexts").isEmpty()?Set.of():new TreeSet<>(List.of(r.getString("contexts").split(","))),!container && Set.of("TVs / Monitors / Projectors","Everything Else").contains(r.getString("name")),r.getString("summary_group")));
     }
     public long create(boolean container,ReferenceInput input,String actor) {
-        String sql="insert into "+table(container)+" (name,active,settings_updated_by,settings_updated_at"+(container?",tare_weight":"")+") values (:name,:active,(select id from app_user where username=:actor),now()"+(container?",:tare":"")+") returning id";
-        return jdbc.queryForObject(sql,new MapSqlParameterSource().addValue("name",input.name().trim()).addValue("active",input.active()).addValue("tare",input.tareWeight()).addValue("actor",actor),Long.class);
+        String sql="insert into "+table(container)+" (name,active,settings_updated_by,settings_updated_at"+(container?",tare_weight,summary_group":"")+") values (:name,:active,(select id from app_user where username=:actor),now()"+(container?",:tare,:summaryGroup":"")+") returning id";
+        return jdbc.queryForObject(sql,new MapSqlParameterSource().addValue("name",input.name().trim()).addValue("active",input.active()).addValue("tare",input.tareWeight()).addValue("summaryGroup",input.summaryGroup()==null?"OTHER":input.summaryGroup()).addValue("actor",actor),Long.class);
     }
     public int update(boolean container,long id,ReferenceInput input,String actor) {
-        return jdbc.update("update "+table(container)+" set name=:name,active=:active,settings_version=settings_version+1,settings_updated_by=(select id from app_user where username=:actor),settings_updated_at=now()"+(container?",tare_weight=:tare":"")+" where id=:id and settings_version=:version",
-                new MapSqlParameterSource().addValue("name",input.name().trim()).addValue("active",input.active()).addValue("tare",input.tareWeight()).addValue("id",id).addValue("version",input.version()).addValue("actor",actor));
+        return jdbc.update("update "+table(container)+" set name=:name,active=:active,settings_version=settings_version+1,settings_updated_by=(select id from app_user where username=:actor),settings_updated_at=now()"+(container?",tare_weight=:tare,summary_group=:summaryGroup":"")+" where id=:id and settings_version=:version",
+                new MapSqlParameterSource().addValue("name",input.name().trim()).addValue("active",input.active()).addValue("tare",input.tareWeight()).addValue("summaryGroup",input.summaryGroup()==null?"OTHER":input.summaryGroup()).addValue("id",id).addValue("version",input.version()).addValue("actor",actor));
     }
     public void applicability(boolean container,long id,Set<String> contexts) {
         jdbc.update("update "+link(container)+" set active=false where "+key(container)+"=:id",Map.of("id",id));

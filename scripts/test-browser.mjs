@@ -1709,7 +1709,7 @@ try {
   await fill('Reporting month','2004-02')
   await hasText('20.00')
   await hasText('144.00')
-  await hasText('Legacy E-waste reconciliation/carry-over calculations are excluded.')
+  assert.equal(await evaluate(`document.querySelector('.notice').textContent`), 'Monthly working summary for manual entry into the existing Waste Levy workbook. Not a completed Waste Levy return, NRE reconciliation, or regulatory/certified report. E-waste Pickup and legacy E-waste reconciliation/carry-over calculations are excluded.')
   await fill('Summary units','t')
   await hasText('0.02000')
   await screenshot('tablet-monthly-waste-levy')
@@ -1735,7 +1735,7 @@ try {
   assert.equal(await evaluate("[...document.querySelectorAll('label')].some(l=>l.textContent.includes('Timezone')&&l.querySelector('select,input'))"),false)
   await click('Add container type')
   const containerSettings='section[aria-label="Container Types"]'
-  await fill('Container name','Browser Settings Container',containerSettings)
+  await fill('Waste Levy summary group','OTHER');await fill('Container name','Browser Settings Container',containerSettings)
   await fill('Tare weight','-1',containerSettings)
   assert.equal(await evaluate(`document.querySelector(${JSON.stringify(containerSettings)}+' input[type=number]').checkValidity()`),false)
   await fill('Tare weight','2.00',containerSettings)
@@ -1748,7 +1748,7 @@ try {
   const historicalCrate=await browserApi('/api/crate-pallet-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2007-02-10',containerTypeId:configuredContainer.id,grossWeight:'12.00',materials:[{materialCategoryId:settingsMaterial,percentage:'100.00'}]})
   assert.equal(historicalCrate.status,201)
   await click('Edit Browser Settings Container')
-  await fill('Container name','Renamed Browser Container',containerSettings)
+  await fill('Waste Levy summary group','OTHER');await fill('Container name','Renamed Browser Container',containerSettings)
   await fill('Tare weight','5.00',containerSettings)
   await fill('Status','inactive',containerSettings)
   await click('Save container type',containerSettings)
@@ -1852,7 +1852,7 @@ try {
   await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
   const ewasteRefs=(await browserApi('/api/admin/settings/container-types')).body
   const ewastePlastic=ewasteRefs.find(c=>c.name==='Plastic Pallet'),ewastePine=ewasteRefs.find(c=>c.name==='Pine Pallet')
-  for(const c of [ewastePlastic,ewastePine])assert.equal((await browserApi('/api/admin/settings/container-types/'+c.id,'PUT',{version:c.version,name:c.name,tareWeight:c.tareWeight,active:true,contexts:[...new Set([...c.contexts,'EWASTE_PICKUP'])]})).status,200)
+  for(const c of [ewastePlastic,ewastePine])assert.equal((await browserApi('/api/admin/settings/container-types/'+c.id,'PUT',{summaryGroup:c.summaryGroup,version:c.version,name:c.name,tareWeight:c.tareWeight,active:true,contexts:[...new Set([...c.contexts,'EWASTE_PICKUP'])]})).status,200)
   await openSettings('Container Types');await enabled('Edit Plastic Pallet');await click('Edit Plastic Pallet')
   assert.equal(await evaluate("[...document.querySelectorAll('.settings-contexts label')].some(l=>l.textContent==='EWASTE PICKUP'&&l.querySelector('input').checked)"),true)
   await click('Cancel edit')
@@ -1878,7 +1878,7 @@ try {
   const ewasteInput=JSON.parse(ewastePayloads[0]);const ewasteRows=(await browserApi('/api/ewaste-pickups')).body.filter(r=>r.submissionId===ewasteInput.submissionId);assert.equal(ewasteRows.length,1);const ewasteId=ewasteRows[0].id
   await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
   const currentEwastePlastic=(await browserApi('/api/admin/settings/container-types')).body.find(c=>c.id===ewastePlastic.id)
-  assert.equal((await browserApi('/api/admin/settings/container-types/'+ewastePlastic.id,'PUT',{version:currentEwastePlastic.version,name:'Renamed E-waste Pallet',tareWeight:'9.00',active:false,contexts:currentEwastePlastic.contexts})).status,200)
+  assert.equal((await browserApi('/api/admin/settings/container-types/'+ewastePlastic.id,'PUT',{summaryGroup:currentEwastePlastic.summaryGroup,version:currentEwastePlastic.version,name:'Renamed E-waste Pallet',tareWeight:'9.00',active:false,contexts:currentEwastePlastic.contexts})).status,200)
   const historicalEwaste=(await browserApi('/api/ewaste-pickups/'+ewasteId)).body
   assert.equal(historicalEwaste.netWeight,'34.55');assert.equal(historicalEwaste.containers.find(c=>c.containerTypeId===ewastePlastic.id).name,'Plastic Pallet')
   await click('Records');await fill('Workflow','EWASTE_PICKUP');await enabled('#'+ewasteId);await click('#'+ewasteId);await enabled('Correct record');await click('Correct record')
@@ -2002,7 +2002,7 @@ try {
   // Monthly worksheet: presentation-only matrices over the complete existing response.
   const worksheetIron=aggregateMaterials.find(c=>c.name==='Iron and Steel').id
   const worksheetAluminium=aggregateMaterials.find(c=>c.name==='Aluminium').id
-  const worksheetContainer=await browserApi('/api/admin/settings/container-types','POST',{name:'Worksheet intake container',tareWeight:'1.00',active:true,contexts:['CRATE_PALLET']})
+  const worksheetContainer=await browserApi('/api/admin/settings/container-types','POST',{summaryGroup:'OTHER',name:'Worksheet intake container',tareWeight:'1.00',active:true,contexts:['CRATE_PALLET']})
   assert.equal(worksheetContainer.status,200)
   assert.equal((await browserApi('/api/crate-pallet-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',containerTypeId:worksheetContainer.body.id,grossWeight:'11.01',materials:[{materialCategoryId:worksheetIron,percentage:'33.33'},{materialCategoryId:worksheetAluminium,percentage:'66.67'}]})).status,201)
   assert.equal((await browserApi('/api/collectable-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',grossWeight:'4.00',materials:[{materialCategoryId:worksheetIron,percentage:'100'}]})).status,201)
@@ -2012,6 +2012,18 @@ try {
   const worksheetEwaste=(await browserApi('/api/ewaste-pickups','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',organisation:'Worksheet excluded intake',enteredWeight:'12345.67',containers:[]}));assert.equal(worksheetEwaste.status,201)
   const worksheetDeleted=(await browserApi('/api/pickup-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',pickupLocation:'Deleted worksheet fixture',netWeight:'999.00',materials:[{materialCategoryId:worksheetIron,percentage:'100'}]})).body
   assert.equal((await browserApi('/api/pickup-records/'+worksheetDeleted.id,'DELETE')).status,204)
+  // All approved groups plus an unknown container; names are matched exactly, not guessed.
+  const worksheetNames=['Apple Crate','Stillage Cage','Plastic Pallet','Pine Pallet','Hardwood Pallet']
+  for(const [index,name] of worksheetNames.entries()) {
+    let container=(await browserApi('/api/admin/settings/container-types')).body.find(c=>c.name===name)
+    if(!container) container=(await browserApi('/api/admin/settings/container-types','POST',{name,summaryGroup:index<2?'CRATE':'PALLET',tareWeight:'1.00',active:true,contexts:['CRATE_PALLET']})).body
+    else container=(await browserApi('/api/admin/settings/container-types/'+container.id,'PUT',{summaryGroup:index<2?'CRATE':'PALLET',version:container.version,name:container.name,tareWeight:container.tareWeight,active:true,contexts:[...new Set([...container.contexts,'CRATE_PALLET'])]})).body
+    const gross=(BigInt(container.tareWeight.replace('.',''))+BigInt(index+1)*100n)
+    const payload={submissionId:crypto.randomUUID(),recordDate:'2013-03-10',containerTypeId:container.id,grossWeight:(gross/100n)+'.'+(gross%100n).toString().padStart(2,'0'),materials:[{materialCategoryId:worksheetIron,percentage:'100'}]}
+    assert.equal((await browserApi('/api/crate-pallet-records','POST',payload)).status,201)
+    if(index===0) assert.equal((await browserApi('/api/crate-pallet-records','POST',{...payload,submissionId:crypto.randomUUID(),recordDate:'2013-05-10'})).status,201)
+    assert.equal((await browserApi('/api/admin/settings/container-types/'+container.id,'PUT',{version:container.version,name:container.name,tareWeight:container.tareWeight,active:container.active,contexts:container.contexts,summaryGroup:'OTHER'})).status,200) // Existing monthly rows must retain their submitted group.
+  }
   const worksheetBefore=(await browserApi('/api/admin/waste-levy-summary?month=2013-03')).body
   assert.equal(worksheetBefore.totals.some(row=>row.workflow==='EWASTE_PICKUP'),false)
   await click('Waste Levy Summary');await fill('Reporting month','2013-03');await enabled('Export CSV');await fill('Summary units','kg')
@@ -2028,16 +2040,17 @@ try {
   assert.deepEqual(await levyFacts('owf'),{'Total weight':'0.01 kg',Records:'1'}) // measured total, not rounded breakdown sum
   assert.deepEqual((await levyRows('rtl')).find(row=>row[0]==='Iron and Steel'),['Iron and Steel','10.00'])
   assert.deepEqual(await levyFacts('rtl'),{'Total weight':'10.00 kg',Records:'1'})
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('${levySection('msw')} thead th')].map(cell=>cell.textContent)`),['Category','Crates','Pallets','Other containers','Collectables','Pickup','Total'])
   const matrixRows=await levyRows('msw')
   assert.ok(matrixRows.length>10)
-  assert.deepEqual(matrixRows.find(row=>row[0]==='Iron and Steel'),['Iron and Steel','3.34','2.00','1.00','6.34'])
-  assert.deepEqual(matrixRows.find(row=>row[0]==='Aluminium'),['Aluminium','6.67','0.00','1.00','7.67'])
+  assert.deepEqual(matrixRows.find(row=>row[0]==='Iron and Steel'),['Iron and Steel','3.00','12.00','3.34','2.00','1.00','21.34'])
+  assert.deepEqual(matrixRows.find(row=>row[0]==='Aluminium'),['Aluminium','0.00','0.00','6.67','0.00','1.00','7.67'])
   const worksheetCents=value=>BigInt(value.replace('.',''))
-  for(const row of matrixRows)assert.equal(worksheetCents(row[4]),row.slice(1,4).reduce((total,value)=>total+worksheetCents(value),0n))
-  assert.deepEqual(await levyFooter('msw'),[['Total weight','10.01','2.00','100.00','112.01']])
-  assert.deepEqual((await levyRows('combined')).find(row=>row[0]==='Iron and Steel'),['Iron and Steel','6.34'])
+  for(const row of matrixRows)assert.equal(worksheetCents(row.at(-1)),row.slice(1,-1).reduce((total,value)=>total+worksheetCents(value),0n))
+  assert.deepEqual(await levyFooter('msw'),[['Total weight','3.00','12.00','10.01','2.00','100.00','127.01']])
+  assert.deepEqual((await levyRows('combined')).find(row=>row[0]==='Iron and Steel'),['Iron and Steel','21.34'])
   assert.equal((await levyRows('combined')).every(row=>row.length===2),true)
-  assert.deepEqual(await levyFooter('combined'),[['Total weight','112.01']])
+  assert.deepEqual(await levyFooter('combined'),[['Total weight','127.01']])
   assert.deepEqual(await evaluate(` [...document.querySelectorAll('${levySection('electrical')} thead th')].map(cell=>cell.textContent)`),['Container','TVs / Monitors / Projectors','Everything Else','Total'])
   assert.deepEqual(await levyRows('electrical'),[0,1,2].map(i=>['Aggregate container '+i,'50.00','50.00','100.00']))
   assert.deepEqual(await levyFooter('electrical'),[['Total weight','150.00','150.00','300.00']])
@@ -2045,7 +2058,7 @@ try {
   assert.deepEqual(await levyFooter('scrap'),[['Total weight','16.65']])
   assert.deepEqual(await levyFacts('whitegoods'),{'Whitegoods count':'2','Estimated weight':worksheetWhitegoods.estimatedWeight+' kg','Applied factor':worksheetWhitegoods.kgPerItem+' kg/item'})
   await fill('Summary units','t')
-  assert.deepEqual((await levyRows('msw')).find(row=>row[0]==='Iron and Steel'),['Iron and Steel','0.00334','0.00200','0.00100','0.00634'])
+  assert.deepEqual((await levyRows('msw')).find(row=>row[0]==='Iron and Steel'),['Iron and Steel','0.00300','0.01200','0.00334','0.00200','0.00100','0.02134'])
   assert.equal((await levyFacts('owf'))['Total weight'],'0.00001 tonnes')
   await fill('Summary units','kg')
   const fullMonthly=worksheetBefore.totals.length
@@ -2053,6 +2066,9 @@ try {
   assert.equal((await evaluate('window.__aggregateDownloads[2].text')).trim().split('\n').length,fullMonthly+1)
   assert.equal(await evaluate('window.__aggregateDownloads.slice(2).every(row=>row.status===200&&!row.url.includes("page="))'),true)
   for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'Monthly worksheet overflow '+width);await screenshot('waste-levy-worksheet-'+width)}
+  await fill('Reporting month','2013-05');await enabled('Export CSV')
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('${levySection('msw')} thead th')].map(cell=>cell.textContent)`),['Category','Crates','Pallets','Collectables','Pickup','Total'])
+  assert.deepEqual((await levyRows('msw')).find(row=>row[0]==='Iron and Steel'),['Iron and Steel','1.00','0.00','0.00','0.00','1.00'])
   await fill('Reporting month','2013-04');await enabled('Export CSV')
   assert.equal((await levyRows('msw')).every(row=>row.slice(1).every(value=>value==='0.00')),true)
   await hasText('No records for this period.')

@@ -103,6 +103,16 @@ public class ReportingRepository {
             ) t order by workflow,direction nulls first,container nulls first,category_id nulls first,metric,category nulls first,unit,value
             """;
     }
+    public List<ContainerMaterial> containerMaterials(ReportFilter f) {
+        return jdbc.query("""
+            select r.summary_group_snapshot,c.id,c.name,sum(m.material_weight) weight
+            from crate_pallet_record r join crate_pallet_material m on m.crate_pallet_record_id=r.id
+            join material_category c on c.id=m.material_category_id
+            where r.deleted_at is null and r.record_date between :from and :to
+            group by r.summary_group_snapshot,c.id,c.name order by r.summary_group_snapshot,c.id
+            """,Map.of("from",f.from(),"to",f.to()),(r,n)->new ContainerMaterial(
+                r.getString(1),r.getLong(2),r.getString(3),r.getBigDecimal(4).toPlainString()));
+    }
     public long totalCount(ReportFilter f) {
         var p=new MapSqlParameterSource();
         return jdbc.queryForObject("select count(*) from ("+totalsSql(f,p)+") summary_rows",p,Long.class);

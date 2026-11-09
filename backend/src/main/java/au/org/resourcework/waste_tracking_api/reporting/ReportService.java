@@ -82,7 +82,7 @@ public class ReportService {
         for (String direction:List.of("UP","DOWN")) if (totals.stream().noneMatch(t->t.workflow().equals("SALVAGE") && Objects.equals(t.direction(),direction) && t.metric().equals("Net weight"))) {
             totals.add(new Total("SALVAGE",direction,null,null,null,"Net weight","kg","0.00"));
         }
-        return new Monthly(value,"Australia/Hobart",clock.instant(),NOTE,totals);
+        return new Monthly(value,"Australia/Hobart",clock.instant(),NOTE,totals,repository.containerMaterials(f));
     }
     private void addMissingCategories(List<Total> totals) {
         for (var t:repository.categoryTemplates()) {

@@ -83,6 +83,7 @@ public class CratePalletService {
         saved.setRecordDate(calculated.getRecordDate());
         saved.setContainerType(calculated.getContainerType());
         saved.setContainerName(calculated.getContainerName());
+        saved.setSummaryGroupSnapshot(calculated.getSummaryGroupSnapshot());
         saved.setGrossWeight(calculated.getGrossWeight());
         saved.setTareWeight(calculated.getTareWeight());
         saved.setNetWeight(calculated.getNetWeight());
@@ -120,6 +121,7 @@ public class CratePalletService {
         result.setRecordDate(input.recordDate());
         result.setContainerType(container);
         result.setContainerName(sameContainer ? previous.getContainerName() : container.getName());
+        result.setSummaryGroupSnapshot(sameContainer ? previous.getSummaryGroupSnapshot() : container.getSummaryGroup());
         result.setGrossWeight(input.grossWeight().setScale(2));
         result.setTareWeight(tare);
         result.setNetWeight(net);

@@ -44,12 +44,13 @@ class SettingsIntegrationTests {
     }
     private JsonNode write(String path,String method,Object body,int expected) throws Exception {
         var response=mvc.perform(request(org.springframework.http.HttpMethod.valueOf(method),path).with(user(admin).roles("ADMIN")).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().is(expected)).andReturn().getResponse();
+        entities.flush();
         entities.clear(); // Separate HTTP requests do not share managed reference entities in production.
         return response.getContentAsString().isEmpty()?null:json.readTree(response.getContentAsString());
     }
     private ObjectNode configuration() throws Exception {return (ObjectNode)read(BASE);}
     private Map<String,Object> reference(String name,String tare,boolean active,String... contexts) {
-        var value=new HashMap<String,Object>();value.put("name",name);value.put("tareWeight",tare);value.put("active",active);value.put("contexts",List.of(contexts));return value;
+        var value=new HashMap<String,Object>();value.put("name",name);value.put("tareWeight",tare);value.put("active",active);value.put("contexts",List.of(contexts));if(tare!=null)value.put("summaryGroup","OTHER");return value;
     }
     private Map<String,Object> crate(long container,long material,String gross,boolean electrical) throws Exception {
         var materials=new ArrayList<Map<String,Object>>();
@@ -118,6 +119,34 @@ class SettingsIntegrationTests {
             edit=reference("Renamed "+context,"9",true,context);edit.put("version",row.path("version").asLong());write(BASE+"/container-types/"+id,"PUT",edit,200);
             var future=write(base,"POST",crate(id,iron,"12",electrical),201);assertThat(future.path("tareWeight").asText()).isEqualTo("9.00");assertThat(future.path("netWeight").asText()).isEqualTo("3.00");
         }
+    }
+    @Test void containerSummaryGroupsAreExplicitAndUnrelatedWorkflowsRemainOptional() throws Exception {
+        for(String group:List.of("CRATE","PALLET","OTHER")) {
+            var input=reference("Group "+group,"1",true,"CRATE_PALLET");input.put("summaryGroup",group);
+            assertThat(write(BASE+"/container-types","POST",input,200).path("summaryGroup").asText()).isEqualTo(group);
+        }
+        var missing=reference("Missing group","1",true,"CRATE_PALLET");missing.remove("summaryGroup");
+        write(BASE+"/container-types","POST",missing,400);
+        missing.put("summaryGroup","GUESS");write(BASE+"/container-types","POST",missing,400);
+        missing.remove("summaryGroup");missing.put("contexts",List.of("EWASTE_PICKUP"));
+        write(BASE+"/container-types","POST",missing,200);
+    }
+    @Test void summaryGroupSnapshotsSurviveSettingsChangesRetriesAndSameContainerCorrections() throws Exception {
+        var input=reference("Custom name unrelated to grouping","2",true,"CRATE_PALLET");input.put("summaryGroup","CRATE");
+        var container=write(BASE+"/container-types","POST",input,200);long id=container.path("id").asLong();
+        var payload=crate(id,iron,"12",false);var first=write("/api/crate-pallet-records","POST",payload,201);
+        input.put("version",container.path("version").asLong());input.put("summaryGroup","PALLET");
+        write(BASE+"/container-types/"+id,"PUT",input,200);
+        write("/api/crate-pallet-records","POST",payload,200); // retry retains its original group
+        payload.put("version",first.path("version").asLong());payload.put("grossWeight","13");
+        write("/api/crate-pallet-records/"+first.path("id").asLong(),"PUT",payload,200);
+        assertThat(jdbc.queryForObject("select summary_group_snapshot from crate_pallet_record where id=?",String.class,first.path("id").asLong())).isEqualTo("CRATE");
+        var second=write("/api/crate-pallet-records","POST",crate(id,iron,"12",false),201);
+        assertThat(jdbc.queryForObject("select summary_group_snapshot from crate_pallet_record where id=?",String.class,second.path("id").asLong())).isEqualTo("PALLET");
+        var monthly=read("/api/admin/waste-levy-summary?month=2006-01").path("containerMaterials");
+        assertThat(monthly.toString()).contains("CRATE","PALLET","11.00","10.00");
+        write("/api/crate-pallet-records/"+second.path("id").asLong(),"DELETE",Map.of(),204);
+        assertThat(read("/api/admin/waste-levy-summary?month=2006-01").path("containerMaterials").toString()).doesNotContain("PALLET");
     }
     @Test void materialIdentityAndInactiveHistoricalReferencesArePreserved() throws Exception {
         var category=write(BASE+"/material-categories","POST",reference("Settings material",null,true,"CRATE_PALLET"),200);long id=category.path("id").asLong();
