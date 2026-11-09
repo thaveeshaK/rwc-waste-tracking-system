@@ -6,6 +6,7 @@ export const getSummary=(month:string)=>request<MonthlySummary>(`${base}/monthly
 export const getReferences=(month:string)=>request<SalesReference[]>(`${base}/sales-references?month=${encodeURIComponent(month)}`)
 export const previewTally=(input:TallyInput,id?:number)=>jsonRequest<TallyRecord>(`${base}/tallies/preview${id?`?recordId=${id}`:''}`,'POST',input)
 export const submitTally=(input:TallyInput)=>jsonRequest<TallyRecord>(`${base}/tallies`,'POST',input)
+export const reduceTally=(id:number,input:{recordDate:string;version:number;count:number})=>jsonRequest<void>(`${base}/tallies/${id}/reduction`,'POST',input)
 export const updateTally=(id:number,input:TallyInput)=>jsonRequest<TallyRecord>(`${base}/tallies/${id}`,'PUT',input)
 export const getRecord=(id:number)=>request<TallyRecord>(`${base}/tallies/${id}`)
 export const deleteRecord=(id:number)=>request<void>(`${base}/tallies/${id}`,{method:'DELETE'})

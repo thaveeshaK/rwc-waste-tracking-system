@@ -175,8 +175,8 @@ class ElectricalTestingIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM electrical_testing_sales_reference",Integer.class)).isEqualTo(1);
     }
     @Test void largeMonthlySumsAndDateBoundariesRemainIndependent() throws Exception {
-        for(int i=0;i<2;i++) createTally(new TallyRequest(UUID.randomUUID(),LocalDate.of(2024,2,29),category,TallyType.STOCK_CULL,new BigDecimal("2147483647"),null));
-        createTally(new TallyRequest(UUID.randomUUID(),LocalDate.of(2024,3,1),category,TallyType.STOCK_CULL,BigDecimal.ONE,null));
+        for(int i=0;i<2;i++) createAt(LocalDate.of(2024,2,29),"2147483647");
+        createAt(LocalDate.of(2024,3,1),"1");
         mvc.perform(get(BASE+"/monthly-summary").session(staff).param("month","2024-02")).andExpect(jsonPath("$.categories[0].stockCull").value(4294967294L));
         mvc.perform(get(BASE+"/monthly-summary").session(staff).param("month","2024-03")).andExpect(jsonPath("$.categories[0].stockCull").value(1));
         mvc.perform(get(BASE+"/tallies").session(staff).param("from","2024-03-01").param("to","2024-03-01")).andExpect(jsonPath("$.length()").value(1));
@@ -188,6 +188,88 @@ class ElectricalTestingIntegrationTests {
         putResult("/tallies/"+saved.path("id").asLong(),new TallyRequest(UUID.randomUUID(),LocalDate.now(clock),category,TallyType.STOCK_CULL,BigDecimal.TEN,saved.path("version").asLong()),200);
         assertThatThrownBy(()->jdbc.update("UPDATE electrical_testing_tally SET count=0 WHERE id=?",saved.path("id").asLong())).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
         assertThatThrownBy(()->jdbc.update("UPDATE electrical_testing_tally SET category_id=NULL WHERE id=?",saved.path("id").asLong())).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+    @Test void selectedMonthAndDateTotalsExcludeDeletedRowsAndKeepOtherMonthsSeparate() throws Exception {
+        createAt(LocalDate.of(2024,2,5),"12");
+        createAt(LocalDate.of(2024,2,9),"2");
+        var deleted=createAt(LocalDate.of(2024,2,9),"9");
+        createAt(LocalDate.of(2024,3,1),"30");
+        mvc.perform(delete(BASE+"/tallies/"+deleted.path("id").asLong()).session(admin).with(csrf())).andExpect(status().isNoContent());
+        mvc.perform(get(BASE+"/monthly-summary").session(staff).param("month","2024-02")).andExpect(jsonPath("$.categories[0].stockCull").value(14));
+        mvc.perform(get(BASE+"/tallies").session(staff).param("from","2024-02-09").param("to","2024-02-09"))
+            .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].count").value(2));
+        mvc.perform(get(BASE+"/monthly-summary").session(staff).param("month","2024-01")).andExpect(jsonPath("$.categories[0].stockCull").value(0)).andExpect(jsonPath("$.divertedToOls").value(0));
+    }
+    @Test void staffReducesOnlyTodayAndZeroSoftDeletesWithoutTouchingEarlierDates() throws Exception {
+        var earlier=createAt(LocalDate.now(clock).minusDays(1),"12");
+        var today=createTally(tally("2",TallyType.STOCK_CULL,category));
+        reduction(today,LocalDate.now(clock),0,"1",staff,204);
+        reduction(today,LocalDate.now(clock),0,"1",staff,204); // lost response retry
+        reduction(today,LocalDate.now(clock),1,"0",staff,204);
+        reduction(today,LocalDate.now(clock),1,"0",staff,204); // soft-delete retry
+        assertThat(jdbc.queryForObject("select count from electrical_testing_tally where id=?",Integer.class,earlier.path("id").asLong())).isEqualTo(12);
+        assertThat(jdbc.queryForObject("select count(*) from electrical_testing_tally where id=? and deleted_at is not null and deleted_by=updated_by",Integer.class,today.path("id").asLong())).isEqualTo(1);
+        mvc.perform(get(BASE+"/tallies").session(staff).param("from",LocalDate.now(clock).toString()).param("to",LocalDate.now(clock).toString())).andExpect(jsonPath("$.length()").value(0));
+    }
+    @Test void staffHistoricalWritesAndAllFutureWritesAreRejected() throws Exception {
+        var yesterday=LocalDate.now(clock).minusDays(1);
+        var earlier=createAt(yesterday,"3");
+        reduction(earlier,yesterday,0,"2",staff,403);
+        postStatus("/tallies",new TallyRequest(UUID.randomUUID(),yesterday,category,TallyType.STOCK_CULL,BigDecimal.ONE,null),staff,403);
+        for(var session:List.of(staff,admin)) {
+            reduction(earlier,LocalDate.now(clock).plusDays(1),0,"2",session,400);
+            postStatus("/tallies",new TallyRequest(UUID.randomUUID(),LocalDate.now(clock).plusDays(1),category,TallyType.STOCK_CULL,BigDecimal.ONE,null),session,400);
+        }
+        assertThat(jdbc.queryForObject("select count from electrical_testing_tally where id=?",Integer.class,earlier.path("id").asLong())).isEqualTo(3);
+    }
+    @Test void adminHistoricalReductionChangesOnlySelectedDateAndRetainsCreationMetadata() throws Exception {
+        var first=createAt(LocalDate.of(2024,2,5),"3");
+        var other=createAt(LocalDate.of(2024,2,9),"11");
+        reduction(first,LocalDate.of(2024,2,5),0,"2",admin,204);
+        mvc.perform(get(BASE+"/monthly-summary").session(staff).param("month","2024-02")).andExpect(jsonPath("$.categories[0].stockCull").value(13));
+        var updated=service.get(first.path("id").asLong());
+        assertThat(updated.createdBy()).isEqualTo(first.path("createdBy").asText());
+        assertThat(updated.createdAt().toString()).isEqualTo(first.path("createdAt").asText());
+        assertThat(updated.updatedBy()).isEqualTo(System.getenv("INITIAL_ADMIN_USERNAME"));
+        assertThat(service.get(other.path("id").asLong()).count()).isEqualTo(11);
+        reduction(first,LocalDate.of(2024,2,9),1,"1",admin,409);
+    }
+    @Test void reductionsRejectStaleVersionsInvalidCountsAndMissingRecords() throws Exception {
+        var saved=createTally(tally("5",TallyType.STOCK_CULL,category));
+        for(var invalid:List.of("-1","1.5","2147483648","5","6")) reduction(saved,LocalDate.now(clock),0,invalid,staff,400);
+        reduction(saved,LocalDate.now(clock),0,"4",staff,204);
+        reduction(saved,LocalDate.now(clock),0,"3",staff,409);
+        reduction(saved,LocalDate.now(clock),0,"4",staff,204);
+        postStatus("/tallies/999999/reduction",new TallyReductionRequest(LocalDate.now(clock),0L,BigDecimal.ONE),staff,404);
+    }
+    @Test void reductionsRequireAuthenticationAndCsrf() throws Exception {
+        var saved=createTally(tally("2",TallyType.STOCK_CULL,category));
+        String path=BASE+"/tallies/"+saved.path("id").asLong()+"/reduction";
+        String body=json.writeValueAsString(new TallyReductionRequest(LocalDate.now(clock),0L,BigDecimal.ONE));
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isUnauthorized());
+        mvc.perform(post(path).session(staff).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        assertThat(service.get(saved.path("id").asLong()).count()).isEqualTo(2);
+    }
+    @Test void concurrentDifferentReductionsCannotOverwriteEachOther() throws Exception {
+        var saved=createTally(tally("5",TallyType.STOCK_CULL,category));
+        var start=new CountDownLatch(1);
+        try(var executor=Executors.newFixedThreadPool(2)) {
+            var futures=new ArrayList<Future<Integer>>();
+            for(int count:List.of(3,4)) futures.add(executor.submit(()->{
+                start.await();
+                try { service.reduce(saved.path("id").asLong(),new TallyReductionRequest(LocalDate.now(clock),0L,BigDecimal.valueOf(count)),System.getenv("INITIAL_STAFF_USERNAME"));return 204; }
+                catch(org.springframework.web.server.ResponseStatusException error){return error.getStatusCode().value();}
+            }));
+            start.countDown();assertThat(List.of(futures.get(0).get(10,TimeUnit.SECONDS),futures.get(1).get(10,TimeUnit.SECONDS))).containsExactlyInAnyOrder(204,409);
+        }
+    }
+    private JsonNode createAt(LocalDate date,String count) throws Exception {
+        var input=new TallyRequest(UUID.randomUUID(),date,category,TallyType.STOCK_CULL,new BigDecimal(count),null);
+        var result=mvc.perform(post(BASE+"/tallies").session(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(input))).andExpect(status().isCreated()).andReturn();
+        return json.readTree(result.getResponse().getContentAsString());
+    }
+    private void reduction(JsonNode saved,LocalDate date,long version,String count,MockHttpSession session,int status) throws Exception {
+        postStatus("/tallies/"+saved.path("id").asLong()+"/reduction",new TallyReductionRequest(date,version,new BigDecimal(count)),session,status);
     }
     private TallyRequest tally(String n,TallyType type,Long category) {return new TallyRequest(UUID.randomUUID(),LocalDate.now(clock),category,type,new BigDecimal(n),null);}
     private SalesReferenceRequest reference(String n) {return new SalesReferenceRequest(UUID.randomUUID(),YearMonth.now(clock).toString(),category,new BigDecimal(n),null);}

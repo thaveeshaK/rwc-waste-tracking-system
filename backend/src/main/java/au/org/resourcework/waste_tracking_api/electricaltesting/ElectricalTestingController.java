@@ -27,6 +27,11 @@ public class ElectricalTestingController {
     @GetMapping("/tallies")
     public List<TallyResponse> list(@RequestParam(required=false) LocalDate from,@RequestParam(required=false) LocalDate to) { return tallies.list(from,to); }
     @GetMapping("/tallies/{id}") public TallyResponse get(@PathVariable Long id) { return tallies.get(id); }
+    @PostMapping("/tallies/{id}/reduction")
+    public ResponseEntity<Void> reduce(@PathVariable Long id, @Valid @RequestBody TallyReductionRequest input, Principal principal) {
+        tallies.reduce(id,input,principal.getName());
+        return ResponseEntity.noContent().build();
+    }
     @PutMapping("/tallies/{id}") public TallyResponse update(@PathVariable Long id,@Valid @RequestBody TallyRequest input,Principal principal) { return tallies.update(id,input,principal.getName()); }
     @DeleteMapping("/tallies/{id}") public ResponseEntity<Void> delete(@PathVariable Long id,Principal principal) { tallies.delete(id,principal.getName());return ResponseEntity.noContent().build(); }
     @GetMapping("/sales-references") public List<SalesReferenceResponse> references(@RequestParam String month) { return references.list(month); }

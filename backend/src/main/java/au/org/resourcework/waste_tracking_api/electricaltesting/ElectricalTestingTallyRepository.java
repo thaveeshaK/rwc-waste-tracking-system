@@ -10,6 +10,9 @@ public interface ElectricalTestingTallyRepository extends JpaRepository<Electric
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from ElectricalTestingTally r where r.id=:id and r.deletedAt is null")
     Optional<ElectricalTestingTally> lockActiveById(@Param("id") Long id);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from ElectricalTestingTally r where r.id=:id")
+    Optional<ElectricalTestingTally> lockById(@Param("id") Long id);
     @Query("select r from ElectricalTestingTally r where r.deletedAt is null and r.recordDate >= :from and r.recordDate <= :to order by r.recordDate desc,r.id desc")
     List<ElectricalTestingTally> findActiveBetween(@Param("from") LocalDate from,@Param("to") LocalDate to);
     interface Total { Long getCategoryId(); TallyType getTallyType(); Long getCount(); }

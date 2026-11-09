@@ -51,6 +51,7 @@ public class ElectricalTestingTallyService {
         var existing = records.findBySubmissionId(input.submissionId());
         if (existing.isPresent()) return retry(existing.get(), input, actor);
 
+        editableDate(input.recordDate(), actor);
         var calculated = calculate(input, null);
         int inserted = records.insertIfAbsent(input.submissionId(), input.recordDate(),
                 calculated.getCategory() == null ? null : calculated.getCategory().getId(), calculated.getTallyType().name(), calculated.getCount(), actor.getId(), clock.instant());
@@ -68,6 +69,36 @@ public class ElectricalTestingTallyService {
     }
 
     public TallyResponse get(Long id) { return response(active(id)); }
+
+    /** The counter UI may reduce only this daily record. Zero soft-deletes it. */
+    @Transactional
+    public void reduce(Long id, TallyReductionRequest input, String username) {
+        var actor = actor(username);
+        editableDate(input.recordDate(), actor);
+        var saved = records.lockById(id).orElseThrow(ElectricalTestingTallyService::notFound);
+        if (!saved.getRecordDate().equals(input.recordDate()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"The tally date changed. Reload counters.");
+        if (input.version() == null || input.version()<0) badRequest("A non-negative record version is required.");
+        int requestedCount=calculator.count(input.count(),true);
+        // A lost-response retry is safe only while the exact resulting version/state remains.
+        if (saved.getVersion().equals(input.version()+1)
+                && saved.getUpdatedBy().getId().equals(actor.getId())
+                && (requestedCount==0 ? saved.getDeletedAt()!=null : saved.getDeletedAt()==null && saved.getCount()==requestedCount)) return;
+        ElectricalTestingValidation.version(input.version(),saved.getVersion());
+        if (saved.getDeletedAt()!=null) throw new ResponseStatusException(HttpStatus.CONFLICT,"The tally was deleted. Reload counters.");
+        if (requestedCount>=saved.getCount()) badRequest("A reduction must be less than the saved daily count.");
+        var now=clock.instant();
+        if (requestedCount==0) { saved.setDeletedAt(now);saved.setDeletedBy(actor); }
+        else saved.setCount(requestedCount);
+        saved.setUpdatedAt(now);saved.setUpdatedBy(actor);
+        records.flush();
+    }
+
+    private void editableDate(LocalDate date, AppUser actor) {
+        calculator.date(date);
+        if (!actor.getRole().equals("ADMIN") && !LocalDate.now(clock).equals(date))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Historical tallies are read-only for Staff. Only today's tally can be changed.");
+    }
 
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
