@@ -232,3 +232,9 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 @media(max-width:800px){.pagination{align-items:flex-start}.pagination-pages{flex-basis:100%;order:3}}
 
 .user-editor {margin-top:1rem}.user-actions {display:flex;gap:.5rem;flex-wrap:wrap}.user-actions button {min-height:44px;text-align:left}
+
+.record-history { margin-top: 1rem; padding-top: .75rem; border-top: 1px solid #dce4dc; color: #52645b; font-size: .85rem; }
+.record-history h3 { margin: 0 0 .5rem; font-size: .9rem; }
+.record-history dl { margin: 0; }
+.record-history dl > div { display: grid; grid-template-columns: minmax(0, 10rem) minmax(0, 1fr); gap: .5rem; padding: .15rem 0; }
+.record-history dd { margin: 0; overflow-wrap: anywhere; }

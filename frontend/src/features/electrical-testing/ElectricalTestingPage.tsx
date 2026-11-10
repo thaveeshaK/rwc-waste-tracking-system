@@ -1,3 +1,4 @@
+import { RecordHistory } from '../../components/RecordHistory'
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, errorMessage } from '../../api/client'
 import { operationalDate } from '../../utils/decimal'
@@ -52,7 +53,7 @@ export function ElectricalTestingPage({editing,isAdmin,onSaved,onCancel,onBusyCh
     {deleting&&<div className="notice" role="alert"><p>Delete the {deleting.reportingMonth} sales reference for {deleting.categoryName}? It will become Not entered.</p><button className="danger" disabled={busy} onClick={removeReference}>Confirm reference deletion</button><button className="secondary" disabled={busy} onClick={()=>setDeleting(null)}>Cancel reference deletion</button></div>}
     {!editing&&<div hidden={form!==null}><TestingBoard categories={categories} date={date} month={month} onDate={setDate} onMonth={setMonth} isAdmin={isAdmin} refresh={refresh} busy={busy||deleting!==null} onReference={openReference} onDeleteReference={row=>{setError('');setDeleting(row)}} onBusy={activity} onUnresolved={onUnresolvedChange} onPending={value=>{onPendingChange(value);if(value)setMessage('')}} onSaved={()=>setRefresh(value=>value+1)}/>
       {categoryError&&<p role="alert">{categoryError}<button onClick={()=>{setCategoryError('');setCategoryAttempt(n=>n+1)}}>Retry categories</button></p>}</div>}
-    {form&&<div className="panel testing-entry"><h2>{form.kind==='tally'?'Processing / diversion tally':'Sold Last Month reference'}</h2>
+    {form&&<div className="panel testing-entry"><h2>{form.kind==='tally'?'Processing / diversion tally':'Sold Last Month reference'}</h2><RecordHistory record={form.editing}/>
         {conflict?<><p>Reload saved records before making another change. This conflicting request will not be retried.</p><button disabled={busy} onClick={()=>{if(editing)onCancel();else{setForm(null);setReview(null);setRefresh(value=>value+1)}}}>Reload counters</button></>
           :review?<>{review.kind==='tally'?<TallyReview record={review.record}/>:<dl className="record-facts"><div><dt>Reporting month</dt><dd>{review.record.reportingMonth}</dd></div><div><dt>Category</dt><dd>{review.record.categoryName}</dd></div><div><dt>Sold Last Month</dt><dd>{review.record.soldLastMonthCount}</dd></div></dl>}
             <div className="actions"><button disabled={busy} onClick={save}>{busy?'Saving...':uncertain?'Retry submission':form.editing?'Confirm correction':'Confirm and submit'}</button><button className="secondary" disabled={busy||uncertain} onClick={()=>setReview(null)}>Back to edit</button></div></>

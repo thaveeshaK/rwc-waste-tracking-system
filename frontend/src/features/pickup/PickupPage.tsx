@@ -1,3 +1,4 @@
+import { RecordHistory } from '../../components/RecordHistory'
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, errorMessage } from '../../api/client'
 import { getMaterials, previewRecord, submitRecord, updateRecord } from './api'
@@ -107,5 +108,6 @@ export function PickupPage({ editing, onSaved, onCancel, onBusyChange, onUnresol
           busy={busy} onChange={setInput} onReview={calculate} />}
       <button className="text-button" disabled={busy} onClick={onCancel}>{uncertain ? 'Check Records' : 'Back to Records'}</button>
     </div>
+  <RecordHistory record={editing}/>
   </section>
 }

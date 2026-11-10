@@ -16,9 +16,5 @@ export function ElectricalCratePalletReview({ record }: { record: ElectricalCrat
         <td className="numeric">{material.materialWeight} kg</td></tr>)}</tbody>
     </table></div>
     <p className="hint">Material weights are rounded individually to 0.01 kg. Their sum may differ slightly from net weight.</p>
-    {record.createdBy && <p className="hint">Created by {record.createdBy}
-      {record.createdAt && <> · {new Date(record.createdAt).toLocaleString('en-AU', { timeZone: 'Australia/Hobart' })} (Hobart)</>}
-      {record.updatedBy && <>. Last updated by {record.updatedBy}
-        {record.updatedAt && <> · {new Date(record.updatedAt).toLocaleString('en-AU', { timeZone: 'Australia/Hobart' })} (Hobart)</>}</>}.</p>}
   </div>
 }

@@ -55,6 +55,10 @@ async function evaluate(expression) {
   return response.result.value
 }
 
+async function recordHistory() {
+  return evaluate(`Object.fromEntries([...document.querySelectorAll('.record-history dl > div')].map(row=>[row.querySelector('dt').textContent,row.querySelector('dd').textContent]))`)
+}
+
 async function click(text, scope = '') {
   await evaluate(`(() => {
     const root = ${scope ? `document.querySelector(${JSON.stringify(scope)})` : 'document'};
@@ -248,6 +252,7 @@ try {
   await screenshot('tablet-entry')
   await click('Review record')
   await hasText('Net material weight')
+  assert.equal(await evaluate("document.querySelector('.record-history')===null"),true) // Unsaved previews have no history.
   assert.ok(await evaluate("document.querySelector('.net-weight dd').textContent.includes('100.00 kg')"))
   assert.ok(await evaluate("document.body.textContent.includes('60.00 kg')"))
   await click('Back to edit')
@@ -295,6 +300,25 @@ try {
   assert.equal(ids.length, 2); assert.equal(ids[0], ids[1])
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b => b.textContent === 'Correct record')"), false)
   const savedId = await evaluate("document.querySelector('.detail-heading h2').textContent.split('#')[1]")
+  assert.equal((await recordHistory())['Created by'],process.env.INITIAL_STAFF_USERNAME)
+  assert.equal((await recordHistory())['Last updated'],'Not modified')
+  assert.equal(await evaluate("document.querySelectorAll('.record-history').length"),1)
+  assert.equal(await evaluate("document.querySelector('.record-history input, .record-history select, .record-history textarea')===null"),true)
+  // Display-only historical response fixtures: never change database audit values.
+  await evaluate(`window.__auditFetch=window.fetch;window.__auditOverride={version:null,createdBy:null,createdAt:null,updatedBy:null,updatedAt:null};
+    window.fetch=async(...args)=>{const response=await window.__auditFetch(...args);if(args[0]===${JSON.stringify('/api/crate-pallet-records/')}+${JSON.stringify(savedId)}&&(!args[1]?.method||args[1].method==='GET'))return new Response(JSON.stringify({...await response.json(),...window.__auditOverride}),{status:response.status,headers:{'Content-Type':'application/json'}});return response}`)
+  await click('#'+savedId)
+  await until(async()=>(await recordHistory())['Created by']==='Not recorded','missing audit metadata')
+  assert.deepEqual(await recordHistory(),{'Created by':'Not recorded','Created at':'Not recorded','Last updated by':'Not recorded','Last updated at':'Not recorded'})
+  await evaluate(`window.__auditOverride={version:1,createdBy:'historic-staff',createdAt:'2026-07-10T03:32:00Z',updatedBy:'historic-admin',updatedAt:'2026-11-10T03:32:00Z'}`)
+  await click('#'+savedId)
+  await until(async()=>(await recordHistory())['Last updated by']==='historic-admin','historical audit display')
+  assert.equal((await recordHistory())['Created at'].replace(/[\u202f\u00a0]/g,' '),'10 July 2026, 1:32 pm')
+  assert.equal((await recordHistory())['Last updated at'].replace(/[\u202f\u00a0]/g,' '),'10 Nov 2026, 2:32 pm')
+  await evaluate('window.fetch=window.__auditFetch;delete window.__auditFetch;delete window.__auditOverride')
+  await click('#'+savedId)
+  await until(async()=>(await recordHistory())['Last updated']==='Not modified','restored real audit data')
+
   await click('Operations')
   const recentStaff=(await browserApi('/api/operations/recent-submissions')).body
   assert.ok(recentStaff.length>0&&recentStaff.length<=5)
@@ -400,13 +424,20 @@ try {
   await enabled('#' + savedId)
   await click('#' + savedId)
   await hasText('Correct record')
+  const persistedAudit=await recordHistory()
+  assert.equal(persistedAudit['Last updated'],'Not modified')
   await click('Correct record')
   await hasText('Material percentages')
+  assert.deepEqual(await recordHistory(),persistedAudit)
   await fill('Gross weight', '170.00')
   await click('Review record')
   await hasText('Net material weight')
+  assert.deepEqual(await recordHistory(),persistedAudit) // Preview metadata is empty; history must use persisted editing data.
   await click('Confirm correction')
   await hasText('saved successfully.')
+  assert.equal((await recordHistory())['Last updated by'],process.env.INITIAL_ADMIN_USERNAME)
+  assert.notEqual((await recordHistory())['Last updated at'],'Not recorded')
+  assert.equal((await recordHistory())['Last updated'],undefined)
   assert.ok(await evaluate("document.querySelector('.net-weight dd').textContent.includes('110.00 kg')"))
   // Lose a successful delete response. Its retry receives 404 and must clear stale details/list rows.
   await evaluate(`window.__lostDeleteResponse = false;
@@ -2130,6 +2161,7 @@ try {
   console.log('PASS: Pickup positive-weight and required-location validation, exact percentages, category restrictions, review/edit, retained retry payload/navigation, Staff permissions, date filters, Admin recalculation, stale correction and lost-delete reconciliation.')
   console.log('PASS: Salvage direction-specific categories, single crew, independent review, all four zero/positive combinations, mandatory times at zero, positive/zero correction transitions, stale Admin correction, retry/navigation across workflows, soft deletion and lost-delete reconciliation.')
   console.log('PASS: login/CSRF, validation/review, active-submission navigation/logout guards, retry UUID retained across Records navigation, definitive conflict handling, Admin correction, lost-delete/404 reconciliation, selected-detail refresh, and tablet layout.')
+  console.log('PASS: read-only record history, Staff/Admin visibility, untouched vs corrected records, persisted correction-preview metadata, missing metadata, Hobart summer/winter timestamps, and hidden unsaved history.')
   console.log('Screenshots and logs: ' + output)
 } catch (error) {
   console.error(error)

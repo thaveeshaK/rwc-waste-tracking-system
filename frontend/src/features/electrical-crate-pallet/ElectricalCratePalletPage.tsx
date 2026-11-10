@@ -1,3 +1,4 @@
+import { RecordHistory } from '../../components/RecordHistory'
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, errorMessage } from '../../api/client'
 import { getContainers, getMaterials, previewRecord, submitRecord, updateRecord } from './api'
@@ -115,5 +116,6 @@ export function ElectricalCratePalletPage({ editing, onSaved, onCancel, onBusyCh
           busy={busy} onChange={setInput} onReview={calculate} />}
       <button className="text-button" disabled={busy} onClick={onCancel}>{uncertain ? 'Check Records' : 'Back to Records'}</button>
     </div>
+  <RecordHistory record={editing}/>
   </section>
 }

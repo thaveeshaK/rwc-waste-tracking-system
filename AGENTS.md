@@ -88,3 +88,12 @@ It must support:
 Applied Flyway migrations are immutable.
 Any schema change must use a new migration version.
 Never modify an already-applied migration.
+
+## Deployment Safety
+
+- Do not automatically deploy the application to any environment.
+- Do not run `gcloud builds submit`, `gcloud run deploy`, or any other deployment command unless the user explicitly requests deployment in the current conversation.
+- Code changes, tests, builds, and deployment preparation may be performed without deploying.
+- Always stop after validation and report that the system is ready to deploy.
+- Production deployment must always require explicit user approval.
+- Development/UAT deployment must also require explicit user approval.
