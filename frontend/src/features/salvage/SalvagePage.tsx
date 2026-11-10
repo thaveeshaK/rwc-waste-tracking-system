@@ -1,4 +1,3 @@
-import { RecordHistory } from '../../components/RecordHistory'
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, errorMessage } from '../../api/client'
 import { operationalDate, decimalHundredths } from '../../utils/decimal'
@@ -112,6 +111,5 @@ export function SalvagePage({ editing, onSaved, onCancel, onBusyChange, onUnreso
         : <SalvageForm value={input} upMaterials={upMaterials} downMaterials={downMaterials} today={operationalDate()}
           busy={busy} step={entryStep} onChange={setInput} onContinue={() => {setEntryStep(2); setError('')}} onBack={() => backTo(1)} onReview={calculate} />}
       <button className="text-button" disabled={busy} onClick={onCancel}>{uncertain ? 'Check Records' : 'Back to Records'}</button>
-    </div><RecordHistory record={editing}/>
-  </section>
+    </div></section>
 }

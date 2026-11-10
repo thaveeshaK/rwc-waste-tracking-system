@@ -18,5 +18,9 @@ export function SalvageReview({ record, showTotals = false }: { record: SalvageR
     <div><dt>Crew</dt><dd>{record.crew}</dd></div></dl>
     <DirectionReview name="Up" value={record.up} showTotals={showTotals} /><DirectionReview name="Down" value={record.down} showTotals={showTotals} />
     <p className="hint">Material weights use the final council weights and are rounded individually to 0.01 kg. Rounding differences are not redistributed.</p>
+    {record.createdBy && <p className="hint">Created by {record.createdBy}
+      {record.createdAt && <> - {new Date(record.createdAt).toLocaleString('en-AU', { timeZone: 'Australia/Hobart' })} (Hobart)</>}
+      {record.updatedBy && <>. Last updated by {record.updatedBy}
+        {record.updatedAt && <> - {new Date(record.updatedAt).toLocaleString('en-AU', { timeZone: 'Australia/Hobart' })} (Hobart)</>}</>}.</p>}
   </div>
 }

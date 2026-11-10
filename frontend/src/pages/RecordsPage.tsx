@@ -1,4 +1,3 @@
-import { RecordHistory } from '../components/RecordHistory'
 import {Pagination} from '../components/Pagination'
 import {getPage,getOperationalRecord} from '../features/records/api'
 import type {RecordsView} from '../features/records/api'
@@ -140,7 +139,6 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, sele
     {selected && <div className="panel detail-panel"><div className="detail-heading"><h2>Record #{selected.record.id}</h2>
       <button className="text-button" disabled={busy} onClick={() => { setSelected(null); setConfirmDelete(false) }}>Close details</button></div>
       {selected.workflow === 'SCRAP' ? <ScrapReview record={selected.record}/> : selected.workflow === 'EWASTE_PICKUP' ? <EwastePickupReview record={selected.record}/> : selected.workflow === 'CRATE_PALLET' ? <CratePalletReview record={selected.record} /> : selected.workflow === 'SALVAGE' ? <SalvageReview record={selected.record} /> : selected.workflow === 'PICKUP' ? <PickupReview record={selected.record} /> : selected.workflow === 'ELECTRICAL_CRATE_PALLET' ? <ElectricalCratePalletReview record={selected.record} /> : selected.workflow === 'COLLECTABLES' ? <CollectableReview record={selected.record} /> : selected.workflow === 'WHITEGOODS' ? <WhitegoodsReview record={selected.record} /> : <TallyReview record={selected.record} />}
-      <RecordHistory record={selected.record}/>
       {isAdmin && <div className="actions"><button className="secondary" disabled={busy} onClick={() => onEdit(selected)}>Correct record</button>
         <button className="danger secondary" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete record</button></div>}
       {confirmDelete && <div className="notice" role="alert"><p>Delete {selected.workflow === 'SALVAGE' ? 'the whole Salvage trip' : 'record'} #{selected.record.id}? It will be removed from Records and retained for traceability.</p>
