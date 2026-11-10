@@ -42,6 +42,7 @@ interface Props {
 export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, selectedRecord, onWorkflowChange, onEdit, onBusyChange }: Props) {
   const [records, setRecords] = useState<OperationalRecord[]>([])
   const [selected, setSelected] = useState<OperationalRecord | null>(selectedRecord ?? saved ?? null)
+  const [openedFromRecords, setOpenedFromRecords] = useState(!!selectedRecord)
   const [from, setFrom] = useState(view.from)
   const [to, setTo] = useState(view.to)
   const [error, setError] = useState('')
@@ -86,7 +87,7 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, sele
 
   async function open(row:OperationalRecord) {
     setBusy(true);setError('');setConfirmDelete(false)
-    try {setSelected(await getOperationalRecord(row.workflow,row.record.id!))
+    try {setSelected(await getOperationalRecord(row.workflow,row.record.id!));setOpenedFromRecords(true)
     } catch (error) { setError(errorMessage(error)) }
     finally { setBusy(false) }
   }
@@ -139,7 +140,7 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, sele
     {selected && <div className="panel detail-panel"><div className="detail-heading"><h2>Record #{selected.record.id}</h2>
       <button className="text-button" disabled={busy} onClick={() => { setSelected(null); setConfirmDelete(false) }}>Close details</button></div>
       {selected.workflow === 'SCRAP' ? <ScrapReview record={selected.record}/> : selected.workflow === 'EWASTE_PICKUP' ? <EwastePickupReview record={selected.record}/> : selected.workflow === 'CRATE_PALLET' ? <CratePalletReview record={selected.record} /> : selected.workflow === 'SALVAGE' ? <SalvageReview record={selected.record} /> : selected.workflow === 'PICKUP' ? <PickupReview record={selected.record} /> : selected.workflow === 'ELECTRICAL_CRATE_PALLET' ? <ElectricalCratePalletReview record={selected.record} /> : selected.workflow === 'COLLECTABLES' ? <CollectableReview record={selected.record} /> : selected.workflow === 'WHITEGOODS' ? <WhitegoodsReview record={selected.record} /> : <TallyReview record={selected.record} />}
-      {isAdmin && <div className="actions"><button className="secondary" disabled={busy} onClick={() => onEdit(selected)}>Correct record</button>
+      {isAdmin && (!saved || openedFromRecords) && <div className="actions"><button className="secondary" disabled={busy} onClick={() => onEdit(selected)}>Correct record</button>
         <button className="danger secondary" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete record</button></div>}
       {confirmDelete && <div className="notice" role="alert"><p>Delete {selected.workflow === 'SALVAGE' ? 'the whole Salvage trip' : 'record'} #{selected.record.id}? It will be removed from Records and retained for traceability.</p>
         <div className="actions"><button className="danger" disabled={busy} onClick={remove}>{busy ? 'Deleting...' : 'Confirm deletion'}</button>

@@ -55,6 +55,15 @@ async function evaluate(expression) {
   return response.result.value
 }
 
+async function reopenForAdminActions() {
+  if (await evaluate("!!document.querySelector('.detail-heading h2') && ![...document.querySelectorAll('button')].some(b=>b.textContent==='Correct record')")) {
+    const id=await evaluate("document.querySelector('.detail-heading h2').textContent.split('#')[1]")
+    assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Delete record')"),false)
+    await enabled('#'+id);await click('#'+id)
+    await enabled('Correct record');await enabled('Delete record')
+  }
+}
+
 async function click(text, scope = '') {
   await evaluate(`(() => {
     const root = ${scope ? `document.querySelector(${JSON.stringify(scope)})` : 'document'};
@@ -399,7 +408,9 @@ try {
 
   await enabled('#' + savedId)
   await click('#' + savedId)
+  await reopenForAdminActions()
   await hasText('Correct record')
+  await reopenForAdminActions()
   await click('Correct record')
   await hasText('Material percentages')
   await fill('Gross weight', '170.00')
@@ -417,6 +428,7 @@ try {
       }
       return response;
     };`)
+  await reopenForAdminActions()
   await click('Delete record')
   await click('Confirm deletion')
   await hasText('Simulated lost delete response')
@@ -446,6 +458,7 @@ try {
   const remainingId = '#' + refreshId
   await enabled(remainingId)
   await click(remainingId)
+  await reopenForAdminActions()
   await hasText('Correct record')
   await evaluate(`(async () => {
     const token = await fetch('/api/auth/csrf').then(r => r.json());
@@ -613,7 +626,9 @@ try {
   await fill('Workflow', 'SALVAGE')
   await enabled('#' + firstSalvageId)
   await click('#' + firstSalvageId)
+  await reopenForAdminActions()
   await hasText('Correct record')
+  await reopenForAdminActions()
   await click('Correct record')
   await until(() => evaluate(`document.querySelector('${upScope} .material-grid')?.children.length === 9`), 'Admin Salvage form')
   await fill('Kg Up', '0.00', upScope)
@@ -625,6 +640,7 @@ try {
   let updated = (await browserApi('/api/salvage-records/' + firstSalvageId)).body
   assert.equal(updated.up.materials.length, 0)
   assert.equal(updated.down.materials.length, 1)
+  await reopenForAdminActions()
   await click('Correct record')
   await until(() => evaluate(`document.querySelector('${upScope} .material-grid') === null && document.querySelector('${upScope} input') !== null`), 'zero-weight Admin form')
   await fill('Kg Up', '10.00', upScope)
@@ -639,6 +655,7 @@ try {
   assert.equal(updated.up.materials.length, 1)
 
   // Change the record from another request while an Admin has an older form open.
+  await reopenForAdminActions()
   await click('Correct record')
   await until(() => evaluate(`document.querySelector('${upScope} .material-grid')?.children.length === 9`), 'stale-correction form')
   const materialInputs = side => side.materials.map(({ materialCategoryId, percentage }) => ({ materialCategoryId, percentage }))
@@ -655,6 +672,7 @@ try {
   await enabled('#' + firstSalvageId)
   await click('#' + firstSalvageId)
   await hasText('Other Admin correction')
+  await reopenForAdminActions()
   await enabled('Delete record')
   await evaluate(`window.__salvageDeleteLost = false;
     window.fetch = async (...args) => {
@@ -664,6 +682,7 @@ try {
       }
       return response;
     };`)
+  await reopenForAdminActions()
   await click('Delete record')
   await click('Confirm deletion')
   await hasText('Simulated lost Salvage delete')
@@ -764,7 +783,9 @@ try {
   await click('Records')
   await enabled('#' + pickupId)
   await click('#' + pickupId)
+  await reopenForAdminActions()
   await enabled('Correct record')
+  await reopenForAdminActions()
   await click('Correct record')
   await until(() => evaluate("document.querySelector('.material-grid')?.children.length === 13"), 'Admin Pickup form')
   await fill('Final net weight', '0')
@@ -778,7 +799,9 @@ try {
   let pickupUpdated = (await browserApi('/api/pickup-records/' + pickupId)).body
   assert.equal(pickupUpdated.netWeight, '200.00')
   assert.equal(pickupUpdated.materials[0].materialWeight, '200.00')
+  await reopenForAdminActions()
   await enabled('Correct record')
+  await reopenForAdminActions()
   await click('Correct record')
   await until(() => evaluate("document.querySelector('.material-grid')?.children.length === 13"), 'stale Pickup form')
   const pickupExternal = await browserApi('/api/pickup-records/' + pickupId, 'PUT', {
@@ -790,6 +813,7 @@ try {
   await click('Back to Records')
   await enabled('#' + pickupId)
   await click('#' + pickupId)
+  await reopenForAdminActions()
   await enabled('Delete record')
   await hasText('Other Pickup Admin')
   await evaluate(`window.__pickupDeleteLost = false;
@@ -800,6 +824,7 @@ try {
       }
       return response;
     };`)
+  await reopenForAdminActions()
   await click('Delete record')
   await click('Confirm deletion')
   await hasText('Simulated lost Pickup delete')
@@ -931,7 +956,9 @@ try {
   await click('Records')
   await enabled('#' + electricalId)
   await click('#' + electricalId)
+  await reopenForAdminActions()
   await enabled('Correct record')
+  await reopenForAdminActions()
   await click('Correct record')
   await until(() => evaluate("document.querySelector('.material-grid')?.children.length === 2"), 'Admin electrical form')
   assert.deepEqual(await electricalPercentages(),electricalRecords[0].materials.map(m=>m.percentage))
@@ -950,7 +977,9 @@ try {
   assert.equal(electricalUpdated.tareWeight, '6.00')
   assert.equal(electricalUpdated.netWeight, '10.00')
   assert.equal(electricalUpdated.materials[0].materialWeight, '6.00')
+  await reopenForAdminActions()
   await enabled('Correct record')
+  await reopenForAdminActions()
   await click('Correct record')
   await until(() => evaluate("document.querySelector('.material-grid')?.children.length === 2"), 'stale electrical form')
   assert.deepEqual(await electricalPercentages(),electricalUpdated.materials.map(m=>m.percentage))
@@ -963,6 +992,7 @@ try {
   await click('Back to Records')
   await enabled('#' + electricalId)
   await click('#' + electricalId)
+  await reopenForAdminActions()
   await enabled('Delete record')
   await hasText('20.00 kg')
   await evaluate(`window.__electricalDeleteLost = false;
@@ -973,6 +1003,7 @@ try {
       }
       return response;
     };`)
+  await reopenForAdminActions()
   await click('Delete record')
   await click('Confirm deletion')
   await hasText('Simulated lost electrical delete')
@@ -1078,7 +1109,9 @@ try {
   await click('Records')
   await enabled('#' + collectableId)
   await click('#' + collectableId)
+  await reopenForAdminActions()
   await enabled('Correct record')
+  await reopenForAdminActions()
   await click('Correct record')
   await until(() => evaluate("document.querySelector('.material-grid')?.children.length === 13"), 'Admin Collectables form')
   await hasText(collectableReminder)
@@ -1092,7 +1125,9 @@ try {
   const collectableUpdated = (await browserApi('/api/collectable-records/' + collectableId)).body
   assert.equal(collectableUpdated.tareWeight, '2.00')
   assert.equal(collectableUpdated.netWeight, '30.00')
+  await reopenForAdminActions()
   await enabled('Correct record')
+  await reopenForAdminActions()
   await click('Correct record')
   await until(() => evaluate("document.querySelector('.material-grid')?.children.length === 13"), 'stale Collectables form')
   const collectableChanged = await browserApi('/api/collectable-records/' + collectableId, 'PUT', {
@@ -1104,6 +1139,7 @@ try {
   await click('Back to Records')
   await enabled('#' + collectableId)
   await click('#' + collectableId)
+  await reopenForAdminActions()
   await enabled('Delete record')
   await hasText('40.00 kg')
   await evaluate(`window.__collectableDeleteLost = false;
@@ -1114,6 +1150,7 @@ try {
       }
       return response;
     };`)
+  await reopenForAdminActions()
   await click('Delete record')
   await click('Confirm deletion')
   await hasText('Simulated lost Collectables delete')
@@ -1225,7 +1262,9 @@ try {
   await click('Records')
   await enabled('#' + whitegoodsId)
   await click('#' + whitegoodsId)
+  await reopenForAdminActions()
   await enabled('Correct record')
+  await reopenForAdminActions()
   await click('Correct record')
   await hasText('Whitegoods entry')
   await fill('Record date', '2001-02-01')
@@ -1237,7 +1276,9 @@ try {
   await expectWhitegoodsSummary('2001-01', 3, '144.00')
   await expectWhitegoodsSummary('2001-02', 10, '480.00')
   const whitegoodsUpdated = (await browserApi('/api/whitegoods-records/' + whitegoodsId)).body
+  await reopenForAdminActions()
   await enabled('Correct record')
+  await reopenForAdminActions()
   await click('Correct record')
   await hasText('Whitegoods entry')
   const whitegoodsChanged = await browserApi('/api/whitegoods-records/' + whitegoodsId, 'PUT', {
@@ -1250,6 +1291,7 @@ try {
   await expectWhitegoodsSummary('2001-02', 11, '528.00')
   await enabled('#' + whitegoodsId)
   await click('#' + whitegoodsId)
+  await reopenForAdminActions()
   await enabled('Delete record')
   await evaluate(`window.__whitegoodsDeleteLost = false;
     window.fetch = async (...args) => {
@@ -1259,6 +1301,7 @@ try {
       }
       return response;
     };`)
+  await reopenForAdminActions()
   await click('Delete record')
   await click('Confirm deletion')
   await hasText('Simulated lost Whitegoods delete')
@@ -1518,7 +1561,9 @@ try {
   await click('Records')
   await enabled('#'+testingId)
   await click('#'+testingId)
+  await reopenForAdminActions()
   await enabled('Correct record')
+  await reopenForAdminActions()
   await click('Correct record')
   await hasText('Processing / diversion tally')
   await fill('Record date','2002-02-01')
@@ -1560,7 +1605,9 @@ try {
   await click('Records')
   await enabled('#'+testingId)
   await click('#'+testingId)
+  await reopenForAdminActions()
   await enabled('Delete record')
+  await reopenForAdminActions()
   await click('Delete record')
   await click('Confirm deletion')
   await hasText('Record #'+testingId+' deleted.')
@@ -1831,6 +1878,11 @@ try {
   await enabled('Confirm and submit')
   await click('Confirm and submit')
   await hasText('saved successfully.')
+  assert.equal(await evaluate("document.querySelector('.detail-panel .record-facts')!==null"),true)
+  assert.equal(await evaluate("[...document.querySelectorAll('.detail-panel button')].some(b=>['Correct record','Delete record'].includes(b.textContent))"),false)
+  const savedWhitegoodsDetails=await evaluate("document.querySelector('.detail-panel .record-facts').textContent")
+  await reopenForAdminActions()
+  assert.equal(await evaluate("document.querySelector('.detail-panel .record-facts').textContent"),savedWhitegoodsDetails)
   assert.equal((await browserApi('/api/whitegoods-records/'+oldWhitegoods.body.id)).body.kgPerItem,'48.00')
   const mixedMonth=(await browserApi('/api/whitegoods-records/monthly-summary?month=2007-02')).body
   assert.equal(mixedMonth.estimatedWeight,'200.50')
@@ -1885,6 +1937,7 @@ try {
   await until(()=>evaluate("document.querySelectorAll('.ewaste-container').length===2"),'historical correction lines')
   await fill('Quantity: Plastic Pallet','3');await fill('Organisation','Next Band corrected');await click('Review record');await enabled('Confirm correction');await click('Confirm correction');await hasText('saved successfully.')
   const correctedEwaste=(await browserApi('/api/ewaste-pickups/'+ewasteId)).body;assert.equal(correctedEwaste.netWeight,'28.55');assert.equal(correctedEwaste.containers.find(c=>c.containerTypeId===ewastePlastic.id).tarePerUnit,'6.00')
+  await reopenForAdminActions()
   await enabled('Correct record');await click('Correct record');await until(()=>evaluate("document.querySelectorAll('.ewaste-container').length===2"),'stale E-waste correction form')
   assert.equal((await browserApi('/api/ewaste-pickups/'+ewasteId,'PUT',{...ewasteInput,organisation:'Next Band corrected',containers:correctedEwaste.containers.map(c=>({containerTypeId:c.containerTypeId,quantity:c.quantity})),version:correctedEwaste.version})).status,200)
   await click('Review record');await hasText('This record has changed.');await click('Back to Records')
@@ -1956,6 +2009,7 @@ try {
   const correctPagingId=await evaluate("Number(document.querySelector('#records-heading').closest('section').querySelector('table tbody button').textContent.slice(1))")
   await enabled('#'+correctPagingId);await click('#'+correctPagingId);await enabled('Correct record');await click('Correct record');await fill('Whitegoods count','2');await enabled('Review Whitegoods');await click('Review Whitegoods');await enabled('Confirm correction');await click('Confirm correction');await hasText('saved successfully.');await hasText('Showing 91-100 of 100')
   assert.equal(await evaluate(`document.querySelector('${recordsPager} [aria-current="page"]').textContent`),'10')
+  await reopenForAdminActions()
   await enabled('Correct record');await click('Correct record');await fill('Record date','2011-02-10');await enabled('Review Whitegoods');await click('Review Whitegoods');await enabled('Confirm correction');await click('Confirm correction');await hasText('Showing 91-99 of 99')
   await fill('Workflow','WHITEGOODS');await hasText('Showing 1-10 of 94')
   await fill('From','2012-01-01');await fill('To','2012-01-31');await enabled('Apply dates / refresh');await click('Apply dates / refresh');await hasText('No records found.');await hasText('Showing 0-0 of 0')
