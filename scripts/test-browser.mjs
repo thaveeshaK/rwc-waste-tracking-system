@@ -2175,6 +2175,48 @@ try {
     assert.equal(await evaluate("document.querySelector('.settings-menu-trigger')===null"),true)
   }
   console.log('PASS: Admin Settings navigation/authorization, container/category configuration and validation, immutable history, organisation header, reporting defaults, configurable future Whitegoods factors, mixed-factor summaries and direct Staff navigation denial.')
+  // Whole-row selection reuses existing details and permissions for every workflow.
+  async function checkRecordRows(admin) {
+    await click('Records');await enabled('Apply dates / refresh')
+    await fill('From','');await fill('To','');await click('Apply dates / refresh');await enabled('Apply dates / refresh')
+    for(const workflow of ['CRATE_PALLET','SALVAGE','PICKUP','ELECTRICAL_CRATE_PALLET','COLLECTABLES','WHITEGOODS','ELECTRICAL_TESTING','EWASTE_PICKUP','SCRAP']) {
+      await fill('Workflow',workflow);await enabled('Apply dates / refresh')
+      const items=(await browserApi('/api/records?workflow='+workflow+'&size=10')).body.items
+      assert.ok(items.length>0,'row fixture for '+workflow)
+      const record=items[0].record
+      await until(()=>evaluate(`document.querySelector('.selectable-record button')?.textContent==='#'+${record.id}`),'loaded '+workflow+' rows')
+      await evaluate("document.querySelector('.selectable-record td:nth-child(2)').click()")
+      await until(()=>evaluate(`document.querySelector('.detail-heading h2')?.textContent==='Record #'+${record.id} && document.querySelector('.selected-row button')?.textContent==='#'+${record.id}`),'selected '+workflow)
+      await enabled('Close details')
+      const details=await evaluate("document.querySelector('.detail-panel').textContent")
+      assert.ok(details.includes('Created by '+record.createdBy),workflow+' creator')
+      assert.ok(details.includes('Last updated by '+record.updatedBy),workflow+' updater')
+      for(const value of [record.createdAt,record.updatedAt]) {
+        const formatted=await evaluate(`new Date(${JSON.stringify(value)}).toLocaleString('en-AU',{timeZone:'Australia/Hobart'})`)
+        assert.ok(details.includes(formatted),workflow+' Hobart timestamp')
+      }
+      assert.equal((details.match(/\(Hobart\)/g)||[]).length,2)
+      assert.equal(await evaluate("[...document.querySelectorAll('.detail-panel button')].some(b=>b.textContent==='Correct record')"),admin)
+      assert.equal(await evaluate("[...document.querySelectorAll('.detail-panel button')].some(b=>b.textContent==='Delete record')"),admin)
+      assert.equal(await evaluate("document.querySelector('.detail-panel input,.detail-panel select')===null"),true)
+      if(workflow==='WHITEGOODS') {
+        assert.ok(items.length>1)
+        await evaluate("document.querySelectorAll('.selectable-record')[1].querySelector('td:nth-child(2)').click()")
+        await until(()=>evaluate(`document.querySelector('.detail-heading h2')?.textContent==='Record #'+${items[1].record.id}`),'switch row by clicking another cell')
+        await evaluate("(() => {const row=document.querySelector('.selectable-record');row.focus();row.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))})()")
+        await until(()=>evaluate(`document.querySelector('.detail-heading h2')?.textContent==='Record #'+${items[0].record.id}`),'switch row with keyboard')
+        assert.equal(await evaluate("document.querySelectorAll('.selected-row').length"),1)
+      }
+      await click('Close details')
+      assert.equal(await evaluate("document.querySelector('.detail-panel')===null && document.querySelectorAll('.selected-row').length===0"),true)
+      assert.equal(await evaluate("document.querySelector('#records-heading').textContent"),'Records')
+    }
+  }
+  await checkRecordRows(false)
+  await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
+  await checkRecordRows(true)
+  console.log('PASS: whole-row and keyboard selection, switching/highlight/close, inline Hobart metadata and Staff/Admin detail permissions across all nine workflows.')
+
   console.log('PASS: Shared branding/logo/favicon, exact workflow order, Electrical Testing Open for both roles, Workflows headings, login/footer text and three-column cards without overflow at 1280/1024/768.')
   console.log('PASS: Admin navigation/API boundaries, Overview, report periods and applied filters, filtered CSV/XLSX downloads, detail links, monthly figures/tonnes/exclusions, soft-delete refresh and tablet layout.')
   console.log('PASS: Electrical Testing selected-month counters/date contributions, Staff historical read-only, date/month synchronization, date-scoped Admin reductions, zero floor, empty months, unsaved guards, addition/reduction lost-response retries, separate sales references, Records/reporting and 1280/1024/768 layouts.')

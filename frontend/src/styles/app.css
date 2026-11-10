@@ -63,6 +63,8 @@ th { font-size: .8rem; color: #5c6f62; background: #f4f6f2; }
 th, td { padding: .75rem .7rem; border-bottom: 1px solid #e4e9e0; }
 .numeric { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .selected-row { background: #edf4e9; }
+.selectable-record { cursor: pointer; }
+.selectable-record:focus-visible { outline: 2px solid #245c43; outline-offset: -2px; }
 .filter-bar { display: flex; align-items: end; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
 .filter-bar label { min-width: 170px; }
 .detail-panel { margin-top: 1.5rem; }
