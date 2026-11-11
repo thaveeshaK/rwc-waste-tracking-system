@@ -217,7 +217,7 @@ try {
   assert.equal(await evaluate("document.querySelectorAll('.staff-recent tbody tr').length"),initialRecent.length)
   const staffToday=(await browserApi('/api/operations/today-activity')).body
   assert.deepEqual(Object.keys(staffToday).sort(),['today','todayActivity'])
-  const expectedStaffToday=staffToday.todayActivity.map(card=>({workflow:card.workflow,metrics:card.metrics.map(metric=>({label:metric.label,value:metric.value+(metric.unit?' '+metric.unit:'')}))}))
+  const expectedStaffToday=staffToday.todayActivity.map(card=>({workflow:card.workflow,metrics:card.metrics.map(metric=>({label:card.workflow==='COLLECTABLES'&&metric.label==='Trips'?'Tubs':metric.label,value:metric.value+(metric.unit?' '+metric.unit:'')}))}))
   await until(()=>evaluate("document.querySelectorAll('[data-today-workflow]').length===9"),'Staff Today cards loaded')
   assert.deepEqual(await readTodayCards(),expectedStaffToday)
   assert.equal(await evaluate("document.querySelector('.staff-operations').firstElementChild===document.querySelector('.dashboard-today')"),true)
@@ -1684,7 +1684,7 @@ try {
   assert.equal(await evaluate("document.querySelector('[data-chart-values=recovered-trend] li:last-child').dataset.value"),'40.00')
   assert.equal(await evaluate("document.querySelector('[data-chart=intake]').compareDocumentPosition(document.querySelector('.dashboard-recent')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)
   const dashBackend=(await browserApi('/api/admin/overview?month=2009-06')).body
-  const expectedToday=dashBackend.todayActivity.map(card=>({workflow:card.workflow,metrics:card.metrics.map(metric=>({label:metric.label,value:metric.value+(metric.unit?' '+metric.unit:'')}))}))
+  const expectedToday=dashBackend.todayActivity.map(card=>({workflow:card.workflow,metrics:card.metrics.map(metric=>({label:card.workflow==='COLLECTABLES'&&metric.label==='Trips'?'Tubs':metric.label,value:metric.value+(metric.unit?' '+metric.unit:'')}))}))
   assert.equal(expectedToday.length,9);assert.deepEqual(await readTodayCards(),expectedToday)
   assert.equal(await evaluate("document.querySelector('.dashboard-secondary').compareDocumentPosition(document.querySelector('.dashboard-today')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)
   assert.equal(await evaluate("document.querySelector('.dashboard-today').compareDocumentPosition(document.querySelector('[data-chart=trend]')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)
