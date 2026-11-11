@@ -16,7 +16,19 @@ class ReportServiceTests {
         var overview=new ReportService(repository,clock,null).overview();
         assertThat(overview.today()).isEqualTo("2026-10-04");
         verify(repository).submitted(Instant.parse("2026-10-03T14:00:00Z"),Instant.parse("2026-10-04T13:00:00Z"));
+        verify(repository).todayActivity(LocalDate.of(2026,10,4),Instant.parse("2026-10-03T14:00:00Z"),Instant.parse("2026-10-04T13:00:00Z"));
         assertThat(overview.monthly().filters().from()).isEqualTo(LocalDate.of(2026,10,1));
+    }
+    @Test void sharedTodayReadUsesHobartBoundaryAndNoAdminDashboardQueries() {
+        var repository=mock(ReportingRepository.class);
+        var clock=Clock.fixed(Instant.parse("2026-04-04T16:30:00Z"),ZoneId.of("Australia/Hobart"));
+        var day=LocalDate.of(2026,4,5);
+        var start=Instant.parse("2026-04-04T13:00:00Z");var end=Instant.parse("2026-04-05T14:00:00Z");
+        var cards=List.of(new ReportData.DailyActivity("WHITEGOODS",List.of(new ReportData.DailyMetric("Items","0",""))));
+        when(repository.todayActivity(day,start,end)).thenReturn(cards);
+        var result=new ReportService(repository,clock,null).todayActivity();
+        assertThat(result.today()).isEqualTo("2026-04-05");assertThat(result.todayActivity()).isEqualTo(cards);
+        verify(repository).todayActivity(day,start,end);verifyNoMoreInteractions(repository);
     }
     @Test void csvTextProtectionLeavesNumericExportToTypedValues() {
         for(String s:List.of("=1+1"," +cmd","-cmd","@SUM(A1)","\tvalue","\nvalue")) assertThat(ReportExportService.safeText(s)).startsWith("'");

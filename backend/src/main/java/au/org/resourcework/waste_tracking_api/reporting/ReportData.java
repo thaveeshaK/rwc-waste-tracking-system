@@ -27,6 +27,7 @@ public final class ReportData {
     public record Counter(String status, String count) {}
     public record DailyMetric(String label, String value, String unit) {}
     public record DailyActivity(String workflow, List<DailyMetric> metrics) {}
+    public record TodayActivitySummary(String today, List<DailyActivity> todayActivity) {}
     public record Overview(String today, String month, long submittedToday, long recordsThisMonth, List<Activity> activity,
             List<Row> recent, List<Trend> trend, Result monthly, DashboardMetrics metrics,
             List<Total> generalIntake, List<Counter> electricalTesting, List<Total> topIntake, List<RecoveredTrend> recoveredTrend, List<DailyActivity> todayActivity) {}

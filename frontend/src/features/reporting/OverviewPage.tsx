@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { request } from './api'
 import { errorMessage } from '../../api/client'
 import { operationalDate } from '../../utils/decimal'
+import { TodayActivity } from '../../components/TodayActivity'
 import type { Overview, Row } from './types'
 import { label } from './types'
 import { TotalsTable } from './ReportTables'
@@ -32,9 +33,7 @@ export function OverviewPage({onOpen, onRecords}: {onOpen: (row: Row) => void; o
       <article className="panel dashboard-kpi" data-kpi="landfill" data-value={data.metrics.landfillKg}><h2>{current ? 'Landfill recorded this month' : 'Landfill recorded'}</h2><strong>{data.metrics.landfillKg}<small> kg</small></strong><p>Council-provided Up weight</p></article>
       <article className="panel dashboard-kpi" data-kpi="whitegoods" data-value={data.metrics.whitegoodsCount}><h2>{current ? 'Whitegoods processed this month' : 'Whitegoods processed'}</h2><strong>{data.metrics.whitegoodsCount}</strong><p>{data.metrics.whitegoodsEstimatedKg} kg estimated from received counts</p></article>
     </div><p className="dashboard-secondary">Submitted today: <strong>{data.submittedToday}</strong><span> Active entries submitted on {data.today}, across all operational dates.</span></p>
-      <section className="dashboard-today" aria-label="Today's activity"><h2>Today's activity</h2><p className="hint">Operational activity for {new Intl.DateTimeFormat('en-AU', {day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Hobart'}).format(new Date(data.today+'T00:00:00Z'))}</p>
-        <div className="dashboard-today-grid">{data.todayActivity.map(activity => <article className="panel" key={activity.workflow} data-today-workflow={activity.workflow}><h3>{label(activity.workflow)}</h3><dl>{activity.metrics.map(metric => <div key={metric.label}><dt>{metric.label}</dt><dd>{metric.value}{metric.unit && <small> {metric.unit}</small>}</dd></div>)}</dl></article>)}</div>
-      </section>
+      <TodayActivity today={data.today} todayActivity={data.todayActivity}/>
       <Suspense fallback={<p role="status">Loading charts...</p>}><DashboardCharts data={data}/></Suspense>
       <section className="panel report-section dashboard-recent" aria-label="Recent submissions"><div className="detail-heading"><div><h2>Recent submissions</h2><p className="hint">Latest five active submissions, across all dates.</p></div><button className="secondary" onClick={onRecords}>View all records</button></div>
         {!data.recent.length ? <p>No submissions yet.</p> : <div className="table-scroll"><table><thead><tr><th>Date / reporting month</th><th>Workflow</th><th>Details</th><th>Weight / count</th><th>Submitted by</th></tr></thead><tbody>{data.recent.map(r => <tr key={r.workflow+r.id}><td>{r.workflow === 'SCRAP' ? r.date.slice(0,7) : r.date}</td><td>{label(r.workflow)}</td><td><button className="text-button" onClick={() => onOpen(r)}>#{r.id}</button> {[r.container, r.organisation ?? r.location, r.crew, r.category, r.status ? typeLabels[r.status as TallyType] : null].filter(Boolean).join(' / ')}</td><td>{r.kg !== null ? `${r.kg} kg${r.workflow === 'WHITEGOODS' ? ' estimated' : ''}` : r.count !== null ? `${r.count} tallied` : '-'}</td><td>{r.createdBy}</td></tr>)}</tbody></table></div>}

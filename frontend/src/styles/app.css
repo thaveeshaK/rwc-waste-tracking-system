@@ -3,7 +3,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; }
 h1, h2, p { margin-top: 0; }
-h1 { font-size: clamp(1.8rem, 4vw, 2.4rem); letter-spacing: -.035em; margin-bottom: .4rem; line-height: 1.2; }
+h1, .staff-operations > .dashboard-today > h2 { font-size: clamp(1.8rem, 4vw, 2.4rem); letter-spacing: -.035em; margin-bottom: .4rem; line-height: 1.2; }
 h2 { font-size: 1.3rem; }
 button, input, select { font: inherit; }
 button { border: 1px solid #245c43; background: #245c43; color: white; border-radius: 6px; padding: .65rem 1.05rem; min-height: 44px; cursor: pointer; font-weight: 600; }
@@ -238,6 +238,8 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 .dashboard-today { margin: 1.5rem 0; }
 .dashboard-today > h2 { margin: 0 0 .35rem; font-size: 1.15rem; }
 .dashboard-today > .hint { margin: 0 0 .85rem; }
+.staff-operations > .dashboard-today { margin: 1rem 0 2.5rem; }
+.staff-operations > .dashboard-today > .hint { font-size: 1rem; color: #5c6f62; margin-bottom: 1.6rem; }
 .dashboard-today-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 .dashboard-today-grid article { min-width: 0; padding: 1rem; border-top: 3px solid #56816a; }
 .dashboard-today-grid h3 { color: #183f2f; font-size: 1rem; font-weight: 700; margin: 0 0 .85rem; }

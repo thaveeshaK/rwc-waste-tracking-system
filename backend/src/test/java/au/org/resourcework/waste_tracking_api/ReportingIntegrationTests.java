@@ -28,6 +28,7 @@ class ReportingIntegrationTests {
     @Autowired WebApplicationContext context;
     @Autowired JdbcTemplate jdbc;
     @Autowired ReportingRepository repository;
+    @Autowired tools.jackson.databind.ObjectMapper json;
     MockMvc mvc;
     long actor,category;
     @BeforeEach void setup() throws Exception {
@@ -52,6 +53,18 @@ class ReportingIntegrationTests {
         jdbc.update("insert into electrical_testing_sales_reference (submission_id,reporting_month,category_id,sold_last_month_count,created_by,updated_by,created_at,updated_at) values (?,date '2001-02-01',(select min(id) from electrical_testing_category),0,?,?,now(),now())",UUID.randomUUID(),actor,actor);
     }
     private MockHttpServletRequestBuilder report(String path) { return get("/api/admin"+path).with(user("admin").roles("ADMIN")).param("from","2001-02-01").param("to","2001-02-28"); }
+    @Test void todayOperationsAllowsBothRolesButReturnsOnlyTheSharedDailyPayload() throws Exception {
+        mvc.perform(get("/api/operations/today-activity")).andExpect(status().isUnauthorized());
+        var overview=json.readTree(mvc.perform(report("/overview")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        for(String role:List.of("STAFF","ADMIN")) {
+            var result=mvc.perform(get("/api/operations/today-activity").with(user(role.toLowerCase()).roles(role)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$",org.hamcrest.Matchers.aMapWithSize(2)))
+                .andExpect(jsonPath("$.today").value(overview.get("today").asText()))
+                .andExpect(jsonPath("$.todayActivity.length()").value(9)).andReturn().getResponse();
+            assertThat(json.readTree(result.getContentAsString()).get("todayActivity")).isEqualTo(overview.get("todayActivity"));
+        }
+        mvc.perform(get("/api/admin/overview").with(user("staff").roles("STAFF"))).andExpect(status().isForbidden());
+    }
     @Test void adminBoundaryProtectsEverySurface() throws Exception {
         for(String path:List.of("/overview","/reports/summary","/reports/records","/reports/options","/reports/electrical-testing","/reports/export","/waste-levy-summary","/waste-levy-summary/export")) {
             mvc.perform(get("/api/admin"+path)).andExpect(status().isUnauthorized());

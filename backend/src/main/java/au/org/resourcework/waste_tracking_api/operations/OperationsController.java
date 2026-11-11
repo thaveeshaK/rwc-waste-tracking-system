@@ -1,6 +1,7 @@
 package au.org.resourcework.waste_tracking_api.operations;
 
 import java.util.List;
+import au.org.resourcework.waste_tracking_api.reporting.ReportData.TodayActivitySummary;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -10,4 +11,6 @@ public class OperationsController {
     public OperationsController(OperationsService service) { this.service=service; }
     @GetMapping("/recent-submissions")
     public List<RecentSubmission> recent() { return service.recent(); }
+    @GetMapping("/today-activity")
+    public TodayActivitySummary todayActivity() { return service.todayActivity(); }
 }

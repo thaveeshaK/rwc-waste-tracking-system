@@ -55,6 +55,10 @@ async function evaluate(expression) {
   return response.result.value
 }
 
+function readTodayCards() {
+  return evaluate("[...document.querySelectorAll('[data-today-workflow]')].map(card=>({workflow:card.dataset.todayWorkflow,metrics:[...card.querySelectorAll('dl > div')].map(row=>({label:row.querySelector('dt').textContent,value:row.querySelector('dd').textContent}))}))")
+}
+
 async function reopenForAdminActions() {
   if (await evaluate("!!document.querySelector('.detail-heading h2') && ![...document.querySelectorAll('button')].some(b=>b.textContent==='Correct record')")) {
     const id=await evaluate("document.querySelector('.detail-heading h2').textContent.split('#')[1]")
@@ -211,6 +215,43 @@ try {
   await until(()=>evaluate("document.querySelector('.staff-recent tbody')!==null"),'existing recent submissions')
   const initialRecent=(await browserApi('/api/operations/recent-submissions')).body
   assert.equal(await evaluate("document.querySelectorAll('.staff-recent tbody tr').length"),initialRecent.length)
+  const staffToday=(await browserApi('/api/operations/today-activity')).body
+  assert.deepEqual(Object.keys(staffToday).sort(),['today','todayActivity'])
+  const expectedStaffToday=staffToday.todayActivity.map(card=>({workflow:card.workflow,metrics:card.metrics.map(metric=>({label:metric.label,value:metric.value+(metric.unit?' '+metric.unit:'')}))}))
+  await until(()=>evaluate("document.querySelectorAll('[data-today-workflow]').length===9"),'Staff Today cards loaded')
+  assert.deepEqual(await readTodayCards(),expectedStaffToday)
+  assert.equal(await evaluate("document.querySelector('.staff-operations').firstElementChild===document.querySelector('.dashboard-today')"),true)
+  assert.equal(await evaluate("document.querySelector('.dashboard-today').compareDocumentPosition(document.querySelector('.staff-operations .page-heading')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)
+  assert.equal(await evaluate("document.querySelectorAll('.dashboard-today input,.dashboard-today button').length"),0)
+  const expectedTodayDate=await evaluate(`new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'long',year:'numeric',timeZone:'Australia/Hobart'}).format(new Date(${JSON.stringify(staffToday.today)}+'T00:00:00Z'))`)
+  assert.ok(await evaluate(`document.querySelector('.dashboard-today .hint').textContent.includes(${JSON.stringify(expectedTodayDate)})`))
+  for(const width of [1280,1024,768]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
+    assert.equal(await evaluate('document.documentElement.scrollWidth<=window.innerWidth'),true)
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.dashboard-today-grid')).gridTemplateColumns.split(' ').length"),width===768?2:3)
+    await screenshot('staff-today-activity-'+width)
+  }
+  await evaluate(`window.__staffTodayFetch=window.fetch;window.__staffTodayMode='hold';window.fetch=(...args)=>{
+    if(args[0]==='/api/operations/today-activity') {
+      if(window.__staffTodayMode==='hold')return new Promise(resolve=>{window.__releaseStaffToday=()=>resolve(new Response(JSON.stringify(${JSON.stringify({...staffToday,todayActivity:staffToday.todayActivity.map(card=>({...card,metrics:card.metrics.map(metric=>({...metric,value:metric.unit==='kg'?'0.00':'0'}))}))})}),{status:200,headers:{'Content-Type':'application/json'}}))});
+      if(window.__staffTodayMode==='error')return Promise.resolve(new Response(JSON.stringify({detail:'Simulated today activity failure'}),{status:503,headers:{'Content-Type':'application/problem+json'}}));
+    }return window.__staffTodayFetch(...args);
+  }`)
+  await click('Records');await click('Operations');await hasText("Loading today's activity...")
+  await until(()=>evaluate("typeof window.__releaseStaffToday==='function'"),'held Staff Today request')
+  assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card button:not(:disabled)').length"),9)
+  await evaluate('window.__releaseStaffToday()')
+  await until(()=>evaluate("document.querySelectorAll('[data-today-workflow]').length===9"),'Staff Today zero cards')
+  assert.equal(await evaluate("[...document.querySelectorAll('.dashboard-today dd')].every(cell=>['0','0.00 kg'].includes(cell.textContent))"),true)
+  await evaluate("window.__staffTodayMode='error'");await click('Records');await click('Operations');await hasText('Simulated today activity failure')
+  assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card button:not(:disabled)').length"),9)
+  await staffWorkflow('Crate / Pallet');await until(()=>evaluate("document.querySelector('main h1')?.textContent==='Crate / Pallet'"),'workflow available despite Today API failure')
+  await click('Operations');await hasText('Simulated today activity failure')
+  await evaluate("window.__staffTodayMode='live'");await click("Retry today's activity")
+  await until(()=>evaluate("document.querySelectorAll('[data-today-workflow]').length===9"),'Staff Today recovery')
+  assert.deepEqual(await readTodayCards(),expectedStaffToday)
+  await evaluate('window.fetch=window.__staffTodayFetch;delete window.__staffTodayFetch;delete window.__releaseStaffToday;delete window.__staffTodayMode')
+  console.log('PASS: Staff Today activity shares nine cards/metrics above Workflows; narrow API, zero state, independent loading/failure/retry and 1280/1024/768 screenshots/overflow.')
   // Exercise empty state without deleting regression fixtures.
   await evaluate(`window.__operationsFetch=window.fetch; window.fetch=(...args)=>args[0]==='/api/operations/recent-submissions'
     ? Promise.resolve(new Response('[]',{status:200,headers:{'Content-Type':'application/json'}})) : window.__operationsFetch(...args);`)
@@ -1643,7 +1684,6 @@ try {
   assert.equal(await evaluate("document.querySelector('[data-chart-values=recovered-trend] li:last-child').dataset.value"),'40.00')
   assert.equal(await evaluate("document.querySelector('[data-chart=intake]').compareDocumentPosition(document.querySelector('.dashboard-recent')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)
   const dashBackend=(await browserApi('/api/admin/overview?month=2009-06')).body
-  const readTodayCards=()=>evaluate("[...document.querySelectorAll('[data-today-workflow]')].map(card=>({workflow:card.dataset.todayWorkflow,metrics:[...card.querySelectorAll('dl > div')].map(row=>({label:row.querySelector('dt').textContent,value:row.querySelector('dd').textContent}))}))")
   const expectedToday=dashBackend.todayActivity.map(card=>({workflow:card.workflow,metrics:card.metrics.map(metric=>({label:metric.label,value:metric.value+(metric.unit?' '+metric.unit:'')}))}))
   assert.equal(expectedToday.length,9);assert.deepEqual(await readTodayCards(),expectedToday)
   assert.equal(await evaluate("document.querySelector('.dashboard-secondary').compareDocumentPosition(document.querySelector('.dashboard-today')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)

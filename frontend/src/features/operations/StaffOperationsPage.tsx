@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { errorMessage, request } from '../../api/client'
 import type { Workflow } from '../records/types'
 import { workflowEntries } from './workflows'
+import { TodayActivity } from '../../components/TodayActivity'
+import type { TodayActivitySummary } from '../reporting/types'
 
 interface RecentSubmission { id: number; recordDate: string; workflow: Workflow; details: string; weightKg: string | null; count: number | null }
 interface Props { onNew: (workflow: Workflow) => void; onRecords: () => void; busy: boolean; unresolved: boolean; currentWorkflow: Workflow }
@@ -18,13 +20,24 @@ export function StaffOperationsPage({onNew, onRecords, busy, unresolved, current
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
+  const [todayAttempt, setTodayAttempt] = useState(0)
+  const [todayResult, setTodayResult] = useState<{attempt: number; data?: TodayActivitySummary; error?: string} | null>(null)
+  const todayLoading=todayResult?.attempt!==todayAttempt
+  useEffect(() => {
+    let cancelled=false
+    request<TodayActivitySummary>('/api/operations/today-activity').then(data=>{if(!cancelled)setTodayResult({attempt:todayAttempt,data})})
+      .catch(e=>{if(!cancelled)setTodayResult({attempt:todayAttempt,error:errorMessage(e)})})
+    return()=>{cancelled=true}
+  }, [todayAttempt])
   useEffect(() => {
     let cancelled = false
     request<RecentSubmission[]>('/api/operations/recent-submissions').then(rows => {if (!cancelled) setRecent(rows)})
       .catch(e => {if (!cancelled) setError(errorMessage(e))}).finally(() => {if (!cancelled) setLoading(false)})
     return () => {cancelled = true}
   }, [attempt])
-  return <section className="staff-operations"><div className="page-heading"><div><h1>Workflows</h1><p>Choose a workflow to start a new record.</p></div></div>
+  return <section className="staff-operations">
+    {todayLoading?<p role="status">Loading today's activity...</p>:todayResult?.error?<div><p className="notice error" role="alert">Today's activity: {todayResult.error}</p><button className="secondary" disabled={busy} onClick={()=>setTodayAttempt(n=>n+1)}>Retry today's activity</button></div>:todayResult?.data&&<TodayActivity {...todayResult.data}/>}
+    <div className="page-heading"><div><h1>Workflows</h1><p>Choose a workflow to start a new record.</p></div></div>
     <div className="workflow-card-grid">{workflowEntries.map(w => <article className="panel workflow-card" key={w.id} data-workflow={w.id}><h2>{w.name}</h2><p>{descriptions[w.id]}</p>
       <button disabled={busy || (unresolved && currentWorkflow !== w.id)} aria-label={`${w.id === 'ELECTRICAL_TESTING' ? 'Open' : 'New entry'}: ${w.name}`} onClick={() => onNew(w.id)}>{unresolved && currentWorkflow === w.id ? 'Resume submission' : w.id === 'ELECTRICAL_TESTING' ? 'Open' : 'New Entry'}</button>
     </article>)}</div>
