@@ -2232,6 +2232,62 @@ try {
   await checkRecordRows(true)
   console.log('PASS: whole-row and keyboard selection, switching/highlight/close, inline Hobart metadata and Staff/Admin detail permissions across all nine workflows.')
 
+  // ET-16: model an authoritative server rollover while the client's pending board is still open.
+  // ElectricalTestingMidnightIntegrationTests separately advances the real injected backend Clock.
+  await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_STAFF_USERNAME);await fill('Password',process.env.INITIAL_STAFF_PASSWORD);await click('Sign in');await enabled('Operations')
+  await staffWorkflow('Electrical Testing')
+  await until(()=>evaluate("!!document.querySelector('.quick-tally input')&&!document.querySelector('.quick-tally input').disabled"),'ET-16 board ready')
+  const midnightDate=await evaluate("document.querySelector('label.tally-date input[type=date]').value")
+  const midnightBefore=(await browserApi('/api/electrical-testing/tallies?from='+midnightDate+'&to='+midnightDate)).body
+  const midnightValue=Number(await evaluate("document.querySelector('.quick-tally input').value"))
+  await click('+','.quick-tally')
+  await evaluate(`window.__midnightFetch=window.fetch;window.__midnightPayloads=[];window.fetch=(...args)=>{
+    if(String(args[0])==='/api/electrical-testing/tallies'&&args[1]?.method==='POST'){
+      window.__midnightPayloads.push(JSON.parse(args[1].body));
+      return Promise.resolve(new Response(JSON.stringify({detail:"Historical tallies are read-only for Staff. Only today's tally can be changed."}),{status:403,headers:{'Content-Type':'application/problem+json'}}));
+    }return window.__midnightFetch(...args);
+  }`)
+  await click('Save Tallies');await hasText('Historical tallies are read-only for Staff.')
+  assert.equal(await evaluate("document.querySelector('label.tally-date input[type=date]').value"),midnightDate)
+  assert.equal(Number(await evaluate("document.querySelector('.quick-tally input').value")),midnightValue+1)
+  await hasText('1 tally adjustments pending')
+  await enabled('Retry Save Tallies');await click('Retry Save Tallies');await enabled('Clear remaining session')
+  const midnightPayloads=await evaluate('window.__midnightPayloads')
+  assert.equal(midnightPayloads.length,2);assert.deepEqual(midnightPayloads[0],midnightPayloads[1]);assert.equal(midnightPayloads[0].recordDate,midnightDate)
+  assert.deepEqual((await browserApi('/api/electrical-testing/tallies?from='+midnightDate+'&to='+midnightDate)).body,midnightBefore)
+  await evaluate('window.fetch=window.__midnightFetch');await click('Clear remaining session')
+  await until(()=>evaluate("![...document.querySelectorAll('button')].find(b=>b.textContent==='Sign out').disabled"),'ET-16 explicit recovery clears pending guard')
+  console.log('PASS ET-16: rejected historical save retains pending value/date/UUID, retry stays date-scoped, explicit clear recovers without a write.')
+
+  // SEC-03: use supported inputs and real API storage; never inject directly into application DOM.
+  await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
+  const hostileTexts=['<script>alert(1)</script>','<img src=x onerror=alert(1)>','=2+2','+SUM(1,1)','@test']
+  await evaluate('window.__hostileAlerts=0;window.__originalAlert=window.alert;window.alert=()=>{window.__hostileAlerts++}')
+  const hostileCategory=(await browserApi('/api/material-categories?context=PICKUP')).body[0].id
+  const hostileRecords=[]
+  for(const text of hostileTexts){const result=await browserApi('/api/pickup-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2005-12-12',pickupLocation:text,netWeight:'1.00',materials:[{materialCategoryId:hostileCategory,percentage:'100'}]});assert.equal(result.status,201);hostileRecords.push(result.body)}
+  async function inertHostileDom(scope){
+    assert.equal(await evaluate(`document.querySelector(${JSON.stringify(scope)}).querySelectorAll('script,img[onerror],iframe,svg[onload]').length`),0)
+    assert.equal(await evaluate('window.__hostileAlerts'),0)
+  }
+  await click('Records');await enabled('Apply dates / refresh');await fill('Workflow','PICKUP');await fill('From','2005-12-12');await fill('To','2005-12-12');await enabled('Apply dates / refresh');await click('Apply dates / refresh')
+  for(const record of hostileRecords){
+    await enabled('#'+record.id)
+    assert.ok(await evaluate(`document.querySelector('[aria-labelledby="records-heading"] table').textContent.includes(${JSON.stringify(record.pickupLocation)})`))
+    await inertHostileDom('[aria-labelledby="records-heading"] table');await click('#'+record.id);await enabled('Close details')
+    assert.ok(await evaluate(`document.querySelector('.detail-panel').textContent.includes(${JSON.stringify(record.pickupLocation)})`))
+    await inertHostileDom('.detail-panel');await click('Close details')
+  }
+  await click('Reports');await hasText('Applied period:');await fill('Report workflow','PICKUP');await fill('From date','2005-12-12');await fill('To date','2005-12-12');await enabled('Apply report filters');await click('Apply report filters');await fill('Report view','details')
+  for(const text of hostileTexts)await until(()=>evaluate(`document.querySelector('.report-section').textContent.includes(${JSON.stringify(text)})`),'SEC-03 literal report text '+text)
+  await inertHostileDom('.report-section')
+  const hostileCsv=await evaluate(`fetch('/api/admin/reports/export?from=2005-12-12&to=2005-12-12&workflow=PICKUP&report=details&format=csv').then(async r=>({status:r.status,text:await r.text()}))`)
+  assert.equal(hostileCsv.status,200)
+  for(const text of ['=2+2','+SUM(1,1)','@test'])assert.ok(hostileCsv.text.includes("'"+text),'SEC-03 CSV text protection '+text)
+  assert.equal(await evaluate('window.__hostileAlerts'),0)
+  await evaluate('window.alert=window.__originalAlert')
+  console.log('PASS SEC-03: hostile stored Pickup text remains literal in Records/details/reports, creates no executable DOM, and formula-looking CSV text is protected.')
+
   console.log('PASS: Shared branding/logo/favicon, exact workflow order, Electrical Testing Open for both roles, Workflows headings, login/footer text and three-column cards without overflow at 1280/1024/768.')
   console.log('PASS: Admin navigation/API boundaries, Overview, report periods and applied filters, filtered CSV/XLSX downloads, detail links, monthly figures/tonnes/exclusions, soft-delete refresh and tablet layout.')
   console.log('PASS: Electrical Testing selected-month counters/date contributions, Staff historical read-only, date/month synchronization, date-scoped Admin reductions, zero floor, empty months, unsaved guards, addition/reduction lost-response retries, separate sales references, Records/reporting and 1280/1024/768 layouts.')

@@ -1,4 +1,4 @@
-param([string]$PostgresBin = 'C:\Program Files\PostgreSQL\18\bin', [switch]$Browser)
+param([string]$PostgresBin = 'C:\Program Files\PostgreSQL\18\bin', [switch]$Browser, [string]$Tests)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $backendRoot = Join-Path $projectRoot 'backend'
@@ -79,7 +79,9 @@ try {
     $env:INITIAL_ADMIN_PASSWORD = [guid]::NewGuid().ToString('N')
     Push-Location $backendRoot
     try {
-        & mvn.cmd -B -ntp verify
+        $testArguments = @('-B', '-ntp', 'verify')
+        if ($Tests) { $testArguments += "-Dtest=$Tests" }
+        & mvn.cmd @testArguments
         $exitCode = $LASTEXITCODE
     } finally { Pop-Location }
     if ($exitCode -eq 0 -and $Browser) {

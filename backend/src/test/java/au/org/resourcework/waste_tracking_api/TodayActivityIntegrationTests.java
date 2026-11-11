@@ -98,4 +98,29 @@ class TodayActivityIntegrationTests {
         assertThat(activity()).hasSize(9);
         assertThat(activity().stream().flatMap(a->a.metrics().stream()).map(m->new BigDecimal(m.value()))).allMatch(v->v.signum()==0);
     }
+
+    @Test void DATE_02_fallBackDayIncludesBothRepeatedHoursAndExcludesAdjacentDays() {
+        var date=LocalDate.of(2026,4,5);
+        var start=date.atStartOfDay(zone).toInstant();var end=date.plusDays(1).atStartOfDay(zone).toInstant();
+        assertThat(Duration.between(start,end)).isEqualTo(Duration.ofHours(25));
+        assertThat(start).isEqualTo(Instant.parse("2026-04-04T13:00:00Z"));
+        assertThat(end).isEqualTo(Instant.parse("2026-04-05T14:00:00Z"));
+        var repeated=LocalDateTime.of(2026,4,5,2,30);
+        var offsets=zone.getRules().getValidOffsets(repeated);
+        assertThat(offsets).containsExactly(ZoneOffset.ofHours(11),ZoneOffset.ofHours(10));
+        var instants=List.of(start.minusNanos(1000),start,repeated.toInstant(offsets.get(0)),repeated.toInstant(offsets.get(1)),end.minusNanos(1000),end);
+        for(var instant:instants) {
+            long id=insert("scrap_record",Map.of("reporting_month",date.withDayOfMonth(1),"iron_and_steel_weight",1,"aluminium_weight",0,"other_non_ferrous_weight",0,"mixed_metals_weight",0,"ewaste_weight",0));
+            jdbc.update("update scrap_record set created_at=? where id=?",java.sql.Timestamp.from(instant),id);
+        }
+        assertThat(repeated.toInstant(offsets.get(0)).atZone(zone).toLocalDate()).isEqualTo(date);
+        assertThat(repeated.toInstant(offsets.get(1)).atZone(zone).toLocalDate()).isEqualTo(date);
+        assertThat(metrics(repository.todayActivity(date,start,end),"SCRAP")).containsEntry("Records today","4");
+        assertThat(metrics(repository.todayActivity(date.minusDays(1),date.minusDays(1).atStartOfDay(zone).toInstant(),start),"SCRAP")).containsEntry("Records today","1");
+        assertThat(metrics(repository.todayActivity(date.plusDays(1),end,date.plusDays(2).atStartOfDay(zone).toInstant()),"SCRAP")).containsEntry("Records today","1");
+        // Exercise the service's range construction too, not only a caller-supplied range.
+        var report=new ReportService(repository,Clock.fixed(repeated.toInstant(offsets.get(1)),zone),null).overview("2026-04");
+        assertThat(report.today()).isEqualTo("2026-04-05");
+        assertThat(metrics(report.todayActivity(),"SCRAP")).containsEntry("Records today","4");
+    }
 }
