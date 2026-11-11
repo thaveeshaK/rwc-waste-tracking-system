@@ -361,6 +361,7 @@ try {
   await click('Settings')
   await until(()=>evaluate("document.querySelectorAll('[role=menuitem]').length===6"),'six Settings choices')
   const settingsLabels=['Container Types','Material Categories','User Management','Organisation Details','Reporting Defaults','Whitegoods Weight Factor']
+  const operationalSettingsNote='Note: Before changing operational settings, make sure no one is currently entering data. If a setting changes while a user is entering or reviewing a record, the latest configuration available at the time of saving will be applied.'
   assert.deepEqual(await evaluate("[...document.querySelectorAll('[role=menuitem]')].map(b=>b.textContent)"),settingsLabels)
   await click('Workflows')
   await until(()=>evaluate("document.querySelector('[role=menu]')===null"),'menu closes outside')
@@ -380,6 +381,7 @@ try {
     await until(()=>evaluate("document.querySelector('main [role=status]')?.textContent!=='Loading settings...'"),'focused Settings loaded')
     assert.equal(await evaluate('location.pathname'),'/admin/settings/'+settingsPaths[i])
     assert.equal(await evaluate("document.querySelector('[role=menu]')===null"),true)
+    assert.equal(await evaluate(`[...document.querySelectorAll('.settings-page .notice')].filter(p=>p.textContent===${JSON.stringify(operationalSettingsNote)}).length`),i<2?1:0)
     if(i===2) {
       await hasText('Manage sign-in access.');await enabled('Add User')
       assert.equal(await evaluate("document.querySelectorAll('.settings-page .user-editor').length"),0)
@@ -1968,6 +1970,24 @@ try {
   await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_STAFF_USERNAME);await fill('Password',process.env.INITIAL_STAFF_PASSWORD);await click('Sign in');await enabled('Operations')
   await staffWorkflow('Scrap');await hasText('Monthly Scrap entry')
   assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Review record').disabled"),true)
+  const scrapCurrentMonth=(await browserApi('/api/auth/me')).body.operationalDate.slice(0,7)
+  const [scrapYear,scrapMonth]=scrapCurrentMonth.split('-').map(Number)
+  const scrapNextMonth=scrapMonth===12?`${scrapYear+1}-01`:`${scrapYear}-${String(scrapMonth+1).padStart(2,'0')}`
+  const scrapPreviousMonth=scrapMonth===1?`${scrapYear-1}-12`:`${scrapYear}-${String(scrapMonth-1).padStart(2,'0')}`
+  assert.equal(await evaluate("document.querySelector('input[type=month]').max"),scrapCurrentMonth)
+  await fill('Iron and Steel','1')
+  for(const month of [scrapPreviousMonth,scrapCurrentMonth]){
+    await fill('Reporting month',month);await enabled('Review record')
+    assert.equal((await browserApi('/api/scrap-records/preview','POST',{submissionId:crypto.randomUUID(),reportingMonth:month,ironAndSteelWeight:'1',aluminiumWeight:'0',otherNonFerrousWeight:'0',mixedMetalsWeight:'0',ewasteWeight:'0'})).status,200)
+  }
+  for(const month of [scrapNextMonth,`${scrapYear+1}-01`]){
+    await fill('Reporting month',month)
+    assert.equal(await evaluate("document.querySelector('input[type=month]').validity.rangeOverflow"),true)
+    assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Review record').disabled"),true)
+    const futureInput={submissionId:crypto.randomUUID(),reportingMonth:month,ironAndSteelWeight:'1',aluminiumWeight:'0',otherNonFerrousWeight:'0',mixedMetalsWeight:'0',ewasteWeight:'0'}
+    assert.equal((await browserApi('/api/scrap-records/preview','POST',futureInput)).status,400)
+    assert.equal((await browserApi('/api/scrap-records','POST',futureInput)).status,400)
+  }
   const scrapSeed={submissionId:crypto.randomUUID(),reportingMonth:'2009-09',ironAndSteelWeight:'250',aluminiumWeight:'0',otherNonFerrousWeight:'75',mixedMetalsWeight:'10',ewasteWeight:'477'}
   assert.equal((await browserApi('/api/scrap-records','POST',scrapSeed)).status,201)
   await fill('Reporting month','2009-09');await fill('Iron and Steel','100');await fill('Other Non-Ferrous','25');await fill('E-waste','100')

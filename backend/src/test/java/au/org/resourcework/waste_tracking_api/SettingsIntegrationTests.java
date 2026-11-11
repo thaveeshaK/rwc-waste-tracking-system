@@ -120,6 +120,21 @@ class SettingsIntegrationTests {
             var future=write(base,"POST",crate(id,iron,"12",electrical),201);assertThat(future.path("tareWeight").asText()).isEqualTo("9.00");assertThat(future.path("netWeight").asText()).isEqualTo("3.00");
         }
     }
+    @Test void newSubmissionUsesLatestContainerConfigurationInsteadOfEarlierPreview() throws Exception {
+        for(boolean electrical:List.of(false,true)) {
+            String context=electrical?"ELECTRICAL_CRATE_PALLET":"CRATE_PALLET";
+            String base=electrical?"/api/electrical-crate-pallet-records":"/api/crate-pallet-records";
+            var container=write(BASE+"/container-types","POST",reference("Preview "+context,"2",true,context),200);
+            long id=container.path("id").asLong();var input=crate(id,iron,"12",electrical);
+            assertThat(write(base+"/preview","POST",input,200).path("tareWeight").asText()).isEqualTo("2.00");
+            var edit=reference("At save "+context,"5",true,context);edit.put("version",container.path("version").asLong());
+            write(BASE+"/container-types/"+id,"PUT",edit,200);
+            var saved=write(base,"POST",input,201);
+            assertThat(saved.path("tareWeight").asText()).isEqualTo("5.00");
+            assertThat(saved.path("netWeight").asText()).isEqualTo("7.00");
+            assertThat(saved.path("containerTypeName").asText()).isEqualTo("At save "+context);
+        }
+    }
     @Test void containerSummaryGroupsAreExplicitAndUnrelatedWorkflowsRemainOptional() throws Exception {
         for(String group:List.of("CRATE","PALLET","OTHER")) {
             var input=reference("Group "+group,"1",true,"CRATE_PALLET");input.put("summaryGroup",group);

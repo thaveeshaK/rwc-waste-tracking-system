@@ -51,6 +51,23 @@ class ScrapIntegrationTests {
   for(String month:List.of("2004-13","2004-09-01","0000-01","9999-01",""))send("/preview",entry(month,"1")).andExpect(status().isBadRequest());
   var missing=entry("2004-09","1");missing.remove("ewasteWeight");send("",missing).andExpect(status().isBadRequest());
  }
+ @Test void currentAndPastMonthsAcceptedButFutureMonthsCannotBypassEntryValidation()throws Exception {
+  var now=YearMonth.now(clock);
+  for(var month:List.of(now.minusMonths(1),now)) {
+   var body=entry(month.toString(),"1.25");send("/preview",body).andExpect(status().isOk());created(body);
+  }
+  var saved=created(entry(now.minusMonths(1).toString(),"2.50"));
+  for(var month:List.of(now.plusMonths(1),now.plusYears(1))) {
+   var body=entry(month.toString(),"9.99");
+   send("/preview",body).andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail").value("Reporting month cannot be in the future (Australia/Hobart)."));
+   send("",body).andExpect(status().isBadRequest());
+   assertThat(jdbc.queryForObject("select count(*) from scrap_record where submission_id=?",Integer.class,body.get("submissionId"))).isZero();
+   body.put("version",saved.get("version").asLong());
+   mvc.perform(post("/api/scrap-records/preview?recordId="+saved.get("id").asLong()).with(user(admin).roles("ADMIN")).with(csrf()).contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
+   update(saved.get("id").asLong(),body).andExpect(status().isBadRequest());
+  }
+  assertThat(get("/api/scrap-records/"+saved.get("id").asLong()).andReturn().getResponse().getContentAsString()).contains("2.50",now.minusMonths(1).toString());
+ }
  @Test void additiveMonthsAndDecimalTotalsAreIndependent()throws Exception {
   created(entry("2004-09","0.10"));created(input("2004-09","0.20","2.25","3.33","4.44","5.55"));created(entry("2004-10","999"));
   get("/api/scrap-records/monthly-summary?month=2004-09").andExpect(jsonPath("$.ironAndSteelWeight").value("0.30")).andExpect(jsonPath("$.totalWeight").value("15.87"));

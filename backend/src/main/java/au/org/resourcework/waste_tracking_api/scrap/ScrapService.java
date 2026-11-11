@@ -93,7 +93,9 @@ public class ScrapService {
     }
 
     private ScrapRecord calculate(ScrapRequest input, ScrapRecord previous) {
-        var result=new ScrapRecord(); result.setReportingMonth(month(input.reportingMonth()).atDay(1));
+        var reportingMonth=month(input.reportingMonth());
+        if(reportingMonth.isAfter(YearMonth.now(clock))) badRequest("Reporting month cannot be in the future (Australia/Hobart).");
+        var result=new ScrapRecord(); result.setReportingMonth(reportingMonth.atDay(1));
         result.setIronAndSteelWeight(input.ironAndSteelWeight().setScale(2));
         result.setAluminiumWeight(input.aluminiumWeight().setScale(2));
         result.setOtherNonFerrousWeight(input.otherNonFerrousWeight().setScale(2));

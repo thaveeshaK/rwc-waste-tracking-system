@@ -32,6 +32,7 @@ export function SettingsPage({section,onChanged}: {section: SettingsSection;onCh
   }
   return <section className="settings-page" data-settings-section={section}><div className="page-heading"><div><p className="eyebrow">Settings</p><h1>{title}</h1></div>{section!=='users'&&<button className="secondary" onClick={()=>{setData(null);setError('');setMessage('');setAttempt(n=>n+1)}}>Reload settings</button>}</div>
     {section==='users'?<UserManagementPage/>:<>
+      {(section==='container-types'||section==='material-categories')&&<p className="notice">Note: Before changing operational settings, make sure no one is currently entering data. If a setting changes while a user is entering or reviewing a record, the latest configuration available at the time of saving will be applied.</p>}
       {message&&<p role="status" className="notice success">{message}</p>}{error&&<p role="alert" className="notice error">{error}</p>}
       {!data&&!error&&<p role="status">Loading settings...</p>}
       {data?.rows&&<ReferenceSettings container={section==='container-types'} rows={data.rows} onSaved={load}/>}
