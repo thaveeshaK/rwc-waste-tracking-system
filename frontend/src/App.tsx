@@ -44,6 +44,7 @@ function App() {
   const [editing, setEditing] = useState<OperationalRecord | undefined>()
   const [reported, setReported] = useState<OperationalRecord | undefined>()
   const [saved, setSaved] = useState<OperationalRecord | undefined>()
+  const [postSaveOrigin, setPostSaveOrigin] = useState<'new' | 'correction' | undefined>()
   const [entryKey, setEntryKey] = useState(0)
   const [hasEntry, setHasEntry] = useState(false)
   const [entryWorkflow, setEntryWorkflow] = useState<Workflow>('CRATE_PALLET')
@@ -105,6 +106,7 @@ function App() {
     setPage('records')
     setReported(undefined)
     setSaved(undefined)
+    setPostSaveOrigin(undefined)
   }
 
   function newRecord(workflow: Workflow) {
@@ -113,6 +115,7 @@ function App() {
     if (!unresolvedRef.current && !pendingTalliesRef.current) {
       setEditing(undefined)
       setSaved(undefined)
+      setPostSaveOrigin(undefined)
       setEntryWorkflow(workflow)
       setEntryKey(key => key + 1)
       setHasEntry(true)
@@ -133,6 +136,7 @@ function App() {
       setConfiguration(null)
       setEditing(undefined)
       setSaved(undefined)
+      setPostSaveOrigin(undefined)
       setHasEntry(false)
       setPage('records')
     } catch (error) { setError(errorMessage(error)) }
@@ -142,6 +146,7 @@ function App() {
   function recordSaved(record: OperationalRecord) {
     setReported(undefined)
     setSaved(record)
+    setPostSaveOrigin(editing ? 'correction' : 'new')
     if(!editing){setRecordWorkflow(record.workflow);setRecordsView(initialRecordsView)}
     setEditing(undefined)
     setHasEntry(false)
@@ -153,6 +158,7 @@ function App() {
     if (['overview', 'reports', 'waste-levy', 'settings'].includes(target) && user?.role !== 'ADMIN') return
     if (target !== 'settings') window.history.replaceState(null,'','/')
     if (target === 'records') { showRecords(); return }
+    setPostSaveOrigin(undefined)
     setError(''); setPage(target)
   }
 
@@ -218,7 +224,7 @@ function App() {
             onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged} onPendingChange={pendingTalliesChanged}
             onSaved={record => recordSaved({ workflow: 'ELECTRICAL_TESTING', record })} onCancel={showRecords} />}
       </div>}
-      {page === 'records' && <RecordsPage isAdmin={user.role === 'ADMIN'} saved={saved} selectedRecord={reported}
+      {page === 'records' && <RecordsPage isAdmin={user.role === 'ADMIN'} saved={saved} postSaveOrigin={postSaveOrigin} onNew={newRecord} selectedRecord={reported}
         view={recordsView} onViewChange={setRecordsView} workflow={recordWorkflow} onWorkflowChange={workflow => { setSaved(undefined); setRecordWorkflow(workflow) }}
         onBusyChange={activityChanged} onEdit={record => {
           if (busyRef.current) return

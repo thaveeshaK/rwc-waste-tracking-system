@@ -33,13 +33,15 @@ interface Props {
   view: RecordsView
   onViewChange:(view:RecordsView)=>void
   saved?: OperationalRecord
+  postSaveOrigin?: 'new' | 'correction'
+  onNew: (workflow: Workflow) => void
   selectedRecord?: OperationalRecord
   onWorkflowChange: (workflow: Workflow | '') => void
   onEdit: (record: OperationalRecord) => void
   onBusyChange: (busy: boolean) => void
 }
 
-export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, selectedRecord, onWorkflowChange, onEdit, onBusyChange }: Props) {
+export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, postSaveOrigin, onNew, selectedRecord, onWorkflowChange, onEdit, onBusyChange }: Props) {
   const [records, setRecords] = useState<OperationalRecord[]>([])
   const [selected, setSelected] = useState<OperationalRecord | null>(selectedRecord ?? saved ?? null)
   const [openedFromRecords, setOpenedFromRecords] = useState(!!selectedRecord)
@@ -52,6 +54,8 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, sele
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [totalItems,setTotalItems]=useState(0)
+  const anotherWorkflow=postSaveOrigin==='new' && saved && saved.workflow!=='ELECTRICAL_TESTING' && !openedFromRecords && selected?.workflow===saved.workflow && selected.record.id===saved.record.id ? saved.workflow : undefined
+  const anotherLabel=anotherWorkflow?newEntryLabels[anotherWorkflow]:undefined
 
   useEffect(() => {
     let cancelled = false
@@ -116,6 +120,7 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, sele
       <p>View submitted loads{isAdmin ? ', correct entries, or delete an incorrect record.' : '. Submitted records are read-only for Staff.'}</p></div></div>
     {workflow === 'SCRAP' && <p className="hint">Scrap uses reporting months. Date filters include each month touched by the selected range.</p>}
     {message && <p className="notice success" role="status">{message}</p>}
+    {anotherWorkflow && anotherLabel && <div className="actions"><button disabled={busy} onClick={()=>onNew(anotherWorkflow)}>Enter another {anotherLabel}</button></div>}
     {error && <p className="notice error" role="alert">{error}</p>}
     {workflow === 'WHITEGOODS' && <WhitegoodsSummary refreshToken={attempt} busy={busy} />}
     <div className="panel"><form className="filter-bar" onSubmit={applyFilter}>
@@ -150,6 +155,12 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, sele
           <button className="secondary" disabled={busy} onClick={() => setConfirmDelete(false)}>Cancel</button></div></div>}
     </div>}
   </section>
+}
+
+const newEntryLabels: Partial<Record<Workflow,string>> = {
+  CRATE_PALLET: 'Crate / Pallet', SALVAGE: 'Salvage trip', PICKUP: 'Pickup',
+  ELECTRICAL_CRATE_PALLET: 'Electrical Crate / Pallet', COLLECTABLES: 'Collectables entry',
+  WHITEGOODS: 'Whitegoods entry', EWASTE_PICKUP: 'E-waste Pickup', SCRAP: 'Scrap entry',
 }
 
 function UnifiedCells({row}:{row:OperationalRecord}) {

@@ -66,6 +66,20 @@ async function reopenForAdminActions() {
     await enabled('#'+id);await click('#'+id)
     await enabled('Correct record');await enabled('Delete record')
   }
+  await assertNoEntryShortcut()
+}
+
+async function assertNoEntryShortcut() {
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent.startsWith('Enter another '))"),false)
+}
+
+async function freshPreview(path,reviewButton) {
+  await evaluate(`window.__freshPreviewFetch=window.fetch;window.__freshPreviews=[];window.fetch=(...args)=>{if(String(args[0]).startsWith(${JSON.stringify(path)})&&args[1]?.method==='POST')window.__freshPreviews.push({path:args[0],input:JSON.parse(args[1].body)});return window.__freshPreviewFetch(...args)}`)
+  await click(reviewButton);await enabled('Back to edit')
+  const previews=await evaluate('window.__freshPreviews')
+  await evaluate('window.fetch=window.__freshPreviewFetch;delete window.__freshPreviewFetch;delete window.__freshPreviews')
+  assert.equal(previews.length,1);assert.equal(previews[0].path,path);assert.equal(previews[0].input.version,undefined)
+  return previews[0].input
 }
 
 async function click(text, scope = '') {
@@ -345,6 +359,16 @@ try {
   assert.equal(ids.length, 2); assert.equal(ids[0], ids[1])
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b => b.textContent === 'Correct record')"), false)
   const savedId = await evaluate("document.querySelector('.detail-heading h2').textContent.split('#')[1]")
+  await enabled('Enter another Crate / Pallet');await screenshot('post-save-batch-staff')
+  await click('Enter another Crate / Pallet')
+  await until(()=>evaluate("document.querySelector('select')?.options.length===6"),'fresh shortcut Crate references')
+  assert.equal(await evaluate("document.querySelector('.staff-operations')===null"),true)
+  assert.equal(await evaluate("document.querySelector('select').value"),'')
+  assert.equal(await evaluate("[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('Gross weight')).querySelector('input').value"),'')
+  assert.equal(await evaluate("[...document.querySelectorAll('.material-grid input')].every(i=>i.value==='0.00')"),true)
+  await fill('Container type',apple);await fill('Gross weight','161.00');await fill('Timber','100.00')
+  const freshCrate=await freshPreview('/api/crate-pallet-records/preview','Review record')
+  assert.notEqual(freshCrate.submissionId,ids[0]);assert.equal(freshCrate.grossWeight,'161.00')
   await click('Operations')
   const recentStaff=(await browserApi('/api/operations/recent-submissions')).body
   assert.ok(recentStaff.length>0&&recentStaff.length<=5)
@@ -361,6 +385,8 @@ try {
   await screenshot('staff-operations-with-recent')
   await click('View Records')
   await hasText('Submitted records are read-only for Staff.')
+  await assertNoEntryShortcut()
+  await enabled('#'+savedId);await click('#'+savedId);await enabled('Close details');await assertNoEntryShortcut()
   const duplicateCount = await evaluate(`fetch('/api/crate-pallet-records').then(r => r.json()).then(rows => rows.filter(r => r.submissionId === ${JSON.stringify(ids[0])}).length)`)
   assert.equal(duplicateCount, 1)
   await screenshot('tablet-saved-record')
@@ -461,6 +487,7 @@ try {
   await hasText('Net material weight')
   await click('Confirm correction')
   await hasText('saved successfully.')
+  await assertNoEntryShortcut()
   assert.ok(await evaluate("document.querySelector('.net-weight dd').textContent.includes('110.00 kg')"))
   // Lose a successful delete response. Its retry receives 404 and must clear stale details/list rows.
   await evaluate(`window.__lostDeleteResponse = false;
@@ -627,6 +654,7 @@ try {
   let trips = await browserApi('/api/salvage-records')
   assert.equal(trips.body.filter(r => r.submissionId === salvageSubmission).length, 1)
   const firstSalvageId = trips.body.find(r => r.submissionId === salvageSubmission).id
+  await enabled('Enter another Salvage trip')
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b => b.textContent === 'Correct record')"), false)
   await screenshot('tablet-salvage-saved')
   await evaluate('window.fetch = window.__realFetch')
@@ -802,6 +830,7 @@ try {
   const pickups = (await browserApi('/api/pickup-records')).body.filter(r => r.submissionId === pickupInput.submissionId)
   assert.equal(pickups.length, 1)
   const pickupId = pickups[0].id
+  await enabled('Enter another Pickup')
   assert.equal(pickups[0].netWeight, '125.50')
   assert.equal(pickups[0].materials[0].materialWeight, '125.50')
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b => b.textContent === 'Correct record')"), false)
@@ -974,6 +1003,7 @@ try {
   const electricalRecords = (await browserApi('/api/electrical-crate-pallet-records')).body.filter(r => r.submissionId === electricalInput.submissionId)
   assert.equal(electricalRecords.length, 1)
   const electricalId = electricalRecords[0].id
+  await enabled('Enter another Electrical Crate / Pallet')
   assert.equal(electricalRecords[0].tareWeight, '50.00')
   assert.equal(electricalRecords[0].netWeight, '100.00')
   assert.equal(electricalRecords[0].materials.length, 2)
@@ -1126,6 +1156,7 @@ try {
   const collectableRecords = (await browserApi('/api/collectable-records')).body.filter(r => r.submissionId === collectableInput.submissionId)
   assert.equal(collectableRecords.length, 1)
   const collectableId = collectableRecords[0].id
+  await enabled('Enter another Collectables entry')
   assert.equal(collectableRecords[0].grossWeight, '22.00')
   assert.equal(collectableRecords[0].tareWeight, '2.00')
   assert.equal(collectableRecords[0].netWeight, '20.00')
@@ -1256,6 +1287,7 @@ try {
   const whitegoodsRecords = (await browserApi('/api/whitegoods-records')).body.filter(r => r.submissionId === whitegoodsInput.submissionId)
   assert.equal(whitegoodsRecords.length, 1)
   const whitegoodsId = whitegoodsRecords[0].id
+  await enabled('Enter another Whitegoods entry')
   assert.equal(whitegoodsRecords[0].kgPerItem, '48.00')
   assert.equal(whitegoodsRecords[0].estimatedWeight, '240.00')
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b => b.textContent === 'Correct record')"), false)
@@ -1476,6 +1508,7 @@ try {
   const testingSaved=(await browserApi('/api/electrical-testing/tallies')).body.filter(r=>r.submissionId===testingInput.submissionId)
   assert.equal(testingSaved.length,1)
   const testingId=testingSaved[0].id
+  await assertNoEntryShortcut()
   const testingSummary=(await browserApi('/api/electrical-testing/monthly-summary?month='+tallyMonth)).body
   assert.equal(testingSummary.divertedToOls,3);assert.equal(testingSummary.divertedToColl,4)
   assert.equal(testingSummary.categories[0].testedAndPriced,2)
@@ -1654,6 +1687,7 @@ try {
   await click('Delete record')
   await click('Confirm deletion')
   await hasText('Record #'+testingId+' deleted.')
+  await assertNoEntryShortcut()
   assert.equal((await browserApi('/api/electrical-testing/monthly-summary?month=2002-02')).body.divertedToOls,0)
   // Dashboard V2 uses exact backend aggregates, with all fixture workflows in one selected month.
   const dashboardContainers=(await browserApi('/api/container-types?context=CRATE_PALLET')).body
@@ -1938,6 +1972,17 @@ try {
   assert.equal(await evaluate("document.querySelector('.detail-panel .record-facts')!==null"),true)
   assert.equal(await evaluate("[...document.querySelectorAll('.detail-panel button')].some(b=>['Correct record','Delete record'].includes(b.textContent))"),false)
   const savedWhitegoodsDetails=await evaluate("document.querySelector('.detail-panel .record-facts').textContent")
+  const batchWhitegoodsId=await evaluate("document.querySelector('.detail-heading h2').textContent.split('#')[1]")
+  const batchWhitegoods=(await browserApi('/api/whitegoods-records/'+batchWhitegoodsId)).body
+  await enabled('Enter another Whitegoods entry');await screenshot('post-save-batch-admin')
+  await click('Enter another Whitegoods entry');await hasText('Whitegoods entry')
+  assert.equal(await evaluate("[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('Whitegoods count')).querySelector('input').value"),'')
+  assert.equal(await evaluate("document.querySelector('input[type=date]').value"),(await browserApi('/api/auth/me')).body.operationalDate)
+  await hasText('52.25 kg per whitegood');await fill('Whitegoods count','1')
+  const freshWhitegoods=await freshPreview('/api/whitegoods-records/preview','Review Whitegoods')
+  assert.notEqual(freshWhitegoods.submissionId,batchWhitegoods.submissionId)
+  await click('Records');await enabled('#'+batchWhitegoodsId);await assertNoEntryShortcut()
+  await click('#'+batchWhitegoodsId);await enabled('Correct record');await assertNoEntryShortcut()
   await reopenForAdminActions()
   assert.equal(await evaluate("document.querySelector('.detail-panel .record-facts').textContent"),savedWhitegoodsDetails)
   assert.equal((await browserApi('/api/whitegoods-records/'+oldWhitegoods.body.id)).body.kgPerItem,'48.00')
@@ -1985,6 +2030,7 @@ try {
   await evaluate('window.__releaseEwaste()');await enabled('Retry submission');await click('Check Records');await resumeStaffSubmission();await enabled('Retry submission');await click('Retry submission');await hasText('saved successfully.')
   const ewastePayloads=await evaluate('window.__ewastePayloads');assert.equal(ewastePayloads.length,2);assert.equal(ewastePayloads[0],ewastePayloads[1]);await evaluate('window.fetch=window.__realFetch')
   const ewasteInput=JSON.parse(ewastePayloads[0]);const ewasteRows=(await browserApi('/api/ewaste-pickups')).body.filter(r=>r.submissionId===ewasteInput.submissionId);assert.equal(ewasteRows.length,1);const ewasteId=ewasteRows[0].id
+  await enabled('Enter another E-waste Pickup')
   await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
   const currentEwastePlastic=(await browserApi('/api/admin/settings/container-types')).body.find(c=>c.id===ewastePlastic.id)
   assert.equal((await browserApi('/api/admin/settings/container-types/'+ewastePlastic.id,'PUT',{summaryGroup:currentEwastePlastic.summaryGroup,version:currentEwastePlastic.version,name:'Renamed E-waste Pallet',tareWeight:'9.00',active:false,contexts:currentEwastePlastic.contexts})).status,200)
@@ -2046,6 +2092,7 @@ try {
   await evaluate('window.__releaseScrap()');await enabled('Retry submission');await click('Check Records');await resumeStaffSubmission();await enabled('Retry submission');await click('Retry submission');await hasText('saved successfully.')
   const scrapPayloads=await evaluate('window.__scrapPayloads');assert.equal(scrapPayloads.length,2);assert.equal(scrapPayloads[0],scrapPayloads[1]);await evaluate('window.fetch=window.__realFetch')
   const scrapInput=JSON.parse(scrapPayloads[0]),scrapRows=(await browserApi('/api/scrap-records')).body.filter(r=>r.submissionId===scrapInput.submissionId);assert.equal(scrapRows.length,1);const scrapId=scrapRows[0].id
+  await enabled('Enter another Scrap entry')
   assert.equal((await browserApi('/api/scrap-records/monthly-summary?month=2009-09')).body.totalWeight,'1037.00')
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Correct record'||b.textContent==='Delete record')"),false)
   await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
