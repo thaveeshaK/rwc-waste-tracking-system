@@ -148,6 +148,18 @@ class SettingsIntegrationTests {
         write("/api/crate-pallet-records/"+second.path("id").asLong(),"DELETE",Map.of(),204);
         assertThat(read("/api/admin/waste-levy-summary?month=2006-01").path("containerMaterials").toString()).doesNotContain("PALLET");
     }
+    @Test void electricalSummaryGroupsAreRequiredAndHistoricalCorrectionsRetainThem() throws Exception {
+        var input=reference("Electrical snapshot test","2",true,"ELECTRICAL_CRATE_PALLET");input.remove("summaryGroup");
+        write(BASE+"/container-types","POST",input,400);input.put("summaryGroup","CRATE");
+        var container=write(BASE+"/container-types","POST",input,200);long id=container.path("id").asLong();
+        var payload=crate(id,iron,"12",true);var first=write("/api/electrical-crate-pallet-records","POST",payload,201);
+        input.put("version",container.path("version").asLong());input.put("summaryGroup","PALLET");write(BASE+"/container-types/"+id,"PUT",input,200);
+        payload.put("version",first.path("version").asLong());payload.put("grossWeight","13");
+        write("/api/electrical-crate-pallet-records/"+first.path("id").asLong(),"PUT",payload,200);
+        assertThat(jdbc.queryForObject("select summary_group_snapshot from electrical_crate_pallet_record where id=?",String.class,first.path("id").asLong())).isEqualTo("CRATE");
+        var second=write("/api/electrical-crate-pallet-records","POST",crate(id,iron,"12",true),201);
+        assertThat(jdbc.queryForObject("select summary_group_snapshot from electrical_crate_pallet_record where id=?",String.class,second.path("id").asLong())).isEqualTo("PALLET");
+    }
     @Test void materialIdentityAndInactiveHistoricalReferencesArePreserved() throws Exception {
         var category=write(BASE+"/material-categories","POST",reference("Settings material",null,true,"CRATE_PALLET"),200);long id=category.path("id").asLong();
         long container=jdbc.queryForObject("select id from container_type where name='Plastic Pallet'",Long.class);

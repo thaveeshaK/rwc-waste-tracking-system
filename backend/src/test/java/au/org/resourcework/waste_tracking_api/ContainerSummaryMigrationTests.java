@@ -42,6 +42,37 @@ class ContainerSummaryMigrationTests {
             assertThat(f.migrate().migrationsExecuted).isEqualTo(20);f.validate();
         }
     }
+    @Test void populatedV20ElectricalUpgradePreservesChecksumsAndBackfillsSnapshotsOnly() throws Exception {
+        var settings=IsolatedTestDatabase.settings();
+        try(var c=DriverManager.getConnection(settings.url(),settings.username(),settings.password())) {
+            IsolatedTestDatabase.verify(c,settings);
+            String schema="electrical_groups_"+UUID.randomUUID().toString().replace("-","");
+            flyway(settings,schema,"20").migrate();c.setSchema(schema);var applied=hashes(c);
+            try(var stmt=c.createStatement()) {
+                stmt.executeUpdate("insert into app_user(username,password_hash,role) values ('migration-admin','unused','ADMIN')");
+                stmt.executeUpdate("insert into container_type(name,tare_weight) values ('Custom pallet',7)");
+                stmt.executeUpdate("insert into electrical_crate_pallet_record(submission_id,record_date,container_type_id,gross_weight,tare_weight,net_weight,created_by,updated_by,created_at,updated_at) select md5(id::text)::uuid,'2005-01-01',id,tare_weight+10,tare_weight,10,(select id from app_user limit 1),(select id from app_user limit 1),now(),now() from container_type where name<>'Apple Crate'");
+                stmt.executeUpdate("update container_type set summary_group='OTHER',name=case when name='Stillage Cage' then 'Renamed cage' else name end");
+            }
+            var latest=flyway(settings,schema,"21");assertThat(latest.migrate().migrationsExecuted).isEqualTo(1);latest.validate();assertThat(hashes(c)).containsAllEntriesOf(applied);
+            var groups=new HashMap<String,String>();
+            try(var stmt=c.createStatement();var rs=stmt.executeQuery("select container_name,summary_group_snapshot from electrical_crate_pallet_record")) {while(rs.next())groups.put(rs.getString(1),rs.getString(2));}
+            assertThat(groups).containsEntry("Stillage Cage","CRATE").containsEntry("Plastic Pallet","PALLET").containsEntry("Pine Pallet","PALLET").containsEntry("Hardwood Pallet","PALLET").containsEntry("Custom pallet","OTHER");
+            try(var stmt=c.createStatement()) {
+                stmt.executeUpdate("update electrical_crate_pallet_record set gross_weight=gross_weight+1,net_weight=net_weight+1 where container_name='Stillage Cage'");
+            }
+            try(var stmt=c.createStatement();var rs=stmt.executeQuery("select summary_group_snapshot from electrical_crate_pallet_record where container_name='Stillage Cage'")) {rs.next();assertThat(rs.getString(1)).isEqualTo("CRATE");}
+            try(var stmt=c.createStatement();var rs=stmt.executeQuery("select count(*) from container_type where summary_group<>'OTHER'")) {rs.next();assertThat(rs.getInt(1)).isZero();}
+        }
+    }
+    @Test void freshV1ThroughV21MigratesAndValidates() throws Exception {
+        var settings=IsolatedTestDatabase.settings();
+        try(var c=DriverManager.getConnection(settings.url(),settings.username(),settings.password())) {
+            IsolatedTestDatabase.verify(c,settings);
+            var f=flyway(settings,"electrical_fresh_"+UUID.randomUUID().toString().replace("-",""),"21");
+            assertThat(f.migrate().migrationsExecuted).isEqualTo(21);f.validate();
+        }
+    }
     private Flyway flyway(IsolatedTestDatabase.Settings s,String schema,String target) {
         return Flyway.configure().dataSource(s.url(),s.username(),s.password()).schemas(schema).defaultSchema(schema).cleanDisabled(true).target(target).load();
     }

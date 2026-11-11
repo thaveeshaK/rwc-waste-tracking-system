@@ -127,7 +127,7 @@ public class ReportService {
         var testing=TESTING_STATUSES.stream().map(status->new Counter(status,
                 metric(totals,"ELECTRICAL_TESTING",status,null).toBigIntegerExact().toString())).toList();
         return new Overview(today.toString(),selected.toString(),repository.submitted(today.atStartOfDay(clock.getZone()).toInstant(),today.plusDays(1).atStartOfDay(clock.getZone()).toInstant()),
-                activity.stream().mapToLong(Activity::count).sum(),activity,repository.recent(5),trend,monthly,metrics,generalIntake(totals),testing,topIntake(totals),recoveredTrend(month,end));
+                activity.stream().mapToLong(Activity::count).sum(),activity,repository.recent(5),trend,monthly,metrics,generalIntake(totals),testing,topIntake(totals),recoveredTrend(month,end),repository.todayActivity(today,today.atStartOfDay(clock.getZone()).toInstant(),today.plusDays(1).atStartOfDay(clock.getZone()).toInstant()));
     }
 
     private List<RecoveredTrend> recoveredTrend(LocalDate month, LocalDate end) {

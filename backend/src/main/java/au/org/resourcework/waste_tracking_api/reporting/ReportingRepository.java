@@ -139,6 +139,39 @@ public class ReportingRepository {
         return jdbc.query("with data as ("+DATA+") select * from data where row_type='RECORD' order by created_at desc,workflow,id desc limit :limit",
                 Map.of("limit",limit),(rs,n)->row(rs));
     }
+    public List<DailyActivity> todayActivity(LocalDate today, Instant start, Instant end) {
+        var p=new MapSqlParameterSource().addValue("today",today).addValue("start",java.sql.Timestamp.from(start)).addValue("end",java.sql.Timestamp.from(end))
+                .addValue("month",today.withDayOfMonth(1));
+        var result=new ArrayList<DailyActivity>();
+        for(String workflow:List.of("CRATE_PALLET","ELECTRICAL_CRATE_PALLET")) {
+            String table=workflow.equals("CRATE_PALLET")?"crate_pallet_record":"electrical_crate_pallet_record";
+            result.add(daily(workflow,"select count(*) filter(where summary_group_snapshot='CRATE'), count(*) filter(where summary_group_snapshot='PALLET'),coalesce(sum(net_weight),0) from "+table+" where deleted_at is null and record_date=:today",p,
+                    List.of("Crates","Pallets","Combined weight"),List.of("","","kg")));
+        }
+        result.add(daily("SALVAGE","select count(*),coalesce(sum(kg_up),0),coalesce(sum(kg_down),0) from salvage_record where deleted_at is null and record_date=:today",p,
+                List.of("Trips","Salvage Up","Salvage Down"),List.of("","kg","kg")));
+        for(String workflow:List.of("PICKUP","EWASTE_PICKUP","COLLECTABLES")) {
+            String table=switch(workflow) {case "PICKUP"->"pickup_record";case "EWASTE_PICKUP"->"ewaste_pickup_record";default->"collectable_record";};
+            result.add(daily(workflow,"select count(*),coalesce(sum(net_weight),0) from "+table+" where deleted_at is null and record_date=:today",p,
+                    List.of("Trips","Combined weight"),List.of("","kg")));
+        }
+        result.add(daily("WHITEGOODS","select coalesce(sum(whitegoods_count),0) from whitegoods_record where deleted_at is null and record_date=:today",p,List.of("Items"),List.of("")));
+        result.add(daily("ELECTRICAL_TESTING","select coalesce(sum(count) filter(where tally_type='TESTED_AND_PRICED'),0),coalesce(sum(count) filter(where tally_type='UNTESTED_BROKEN_FAILED'),0) from electrical_testing_tally where deleted_at is null and record_date=:today",p,
+                List.of("Working","Untested / Broken / Failed"),List.of("","")));
+        // Daily means entered today, independently of the monthly period being reported.
+        result.add(daily("SCRAP","select count(*) filter(where created_at>=:start and created_at<:end),count(*) filter(where reporting_month=:month) from scrap_record where deleted_at is null",p,
+                List.of("Records today","Records this month"),List.of("","")));
+        var order=List.of("CRATE_PALLET","SALVAGE","ELECTRICAL_CRATE_PALLET","PICKUP","EWASTE_PICKUP","COLLECTABLES","WHITEGOODS","ELECTRICAL_TESTING","SCRAP");
+        result.sort(Comparator.comparingInt(row->order.indexOf(row.workflow())));
+        return result;
+    }
+    private DailyActivity daily(String workflow,String sql,MapSqlParameterSource parameters,List<String> labels,List<String> units) {
+        return jdbc.queryForObject(sql,parameters,(r,n)->{
+            var metrics=new ArrayList<DailyMetric>();
+            for(int i=0;i<labels.size();i++) metrics.add(new DailyMetric(labels.get(i),r.getBigDecimal(i+1).setScale(units.get(i).equals("kg")?2:0).toPlainString(),units.get(i)));
+            return new DailyActivity(workflow,metrics);
+        });
+    }
     public long submitted(Instant start, Instant end) {
         return jdbc.queryForObject("with data as ("+DATA+") select count(*) from data where row_type='RECORD' and created_at>=:start and created_at<:end",
                 new MapSqlParameterSource().addValue("start",java.sql.Timestamp.from(start)).addValue("end",java.sql.Timestamp.from(end)),Long.class);

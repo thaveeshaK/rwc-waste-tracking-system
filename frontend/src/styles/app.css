@@ -234,3 +234,17 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 @media(max-width:800px){.pagination{align-items:flex-start}.pagination-pages{flex-basis:100%;order:3}}
 
 .user-editor {margin-top:1rem}.user-actions {display:flex;gap:.5rem;flex-wrap:wrap}.user-actions button {min-height:44px;text-align:left}
+
+.dashboard-today { margin: 1.5rem 0; }
+.dashboard-today > h2 { margin: 0 0 .35rem; font-size: 1.15rem; }
+.dashboard-today > .hint { margin: 0 0 .85rem; }
+.dashboard-today-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.dashboard-today-grid article { min-width: 0; padding: 1rem; border-top: 3px solid #56816a; }
+.dashboard-today-grid h3 { color: #183f2f; font-size: 1rem; font-weight: 700; margin: 0 0 .85rem; }
+.dashboard-today-grid dl { display: flex; gap: .7rem; margin: 0; }
+.dashboard-today-grid dl > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .3rem; }
+.dashboard-today-grid dt { color: #617164; font-size: .75rem; line-height: 1.35; }
+.dashboard-today-grid dd { order: -1; margin: 0; color: #183f2f; font-size: 1.2rem; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.dashboard-today-grid dd small { font-size: .72rem; font-weight: 500; }
+@media (max-width: 900px) { .dashboard-today-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .dashboard-today-grid { grid-template-columns: minmax(0, 1fr); } }

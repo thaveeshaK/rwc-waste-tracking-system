@@ -1641,6 +1641,20 @@ try {
   assert.equal(await evaluate("document.querySelector('[data-chart-values=recovered-trend] li:last-child').dataset.value"),'40.00')
   assert.equal(await evaluate("document.querySelector('[data-chart=intake]').compareDocumentPosition(document.querySelector('.dashboard-recent')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)
   const dashBackend=(await browserApi('/api/admin/overview?month=2009-06')).body
+  const readTodayCards=()=>evaluate("[...document.querySelectorAll('[data-today-workflow]')].map(card=>({workflow:card.dataset.todayWorkflow,metrics:[...card.querySelectorAll('dl > div')].map(row=>({label:row.querySelector('dt').textContent,value:row.querySelector('dd').textContent}))}))")
+  const expectedToday=dashBackend.todayActivity.map(card=>({workflow:card.workflow,metrics:card.metrics.map(metric=>({label:metric.label,value:metric.value+(metric.unit?' '+metric.unit:'')}))}))
+  assert.equal(expectedToday.length,9);assert.deepEqual(await readTodayCards(),expectedToday)
+  assert.equal(await evaluate("document.querySelector('.dashboard-secondary').compareDocumentPosition(document.querySelector('.dashboard-today')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)
+  assert.equal(await evaluate("document.querySelector('.dashboard-today').compareDocumentPosition(document.querySelector('[data-chart=trend]')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)
+  assert.equal(await evaluate("document.querySelectorAll('.dashboard-today input').length"),0)
+  assert.deepEqual(dashBackend.todayActivity.find(card=>card.workflow==='ELECTRICAL_TESTING').metrics.map(metric=>metric.label),['Working','Untested / Broken / Failed'])
+  await evaluate(`window.__todayFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.__todayFetch(...args);if(String(args[0]).startsWith('/api/admin/overview?')){const body=await response.json();body.todayActivity=body.todayActivity.map(card=>({...card,metrics:card.metrics.map(metric=>({...metric,value:metric.unit==='kg'?'0.00':'0'}))}));return new Response(JSON.stringify(body),{status:200,headers:{'Content-Type':'application/json'}})}return response}`)
+  await click('Refresh');await enabled('Refresh')
+  assert.equal(await evaluate("[...document.querySelectorAll('.dashboard-today dd')].every(cell=>['0','0.00 kg'].includes(cell.textContent))"),true)
+  assert.equal(await evaluate("document.querySelectorAll('[data-today-workflow]').length"),9)
+  await evaluate('window.fetch=window.__todayFetch;delete window.__todayFetch')
+  await click('Refresh');await enabled('Refresh');assert.deepEqual(await readTodayCards(),expectedToday)
+
   assert.equal(dashBackend.recordsThisMonth,8)
   assert.equal(await evaluate("document.querySelector('[data-kpi=records]').dataset.value"),'8')
   assert.equal(await evaluate("document.querySelector('[data-kpi=recovered]').dataset.value"),'40.00')
@@ -1680,6 +1694,7 @@ try {
   await until(()=>evaluate("document.querySelector('[data-kpi=records]')?.dataset.value==='0'"),'empty dashboard period')
   await until(()=>evaluate("document.querySelectorAll('.dashboard-empty').length===6"),'six clean empty charts')
   assert.equal(await evaluate("document.querySelectorAll('canvas').length"),0)
+  assert.deepEqual(await readTodayCards(),expectedToday) // Today's values are independent of the selected dashboard month.
   await screenshot('tablet-dashboard-v2-empty')
   await click('View all records')
   await hasText('View submitted loads, correct entries')
@@ -2033,7 +2048,7 @@ try {
   assert.equal((await browserApi('/api/pickup-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',pickupLocation:'Aggregate paging',netWeight:'100',materials:aggregateBreakdown})).status,201)
   const aggregateElectrical=(await browserApi('/api/material-categories?context=ELECTRICAL_CRATE_PALLET')).body
   for(let i=0;i<3;i++){
-    const container=await browserApi('/api/admin/settings/container-types','POST',{name:'Aggregate container '+i,tareWeight:'1.00',active:true,contexts:['ELECTRICAL_CRATE_PALLET']});assert.equal(container.status,200)
+    const container=await browserApi('/api/admin/settings/container-types','POST',{name:'Aggregate container '+i,summaryGroup:'OTHER',tareWeight:'1.00',active:true,contexts:['ELECTRICAL_CRATE_PALLET']});assert.equal(container.status,200)
     assert.equal((await browserApi('/api/electrical-crate-pallet-records','POST',{submissionId:crypto.randomUUID(),recordDate:'2013-03-10',containerTypeId:container.body.id,grossWeight:'101',materials:aggregateElectrical.map(c=>({materialCategoryId:c.id,percentage:'50'}))})).status,201)
   }
   const summaryFilter='/api/admin/reports/summary?from=2013-03-01&to=2013-03-31',summaryAll=(await browserApi(summaryFilter+'&size=50')).body
@@ -2226,6 +2241,7 @@ try {
   console.log('PASS: Pickup positive-weight and required-location validation, exact percentages, category restrictions, review/edit, retained retry payload/navigation, Staff permissions, date filters, Admin recalculation, stale correction and lost-delete reconciliation.')
   console.log('PASS: Salvage direction-specific categories, single crew, independent review, all four zero/positive combinations, mandatory times at zero, positive/zero correction transitions, stale Admin correction, retry/navigation across workflows, soft deletion and lost-delete reconciliation.')
   console.log('PASS: login/CSRF, validation/review, active-submission navigation/logout guards, retry UUID retained across Records navigation, definitive conflict handling, Admin correction, lost-delete/404 reconciliation, selected-detail refresh, and tablet layout.')
+  console.log('PASS: Today activity nine cards, backend values, accurate testing labels, month independence, zero values, placement and responsive dashboard layouts.')
   console.log('Screenshots and logs: ' + output)
 } catch (error) {
   console.error(error)

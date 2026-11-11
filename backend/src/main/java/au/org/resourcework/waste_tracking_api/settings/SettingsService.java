@@ -28,7 +28,7 @@ public class SettingsService {
         Reference previous=id==null?null:references(container).stream().filter(r->r.id().equals(requestedId)).findFirst().orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Reference not found."));
         if(previous!=null && previous.restricted()) bad("The two electrical material identities and applicability are fixed for this workflow.");
         if(previous!=null && !container && !previous.name().equals(input.name().trim())) bad("Category names are immutable. Add a new category and deactivate the old one instead.");
-        if(container && input.contexts().contains("CRATE_PALLET") && input.summaryGroup()==null) bad("Waste Levy summary group is required for Crate/Pallet containers.");
+        if(container && (input.contexts().contains("CRATE_PALLET") || input.contexts().contains("ELECTRICAL_CRATE_PALLET")) && input.summaryGroup()==null) bad("Waste Levy summary group is required for general or electrical Crate/Pallet containers.");
         if(container && input.summaryGroup()!=null && !Set.of("CRATE","PALLET","OTHER").contains(input.summaryGroup())) bad("Invalid Waste Levy summary group.");
         if(container && input.tareWeight()==null) bad("Tare weight is required.");
         if(!(container?CONTAINERS:MATERIALS).containsAll(input.contexts())) bad("Unsupported workflow applicability.");
