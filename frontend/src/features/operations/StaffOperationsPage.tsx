@@ -36,11 +36,17 @@ export function StaffOperationsPage({onNew, onRecords, busy, unresolved, current
     return () => {cancelled = true}
   }, [attempt])
   return <section className="staff-operations">
-    {todayLoading?<p role="status">Loading today's activity...</p>:todayResult?.error?<div><p className="notice error" role="alert">Today's activity: {todayResult.error}</p><button className="secondary" disabled={busy} onClick={()=>setTodayAttempt(n=>n+1)}>Retry today's activity</button></div>:todayResult?.data&&<TodayActivity {...todayResult.data}/>}
     <div className="page-heading"><div><h1>Workflows</h1><p>Choose a workflow to start a new record.</p></div></div>
-    <div className="workflow-card-grid">{workflowEntries.map(w => <article className="panel workflow-card" key={w.id} data-workflow={w.id}><h2>{w.name}</h2><p>{descriptions[w.id]}</p>
-      <button disabled={busy || (unresolved && currentWorkflow !== w.id)} aria-label={`${w.id === 'ELECTRICAL_TESTING' ? 'Open' : 'New entry'}: ${w.name}`} onClick={() => onNew(w.id)}>{unresolved && currentWorkflow === w.id ? 'Resume submission' : w.id === 'ELECTRICAL_TESTING' ? 'Open' : 'New Entry'}</button>
-    </article>)}</div>
+    <div className="workflow-card-grid">{workflowEntries.map(w => {
+      const disabled=busy || (unresolved && currentWorkflow !== w.id)
+      return <article className="panel workflow-card" key={w.id} data-workflow={w.id} role="button" tabIndex={disabled?-1:0} aria-disabled={disabled}
+        aria-label={`${unresolved && currentWorkflow === w.id ? 'Resume submission' : w.id === 'ELECTRICAL_TESTING' ? 'Open' : 'New entry'}: ${w.name}`}
+        onClick={()=>{if(!disabled)onNew(w.id)}}
+        onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();if(!disabled&&!event.repeat)onNew(w.id)}}}>
+        <h2>{w.name}</h2><p>{descriptions[w.id]}</p>{unresolved && currentWorkflow===w.id && <span className="hint">Resume submission</span>}
+      </article>
+    })}</div>
+    {todayLoading?<p role="status">Loading today's activity...</p>:todayResult?.error?<div><p className="notice error" role="alert">Today's activity: {todayResult.error}</p><button className="secondary" disabled={busy} onClick={()=>setTodayAttempt(n=>n+1)}>Retry today's activity</button></div>:todayResult?.data&&<TodayActivity {...todayResult.data}/>}
     <section className="panel report-section staff-recent" aria-label="Recent submissions"><div className="detail-heading"><h2>Recent submissions</h2><button className="secondary" disabled={busy} onClick={onRecords}>View Records</button></div>
       {loading ? <p role="status">Loading recent submissions...</p> : error ? <div><p className="notice error" role="alert">{error}</p><button className="secondary" disabled={busy} onClick={() => {setLoading(true); setError(''); setAttempt(n => n+1)}}>Retry recent submissions</button></div> : recent.length === 0 ? <p>No recent submissions.</p> : <div className="table-scroll"><table><caption className="sr-only">Latest five active operational submissions, across all dates.</caption><thead><tr><th>Date / reporting month</th><th>Workflow</th><th>Details</th><th>Weight / count</th></tr></thead><tbody>{recent.map(r => <tr key={r.workflow+r.id}><td>{r.workflow === 'SCRAP' ? r.recordDate.slice(0,7) : r.recordDate}</td><td>{workflowEntries.find(w => w.id === r.workflow)?.name}</td><td>{r.details}</td><td>{r.count !== null && <>{r.count} {r.workflow === 'WHITEGOODS' ? 'received' : 'tallied'}{r.weightKg !== null && <br/>}</>}{r.weightKg !== null && <>{r.weightKg} kg{r.workflow === 'WHITEGOODS' ? ' estimated' : ''}</>}{r.count === null && r.weightKg === null && '-'}</td></tr>)}</tbody></table></div>}
     </section>

@@ -67,7 +67,8 @@ th, td { padding: .75rem .7rem; border-bottom: 1px solid #e4e9e0; }
 .selectable-record:focus-visible { outline: 2px solid #245c43; outline-offset: -2px; }
 .filter-bar { display: flex; align-items: end; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
 .filter-bar label { min-width: 170px; }
-.detail-panel { margin-top: 1.5rem; }
+.modal-dialog { width: min(960px, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; margin: auto; color: inherit; }
+.modal-dialog::backdrop { background: #14231c80; }
 .salvage-direction { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #dde4dd; }
 .salvage-direction .form-grid { margin-bottom: 1.2rem; }
 .detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
@@ -146,6 +147,8 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 .workflow-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 .workflow-card { display: flex; flex-direction: column; align-items: flex-start; }
 .workflow-card p { flex: 1; color: #5c6f62; }
+.staff-operations .workflow-card[role="button"] { cursor: pointer; }
+.staff-operations .workflow-card[aria-disabled="true"] { cursor: default; opacity: .55; }
 .dashboard-heading { align-items: flex-end; }
 .dashboard-period { display: flex; gap: .7rem; align-items: flex-end; flex-wrap: wrap; }
 .dashboard-period label { font-size: .8rem; }

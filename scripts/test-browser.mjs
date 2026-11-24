@@ -82,7 +82,30 @@ async function freshPreview(path,reviewButton) {
   return previews[0].input
 }
 
+// Background navigation/filtering must first close the native modal, as a user would.
+async function closeDetailsBeforeBackgroundAction(targetExpression) {
+  const background=await evaluate(`(()=>{const dialog=document.querySelector('.record-details-dialog[open]');const target=${targetExpression};return !!dialog&&!!target&&!dialog.contains(target)})()`)
+  if(background) {
+    await evaluate("(()=>{const close=[...document.querySelectorAll('.record-details-dialog button')].find(b=>b.textContent==='Close details');if(!close||close.disabled)throw new Error('Record dialog is busy');close.click()})()")
+    await until(()=>evaluate("document.querySelector('.record-details-dialog')===null"),'close details before background action')
+  }
+}
+
+async function assertRecordDialog(savedSuccess=false) {
+  await until(()=>evaluate("document.querySelector('.record-details-dialog')?.matches(':modal')"),'record details open as native modal')
+  assert.equal(await evaluate("document.querySelector('.detail-panel')===null"),true)
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog').getAttribute('aria-labelledby')"),'record-details-heading')
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog').contains(document.activeElement)"),true)
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog').textContent.includes('saved successfully.')"),savedSuccess)
+}
+
+async function recordKey(key,code,value,modifiers=0) {
+  await cdp('Input.dispatchKeyEvent',{type:'rawKeyDown',key,code,windowsVirtualKeyCode:value,modifiers})
+  await cdp('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode:value,modifiers})
+}
+
 async function click(text, scope = '') {
+  await closeDetailsBeforeBackgroundAction(`(()=>{const root=${scope?`document.querySelector(${JSON.stringify(scope)})`:'document'};return [...root.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(text)})})()`)
   await evaluate(`(() => {
     const root = ${scope ? `document.querySelector(${JSON.stringify(scope)})` : 'document'};
     const button = [...root.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(text)});
@@ -96,7 +119,20 @@ async function staffWorkflow(name) {
   await click('Operations')
   await until(()=>evaluate("document.querySelectorAll('.staff-operations .workflow-card').length===9"),'Staff workflow cards')
   const ids={'Crate / Pallet':'CRATE_PALLET',Salvage:'SALVAGE',Pickup:'PICKUP','Electrical Crate / Pallet':'ELECTRICAL_CRATE_PALLET',Collectables:'COLLECTABLES',Whitegoods:'WHITEGOODS','Electrical Testing':'ELECTRICAL_TESTING','E-waste Pickup':'EWASTE_PICKUP',Scrap:'SCRAP'}
-  await click(name==='Electrical Testing'?'Open':'New Entry',`.staff-operations [data-workflow="${ids[name]}"]`)
+  await activateStaffCard(`.staff-operations [data-workflow="${ids[name]}"]`)
+}
+async function activateStaffCard(selector,key) {
+  assert.equal(await evaluate(`document.querySelector(${JSON.stringify(selector)}).getAttribute('aria-disabled')`),'false')
+  if(key) {
+    await cdp('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9})
+    await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9})
+    await evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`)
+    assert.equal(await evaluate(`document.querySelector(${JSON.stringify(selector)}).matches(':focus-visible')`),true)
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector(${JSON.stringify(selector)})).outlineStyle`),'solid')
+    const code=key===' '?'Space':'Enter',value=key===' '?32:13
+    await cdp('Input.dispatchKeyEvent',{type:'rawKeyDown',key,code,windowsVirtualKeyCode:value})
+    await cdp('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode:value})
+  } else await evaluate(`document.querySelector(${JSON.stringify(selector)}).querySelector('p').click()`)
 }
 async function adminWorkflow(name) {
   await click('Workflows')
@@ -111,11 +147,16 @@ async function openSettings(label) {
 
 async function resumeStaffSubmission() {
   await click('Operations')
-  assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card button:not(:disabled)').length"),1)
-  await click('Resume submission','.staff-operations')
+  assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card[aria-disabled=false]').length"),1)
+  assert.equal(await evaluate("[...document.querySelectorAll('.staff-operations .workflow-card[aria-disabled=true]')].every(card=>card.tabIndex===-1)"),true)
+  await evaluate("(()=>{const card=document.querySelector('.staff-operations .workflow-card[aria-disabled=true]');card.click();for(const key of ['Enter',' '])card.dispatchEvent(new KeyboardEvent('keydown',{key,bubbles:true,cancelable:true}))})()")
+  assert.equal(await evaluate("document.querySelector('.staff-operations')!==null"),true)
+  assert.ok(await evaluate("document.querySelector('.staff-operations .workflow-card[aria-disabled=false]').textContent.includes('Resume submission')"))
+  await activateStaffCard('.staff-operations .workflow-card[aria-disabled=false]','Enter')
 }
 
 async function fill(label, value, scope = '') {
+  await closeDetailsBeforeBackgroundAction(`(()=>{const root=${scope?`document.querySelector(${JSON.stringify(scope)})`:'document'};return [...root.querySelectorAll('label')].find(l=>l.textContent.trim().startsWith(${JSON.stringify(label)}))?.querySelector('input,select')})()`)
   await evaluate(`(() => {
     const root = ${scope ? `document.querySelector(${JSON.stringify(scope)})` : 'document'};
     const label = [...root.querySelectorAll('label')].find(l => l.textContent.trim().startsWith(${JSON.stringify(label)}));
@@ -146,7 +187,10 @@ async function checkBranding(view) {
     assert.equal(await evaluate("document.querySelector('.brand span').textContent"),'Waste Tracking Management System')
     assert.equal(await evaluate("document.querySelector('main h1').textContent"),'Workflows')
     assert.deepEqual(await evaluate("[...document.querySelectorAll('.workflow-card')].map(card=>card.dataset.workflow)"),orderedWorkflows)
-    assert.equal(await evaluate("document.querySelector('[data-workflow=ELECTRICAL_TESTING] button').textContent"),'Open')
+    if(view==='staff') {
+      assert.equal(await evaluate("document.querySelector('[data-workflow=ELECTRICAL_TESTING]').getAttribute('aria-label')"),'Open: Electrical Testing')
+      assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card button').length"),0)
+    } else assert.equal(await evaluate("document.querySelector('[data-workflow=ELECTRICAL_TESTING] button').textContent"),'Open')
   }
   const assets=await evaluate(`(async()=>{const paths=[document.querySelector('.brand-logo').src,document.querySelector('link[rel=icon]').href];return Promise.all(paths.map(async path=>{const response=await fetch(path);const bytes=new Uint8Array(await response.arrayBuffer());return {path:new URL(path).pathname,status:response.status,type:response.headers.get('content-type'),signature:[...bytes.slice(0,2)]}}))})()`)
   assert.deepEqual(assets.map(asset=>asset.path),['/assets/branding/rwc_logo.png','/assets/branding/rwc_favicon.jpg'])
@@ -234,8 +278,10 @@ try {
   const expectedStaffToday=staffToday.todayActivity.map(card=>({workflow:card.workflow,metrics:card.metrics.map(metric=>({label:card.workflow==='COLLECTABLES'&&metric.label==='Trips'?'Tubs':metric.label,value:metric.value+(metric.unit?' '+metric.unit:'')}))}))
   await until(()=>evaluate("document.querySelectorAll('[data-today-workflow]').length===9"),'Staff Today cards loaded')
   assert.deepEqual(await readTodayCards(),expectedStaffToday)
-  assert.equal(await evaluate("document.querySelector('.staff-operations').firstElementChild===document.querySelector('.dashboard-today')"),true)
-  assert.equal(await evaluate("document.querySelector('.dashboard-today').compareDocumentPosition(document.querySelector('.staff-operations .page-heading')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)
+  assert.equal(await evaluate("document.querySelector('.staff-operations').firstElementChild===document.querySelector('.staff-operations .page-heading')"),true)
+  assert.equal(await evaluate("document.querySelector('.staff-operations .workflow-card-grid').compareDocumentPosition(document.querySelector('.dashboard-today')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)
+  assert.equal(await evaluate("document.querySelector('.dashboard-today').compareDocumentPosition(document.querySelector('.staff-recent')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)
+  assert.equal(await evaluate("[...document.querySelectorAll('.staff-operations .workflow-card')].every(card=>card.getAttribute('role')==='button'&&card.tabIndex===0&&!card.querySelector('button,a,input,select,textarea,[role=button]'))"),true)
   assert.equal(await evaluate("document.querySelectorAll('.dashboard-today input,.dashboard-today button').length"),0)
   const expectedTodayDate=await evaluate(`new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'long',year:'numeric',timeZone:'Australia/Hobart'}).format(new Date(${JSON.stringify(staffToday.today)}+'T00:00:00Z'))`)
   assert.ok(await evaluate(`document.querySelector('.dashboard-today .hint').textContent.includes(${JSON.stringify(expectedTodayDate)})`))
@@ -253,19 +299,19 @@ try {
   }`)
   await click('Records');await click('Operations');await hasText("Loading today's activity...")
   await until(()=>evaluate("typeof window.__releaseStaffToday==='function'"),'held Staff Today request')
-  assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card button:not(:disabled)').length"),9)
+  assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card[aria-disabled=false]').length"),9)
   await evaluate('window.__releaseStaffToday()')
   await until(()=>evaluate("document.querySelectorAll('[data-today-workflow]').length===9"),'Staff Today zero cards')
   assert.equal(await evaluate("[...document.querySelectorAll('.dashboard-today dd')].every(cell=>['0','0.00 kg'].includes(cell.textContent))"),true)
   await evaluate("window.__staffTodayMode='error'");await click('Records');await click('Operations');await hasText('Simulated today activity failure')
-  assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card button:not(:disabled)').length"),9)
+  assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card[aria-disabled=false]').length"),9)
   await staffWorkflow('Crate / Pallet');await until(()=>evaluate("document.querySelector('main h1')?.textContent==='Crate / Pallet'"),'workflow available despite Today API failure')
   await click('Operations');await hasText('Simulated today activity failure')
   await evaluate("window.__staffTodayMode='live'");await click("Retry today's activity")
   await until(()=>evaluate("document.querySelectorAll('[data-today-workflow]').length===9"),'Staff Today recovery')
   assert.deepEqual(await readTodayCards(),expectedStaffToday)
   await evaluate('window.fetch=window.__staffTodayFetch;delete window.__staffTodayFetch;delete window.__releaseStaffToday;delete window.__staffTodayMode')
-  console.log('PASS: Staff Today activity shares nine cards/metrics above Workflows; narrow API, zero state, independent loading/failure/retry and 1280/1024/768 screenshots/overflow.')
+  console.log('PASS: Staff Workflows precede Today activity and recent submissions; unchanged nine daily cards/metrics, zero state, independent loading/failure/retry and 1280/1024/768 screenshots/overflow.')
   // Exercise empty state without deleting regression fixtures.
   await evaluate(`window.__operationsFetch=window.fetch; window.fetch=(...args)=>args[0]==='/api/operations/recent-submissions'
     ? Promise.resolve(new Response('[]',{status:200,headers:{'Content-Type':'application/json'}})) : window.__operationsFetch(...args);`)
@@ -283,6 +329,12 @@ try {
     await until(()=>evaluate(`document.querySelector('main h1')?.textContent===${JSON.stringify(name)}`),'existing '+name+' form')
     await click('Operations')
   }
+  for(const [workflow,name,key] of [['CRATE_PALLET','Crate / Pallet','Enter'],['PICKUP','Pickup',' '],['ELECTRICAL_TESTING','Electrical Testing','Enter'],['ELECTRICAL_TESTING','Electrical Testing',' ']]) {
+    await activateStaffCard(`.staff-operations [data-workflow="${workflow}"]`,key)
+    await until(()=>evaluate(`document.querySelector('main h1')?.textContent===${JSON.stringify(name)}`),'keyboard '+JSON.stringify(key)+' opens '+name)
+    await click('Operations')
+  }
+  console.log('PASS: Staff whole-card pointer/Enter/Space activation, visible keyboard focus, no nested controls, nine existing workflow destinations; Admin retains its own buttons.')
   for(const width of [768,1024,1280]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
     await until(()=>evaluate("document.documentElement.scrollWidth<=window.innerWidth"),'Staff Operations overflow at '+width)
@@ -359,6 +411,9 @@ try {
   assert.equal(ids.length, 2); assert.equal(ids[0], ids[1])
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b => b.textContent === 'Correct record')"), false)
   const savedId = await evaluate("document.querySelector('.detail-heading h2').textContent.split('#')[1]")
+  await assertRecordDialog(true)
+  assert.equal(await evaluate("document.activeElement.textContent"),'Close details')
+  assert.equal(await evaluate("document.querySelector('[aria-labelledby=records-heading] > .notice.success')===null"),true)
   await enabled('Enter another Crate / Pallet');await screenshot('post-save-batch-staff')
   await click('Enter another Crate / Pallet')
   await until(()=>evaluate("document.querySelector('select')?.options.length===6"),'fresh shortcut Crate references')
@@ -387,6 +442,23 @@ try {
   await hasText('Submitted records are read-only for Staff.')
   await assertNoEntryShortcut()
   await enabled('#'+savedId);await click('#'+savedId);await enabled('Close details');await assertNoEntryShortcut()
+  await assertRecordDialog()
+  for(let i=0;i<4;i++) {await recordKey('Tab','Tab',9);assert.equal(await evaluate("document.querySelector('.record-details-dialog').contains(document.activeElement)"),true)}
+  await recordKey('Tab','Tab',9,8);assert.equal(await evaluate("document.querySelector('.record-details-dialog').contains(document.activeElement)"),true)
+  await recordKey('Escape','Escape',27)
+  await until(()=>evaluate("document.querySelector('.record-details-dialog')===null"),'Escape closes Staff record modal')
+  assert.equal(await evaluate("document.activeElement.textContent"),'#'+savedId)
+  assert.equal(await evaluate("document.querySelector('[aria-labelledby=records-heading]').textContent.includes('saved successfully.')"),false)
+  for(const [key,code,value] of [['Enter','Enter',13],[' ','Space',32]]) {
+    await evaluate(`(()=>{const row=[...document.querySelectorAll('.selectable-record')].find(r=>r.querySelector('button').textContent==='#'+${JSON.stringify(savedId)});row.focus()})()`)
+    await recordKey(key,code,value);await assertRecordDialog()
+    for(const width of [1280,1024,768]) {
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
+      assert.equal(await evaluate("(()=>{const d=document.querySelector('.record-details-dialog'),r=d.getBoundingClientRect();return r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&d.scrollWidth<=d.clientWidth&&document.documentElement.scrollWidth<=innerWidth})()"),true)
+      if(key==='Enter')await screenshot('record-details-staff-'+width)
+    }
+    await click('Close details');assert.equal(await evaluate("document.activeElement.classList.contains('selectable-record')"),true)
+  }
   const duplicateCount = await evaluate(`fetch('/api/crate-pallet-records').then(r => r.json()).then(rows => rows.filter(r => r.submissionId === ${JSON.stringify(ids[0])}).length)`)
   assert.equal(duplicateCount, 1)
   await screenshot('tablet-saved-record')
@@ -467,6 +539,9 @@ try {
   await openSettings('User Management')
   await openSettings('Organisation Details')
   assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Sign out').disabled"),true)
+  await click('Records');await fill('Workflow','CRATE_PALLET');await enabled('#'+savedId);await click('#'+savedId);await enabled('Correct record')
+  await click('Correct record');await hasText('Resolve the current submission before correcting another record.')
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog')===null"),true)
   await click('Workflows')
   await click('Resume submission','.workflow-card[data-workflow="ELECTRICAL_TESTING"]')
   assert.equal(await evaluate("document.querySelector('.testing-category .quick-tally input').value"),'1')
@@ -506,7 +581,7 @@ try {
   await click('Confirm deletion')
   await hasText('Record #' + savedId + ' is already deleted or no longer available.')
   assert.equal(await evaluate(`[...document.querySelectorAll('tbody button')].some(b => b.textContent === '#${savedId}')`), false)
-  assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog') !== null"), false)
   await evaluate('window.fetch = window.__realFetch')
 
   // A record removed by another request must also disappear from selected details on refresh.
@@ -538,7 +613,7 @@ try {
     if (!response.ok) throw new Error('External deletion failed');
   })()`)
   await click('Apply dates / refresh')
-  await until(() => evaluate("document.querySelector('.detail-panel') === null"), 'selected deleted record cleared after refresh')
+  await until(() => evaluate("document.querySelector('.record-details-dialog') === null"), 'selected deleted record cleared after refresh')
 
   // Salvage has its own material contexts and one crew for the complete trip.
   await click('Sign out')
@@ -641,7 +716,7 @@ try {
   await until(() => evaluate("document.querySelector('select').value === 'SALVAGE'"), 'Salvage records selected')
   await fill('Workflow', 'CRATE_PALLET')
   await enabled('Apply dates / refresh')
-  assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog') !== null"), false)
   await fill('Workflow', 'SALVAGE')
   await resumeStaffSubmission()
   await enabled('Retry submission')
@@ -760,7 +835,7 @@ try {
   await enabled('Confirm deletion')
   await click('Confirm deletion')
   await hasText('is already deleted or no longer available.')
-  assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog') !== null"), false)
   assert.equal((await browserApi('/api/salvage-records/' + firstSalvageId)).status, 404)
   await evaluate('window.fetch = window.__realFetch')
   // Pickup uses one final positive weight and its own reference context.
@@ -842,7 +917,7 @@ try {
   await fill('To', '2000-01-01')
   await click('Apply dates / refresh')
   await hasText('No records found.')
-  assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog') !== null"), false)
   await fill('To', '')
   await click('Apply dates / refresh')
   await enabled('#' + pickupId)
@@ -903,7 +978,7 @@ try {
   await enabled('Confirm deletion')
   await click('Confirm deletion')
   await hasText('is already deleted or no longer available.')
-  assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog') !== null"), false)
   assert.equal((await browserApi('/api/pickup-records/' + pickupId)).status, 404)
   await evaluate('window.fetch = window.__realFetch')
   // Electrical Crate/Pallet requires gross strictly above tare and both approved categories.
@@ -1016,7 +1091,7 @@ try {
   await fill('To', '2000-01-01')
   await click('Apply dates / refresh')
   await hasText('No records found.')
-  assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog') !== null"), false)
   await fill('To', '')
   await click('Apply dates / refresh')
   await enabled('#' + electricalId)
@@ -1083,7 +1158,7 @@ try {
   await enabled('Confirm deletion')
   await click('Confirm deletion')
   await hasText('is already deleted or no longer available.')
-  assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog') !== null"), false)
   assert.equal((await browserApi('/api/electrical-crate-pallet-records/' + electricalId)).status, 404)
   await evaluate('window.fetch = window.__realFetch')
   // Collectables: one tub, fixed 2 kg tare, operational duplicate avoidance only.
@@ -1170,7 +1245,7 @@ try {
   await fill('To', '2000-01-01')
   await click('Apply dates / refresh')
   await hasText('No records found.')
-  assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog') !== null"), false)
   await fill('To', '')
   await click('Apply dates / refresh')
   await enabled('#' + collectableId)
@@ -1231,7 +1306,7 @@ try {
   await enabled('Confirm deletion')
   await click('Confirm deletion')
   await hasText('is already deleted or no longer available.')
-  assert.equal(await evaluate("document.querySelector('.detail-panel') !== null"), false)
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog') !== null"), false)
   assert.equal((await browserApi('/api/collectable-records/' + collectableId)).status, 404)
   await evaluate('window.fetch = window.__realFetch')
   // Whitegoods: daily quantities, zero and same-day entries, derived calendar-month summaries.
@@ -1351,6 +1426,7 @@ try {
   await expectWhitegoodsSummary('2001-01', 3, '144.00')
   await expectWhitegoodsSummary('2001-02', 10, '480.00')
   const whitegoodsUpdated = (await browserApi('/api/whitegoods-records/' + whitegoodsId)).body
+  await enabled('#'+whitegoodsId);await click('#'+whitegoodsId)
   await reopenForAdminActions()
   await enabled('Correct record')
   await reopenForAdminActions()
@@ -1969,9 +2045,9 @@ try {
   await enabled('Confirm and submit')
   await click('Confirm and submit')
   await hasText('saved successfully.')
-  assert.equal(await evaluate("document.querySelector('.detail-panel .record-facts')!==null"),true)
-  assert.equal(await evaluate("[...document.querySelectorAll('.detail-panel button')].some(b=>['Correct record','Delete record'].includes(b.textContent))"),false)
-  const savedWhitegoodsDetails=await evaluate("document.querySelector('.detail-panel .record-facts').textContent")
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog .record-facts')!==null"),true)
+  assert.equal(await evaluate("[...document.querySelectorAll('.record-details-dialog button')].some(b=>['Correct record','Delete record'].includes(b.textContent))"),false)
+  const savedWhitegoodsDetails=await evaluate("document.querySelector('.record-details-dialog .record-facts').textContent")
   const batchWhitegoodsId=await evaluate("document.querySelector('.detail-heading h2').textContent.split('#')[1]")
   const batchWhitegoods=(await browserApi('/api/whitegoods-records/'+batchWhitegoodsId)).body
   await enabled('Enter another Whitegoods entry');await screenshot('post-save-batch-admin')
@@ -1984,7 +2060,7 @@ try {
   await click('Records');await enabled('#'+batchWhitegoodsId);await assertNoEntryShortcut()
   await click('#'+batchWhitegoodsId);await enabled('Correct record');await assertNoEntryShortcut()
   await reopenForAdminActions()
-  assert.equal(await evaluate("document.querySelector('.detail-panel .record-facts').textContent"),savedWhitegoodsDetails)
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog .record-facts').textContent"),savedWhitegoodsDetails)
   assert.equal((await browserApi('/api/whitegoods-records/'+oldWhitegoods.body.id)).body.kgPerItem,'48.00')
   const mixedMonth=(await browserApi('/api/whitegoods-records/monthly-summary?month=2007-02')).body
   assert.equal(mixedMonth.estimatedWeight,'200.50')
@@ -2310,7 +2386,8 @@ try {
       await evaluate("document.querySelector('.selectable-record td:nth-child(2)').click()")
       await until(()=>evaluate(`document.querySelector('.detail-heading h2')?.textContent==='Record #'+${record.id} && document.querySelector('.selected-row button')?.textContent==='#'+${record.id}`),'selected '+workflow)
       await enabled('Close details')
-      const details=await evaluate("document.querySelector('.detail-panel').textContent")
+      await assertRecordDialog()
+      const details=await evaluate("document.querySelector('.record-details-dialog').textContent")
       assert.ok(details.includes('Created by '+record.createdBy),workflow+' creator')
       assert.ok(details.includes('Last updated by '+record.updatedBy),workflow+' updater')
       for(const value of [record.createdAt,record.updatedAt]) {
@@ -2318,19 +2395,27 @@ try {
         assert.ok(details.includes(formatted),workflow+' Hobart timestamp')
       }
       assert.equal((details.match(/\(Hobart\)/g)||[]).length,2)
-      assert.equal(await evaluate("[...document.querySelectorAll('.detail-panel button')].some(b=>b.textContent==='Correct record')"),admin)
-      assert.equal(await evaluate("[...document.querySelectorAll('.detail-panel button')].some(b=>b.textContent==='Delete record')"),admin)
-      assert.equal(await evaluate("document.querySelector('.detail-panel input,.detail-panel select')===null"),true)
+      assert.equal(await evaluate("[...document.querySelectorAll('.record-details-dialog button')].some(b=>b.textContent==='Correct record')"),admin)
+      assert.equal(await evaluate("[...document.querySelectorAll('.record-details-dialog button')].some(b=>b.textContent==='Delete record')"),admin)
+      assert.equal(await evaluate("document.querySelector('.record-details-dialog input,.record-details-dialog select')===null"),true)
+      if(admin)for(const width of [1280,1024,768]) {
+        await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
+        assert.equal(await evaluate("(()=>{const d=document.querySelector('.record-details-dialog'),r=d.getBoundingClientRect();return r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&d.scrollWidth<=d.clientWidth&&document.documentElement.scrollWidth<=innerWidth})()"),true)
+        await screenshot('record-details-admin-'+workflow+'-'+width)
+      }
       if(workflow==='WHITEGOODS') {
         assert.ok(items.length>1)
+        await click('Close details')
         await evaluate("document.querySelectorAll('.selectable-record')[1].querySelector('td:nth-child(2)').click()")
         await until(()=>evaluate(`document.querySelector('.detail-heading h2')?.textContent==='Record #'+${items[1].record.id}`),'switch row by clicking another cell')
+        await click('Close details')
         await evaluate("(() => {const row=document.querySelector('.selectable-record');row.focus();row.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))})()")
         await until(()=>evaluate(`document.querySelector('.detail-heading h2')?.textContent==='Record #'+${items[0].record.id}`),'switch row with keyboard')
         assert.equal(await evaluate("document.querySelectorAll('.selected-row').length"),1)
       }
       await click('Close details')
-      assert.equal(await evaluate("document.querySelector('.detail-panel')===null && document.querySelectorAll('.selected-row').length===0"),true)
+      assert.equal(await evaluate("document.querySelector('.record-details-dialog')===null && document.querySelectorAll('.selected-row').length===0"),true)
+      assert.equal(await evaluate("document.querySelector('[aria-labelledby=records-heading]').textContent.includes('saved successfully.')"),false)
       assert.equal(await evaluate("document.querySelector('#records-heading').textContent"),'Records')
     }
   }
@@ -2382,8 +2467,8 @@ try {
     await enabled('#'+record.id)
     assert.ok(await evaluate(`document.querySelector('[aria-labelledby="records-heading"] table').textContent.includes(${JSON.stringify(record.pickupLocation)})`))
     await inertHostileDom('[aria-labelledby="records-heading"] table');await click('#'+record.id);await enabled('Close details')
-    assert.ok(await evaluate(`document.querySelector('.detail-panel').textContent.includes(${JSON.stringify(record.pickupLocation)})`))
-    await inertHostileDom('.detail-panel');await click('Close details')
+    assert.ok(await evaluate(`document.querySelector('.record-details-dialog').textContent.includes(${JSON.stringify(record.pickupLocation)})`))
+    await inertHostileDom('.record-details-dialog');await click('Close details')
   }
   await click('Reports');await hasText('Applied period:');await fill('Report workflow','PICKUP');await fill('From date','2005-12-12');await fill('To date','2005-12-12');await enabled('Apply report filters');await click('Apply report filters');await fill('Report view','details')
   for(const text of hostileTexts)await until(()=>evaluate(`document.querySelector('.report-section').textContent.includes(${JSON.stringify(text)})`),'SEC-03 literal report text '+text)
