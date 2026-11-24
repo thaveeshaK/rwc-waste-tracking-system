@@ -15,7 +15,6 @@ import { getOperationalConfiguration } from './features/settings/api'
 import type { OperationalConfiguration } from './features/settings/types'
 import { Navigation, type Page } from './components/navigation/Navigation'
 import { OverviewPage } from './features/reporting/OverviewPage'
-import { ReportsPage } from './features/reporting/ReportsPage'
 import { WasteLevySummaryPage } from './features/reporting/WasteLevySummaryPage'
 import type { Row } from './features/reporting/types'
 import { request } from './api/client'
@@ -51,6 +50,7 @@ function App() {
   const [entryWorkflow, setEntryWorkflow] = useState<Workflow>('CRATE_PALLET')
   const [recordWorkflow, setRecordWorkflow] = useState<Workflow | ''>('')
   const [recordsView,setRecordsView]=useState<RecordsView>(initialRecordsView)
+  const [recordsTab,setRecordsTab]=useState<'records'|'analysis'>('records')
   const [reportView,setReportView]=useState(initialReportView)
   const [signingOut, setSigningOut] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -103,6 +103,7 @@ function App() {
 
   function showRecords() {
     if (busyRef.current) return
+    setRecordsTab('records')
     if (hasEntry && !editing) {setRecordWorkflow(entryWorkflow);setRecordsView(initialRecordsView)}
     setPage('records')
     setReported(undefined)
@@ -132,6 +133,7 @@ function App() {
       await logout()
       window.history.replaceState(null,'','/')
       setRecordsView(initialRecordsView)
+      setRecordsTab('records')
       setReportView(initialReportView)
       setUser(null)
       setConfiguration(null)
@@ -145,6 +147,7 @@ function App() {
   }
 
   function recordSaved(record: OperationalRecord) {
+    setRecordsTab('records')
     setReported(undefined)
     setSaved(record)
     setPostSaveOrigin(editing ? 'correction' : 'new')
@@ -156,7 +159,7 @@ function App() {
 
   function navigate(target: Page) {
     if (busyRef.current || signingOut) return
-    if (['overview', 'reports', 'waste-levy', 'settings'].includes(target) && user?.role !== 'ADMIN') return
+    if (['overview', 'waste-levy', 'settings'].includes(target) && user?.role !== 'ADMIN') return
     if (target !== 'settings') window.history.replaceState(null,'','/')
     if (target === 'records') { showRecords(); return }
     setPostSaveOrigin(undefined)
@@ -176,6 +179,7 @@ function App() {
     activityChanged(true); setError('')
     try {
       const record = await request<OperationalRecord['record']>(paths[row.workflow]+'/'+row.id)
+      setRecordsTab('records')
       setRecordsView(initialRecordsView)
       setRecordWorkflow(row.workflow as Workflow)
       setSaved(undefined)
@@ -199,7 +203,6 @@ function App() {
       {page === 'operations' && (user.role === 'ADMIN' ? <WorkflowsPage onNew={newRecord} busy={busy || signingOut} unresolved={unresolved || pendingTallies} currentWorkflow={entryWorkflow}/> : <StaffOperationsPage onNew={newRecord} onRecords={showRecords} busy={busy || signingOut} unresolved={unresolved || pendingTallies} currentWorkflow={entryWorkflow}/>)}
       {user.role === 'ADMIN' && page === 'settings' && <SettingsPage key={settingsSection} section={settingsSection} onChanged={() => {setReportView(initialReportView);setConfigurationRevision(n => n+1)}}/>}
       {user.role === 'ADMIN' && page === 'overview' && <OverviewPage onOpen={openReportedRecord} onRecords={showRecords}/>}
-      {user.role === 'ADMIN' && page === 'reports' && <ReportsPage view={reportView} onViewChange={setReportView} onOpen={openReportedRecord}/>}
       {user.role === 'ADMIN' && page === 'waste-levy' && <WasteLevySummaryPage/>}
       {hasEntry && <div hidden={page !== 'entry'}>
         {entryWorkflow === 'SCRAP' ? <ScrapPage key={entryKey} editing={editing?.workflow === 'SCRAP' ? editing.record : undefined} onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged} onSaved={record => recordSaved({workflow: 'SCRAP', record})} onCancel={showRecords}/> : entryWorkflow === 'EWASTE_PICKUP' ? <EwastePickupPage key={entryKey} editing={editing?.workflow === 'EWASTE_PICKUP' ? editing.record : undefined} onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged} onSaved={record => recordSaved({workflow: 'EWASTE_PICKUP', record})} onCancel={showRecords}/> : entryWorkflow === 'CRATE_PALLET' ? <CratePalletPage isAdmin={user.role === 'ADMIN'} key={entryKey}
@@ -225,7 +228,7 @@ function App() {
             onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged} onPendingChange={pendingTalliesChanged}
             onSaved={record => recordSaved({ workflow: 'ELECTRICAL_TESTING', record })} onCancel={showRecords} />}
       </div>}
-      {page === 'records' && <RecordsPage isAdmin={user.role === 'ADMIN'} saved={saved} postSaveOrigin={postSaveOrigin} onNew={newRecord} selectedRecord={reported}
+      {page === 'records' && <RecordsPage tab={recordsTab} onTabChange={setRecordsTab} reportView={reportView} onReportViewChange={setReportView} isAdmin={user.role === 'ADMIN'} saved={saved} postSaveOrigin={postSaveOrigin} onNew={newRecord} selectedRecord={reported}
         view={recordsView} onViewChange={setRecordsView} workflow={recordWorkflow} onWorkflowChange={workflow => { setSaved(undefined); setRecordWorkflow(workflow) }}
         onBusyChange={activityChanged} onEdit={record => {
           if (busyRef.current || (user.role !== 'ADMIN' && !isIncompleteRecord(record))) return

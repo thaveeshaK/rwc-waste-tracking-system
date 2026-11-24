@@ -104,6 +104,11 @@ async function recordKey(key,code,value,modifiers=0) {
   await cdp('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode:value,modifiers})
 }
 
+async function openAnalysis() {
+  await click('Records');await enabled('Summary & exports');await click('Summary & exports')
+  await until(()=>evaluate("document.querySelector('[data-records-view=analysis]')?.checkVisibility()"),'Admin Records analysis view')
+}
+
 async function click(text, scope = '') {
   if(text === 'Review record')await loadBreakdown()
   await closeDetailsBeforeBackgroundAction(`(()=>{const root=${scope?`document.querySelector(${JSON.stringify(scope)})`:'document'};return [...root.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(text)})})()`)
@@ -235,7 +240,7 @@ async function setPercentage(material,value,scope='') {
   }
 }
 
-const hasText = text => until(() => evaluate(`document.body.textContent.includes(${JSON.stringify(text)})`), text)
+const hasText = text => until(() => evaluate(`document.body.innerText.includes(${JSON.stringify(text)})`), text)
 const enabled = text => until(() => evaluate(`[...document.querySelectorAll('button')].some(b => b.textContent.trim() === ${JSON.stringify(text)} && !b.disabled)`), 'enabled ' + text)
 async function screenshot(name) {
   const result = await cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })
@@ -410,6 +415,7 @@ try {
   await click('View Records')
   await hasText('Completed records are read-only for Staff.')
   assert.equal(await evaluate("[...document.querySelectorAll('nav button')].some(b => ['Overview','Reports','Waste Levy Summary','Users','Settings'].includes(b.textContent.trim()))"), false)
+  assert.equal(await evaluate("document.querySelector('.records-view-switch,[data-records-view=analysis]')===null"),true)
   for (const path of ['/api/admin/overview','/api/admin/reports/summary','/api/admin/reports/export?format=csv','/api/admin/reports/export?format=xlsx','/api/admin/waste-levy-summary?month=2004-02','/api/admin/settings','/api/admin/settings/container-types','/api/admin/settings/material-categories']) {
     assert.equal((await browserApi(path)).status,403)
   }
@@ -618,7 +624,7 @@ try {
   await hasText('View submitted loads, correct entries')
   // Settings is the sole Admin dropdown; operational access remains on Workflows.
   assert.equal(await evaluate("document.querySelector('[aria-label=\"Admin navigation\"] .workflow-navigation')===null"),true)
-  assert.deepEqual(await evaluate("[...document.querySelectorAll('.management-navigation button')].map(b=>b.textContent.trim())"),['Overview','Workflows','Reports','Waste Levy Summary','Records'])
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.management-navigation button')].map(b=>b.textContent.trim())"),['Overview','Workflows','Records','Waste Levy Summary'])
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='+ New Entry')"),false)
   await click('Settings')
   await until(()=>evaluate("document.querySelectorAll('[role=menuitem]').length===6"),'six Settings choices')
@@ -2016,13 +2022,20 @@ try {
   await hasText('Recent submissions')
   assert.equal(await evaluate("[...document.querySelectorAll('nav button')].some(b => ['Users'].includes(b.textContent.trim()))"),false)
   await screenshot('tablet-admin-overview')
-  await click('Reports')
+  await click('Records');await enabled('Apply dates / refresh')
+  assert.equal(await evaluate("document.querySelector('[data-records-view=records]').hidden"),false)
+  await fill('Workflow','CRATE_PALLET');await fill('From','2019-01-01');await fill('To','2019-01-31');await click('Apply dates / refresh');await enabled('Apply dates / refresh')
+  await evaluate("window.__consolidatedRecords=document.querySelector('[aria-labelledby=records-heading]');true")
+  await openAnalysis()
   await hasText('Applied period:')
   await fill('From date','2004-02-29')
   await fill('Reporting period','daily')
   assert.equal(await evaluate("[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('To date')).querySelector('input').value"),'2004-02-29')
   await fill('Reporting period','weekly')
   assert.equal(await evaluate("[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('From date')).querySelector('input').value"),'2004-02-23')
+  await fill('Reporting period','monthly')
+  assert.equal(await evaluate("[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('From date')).querySelector('input').value"),'2004-02-01')
+  assert.equal(await evaluate("[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('To date')).querySelector('input').value"),'2004-02-29')
   await fill('Reporting period','financial')
   assert.equal(await evaluate("[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('From date')).querySelector('input').value"),'2003-07-01')
   await fill('From date','2004-02-01')
@@ -2034,6 +2047,20 @@ try {
   await click('Apply report filters')
   await hasText('12.34')
   await enabled('Export CSV')
+  await fill('Material category',String(reportIron));await click('Apply report filters');await enabled('Export CSV');await fill('Report view','details');await enabled('Export CSV')
+  assert.equal(await evaluate("[...document.querySelectorAll('[data-records-view=analysis] tbody tr')].every(row=>row.cells[2].textContent.includes('material'))"),true)
+  await fill('Report workflow','SALVAGE');await fill('From date','2009-06-01');await fill('To date','2009-06-30')
+  for(const direction of ['UP','DOWN']) {
+    await fill('Salvage direction',direction);await click('Apply report filters');await fill('Report view','details');await enabled('Export CSV')
+    const expected=(await browserApi('/api/admin/reports/records?from=2009-06-01&to=2009-06-30&workflow=SALVAGE&direction='+direction)).body
+    assert.equal(await evaluate("document.querySelectorAll('[data-records-view=analysis] tbody tr').length"),Math.min(10,expected.totalRows))
+    if(expected.totalRows)assert.equal(await evaluate(`[...document.querySelectorAll('[data-records-view=analysis] tbody tr')].every(row=>row.cells[3].textContent.includes(${JSON.stringify(direction)}))`),true)
+  }
+  await fill('Report workflow','ELECTRICAL_TESTING');await fill('Electrical Testing category',String(dashCategory));await click('Apply report filters');await fill('Report view','electrical-testing');await enabled('Export CSV')
+  await hasText('sold last month')
+  assert.equal(await evaluate("[...document.querySelectorAll('[data-records-view=analysis] tbody tr')].some(row=>row.cells[2]?.textContent.includes('reference')&&row.cells[5]?.textContent==='50'&&!row.querySelector('button'))"),true)
+  await fill('Report workflow','PICKUP');await fill('From date','2004-02-01');await fill('To date','2004-02-29');await fill('Pickup location contains','Warehouse');await click('Apply report filters');await fill('Report view','summary');await enabled('Export CSV')
+  console.log('PASS: Embedded analysis daily/weekly/monthly/financial/custom periods, material-only rows, independent Salvage Up/Down filters, Electrical Testing category/KPI mode and separate read-only sales references.')
   await evaluate(`(() => {
     window.reportDownloads=[];
     const original=window.fetch;
@@ -2062,8 +2089,27 @@ try {
   await fill('Report view','details')
   await hasText('=Warehouse Cafe')
   await screenshot('tablet-admin-reports')
-  await click('#'+reportCreated.body.id)
-  await hasText('Record #'+reportCreated.body.id)
+  await evaluate(`window.__analysisLink=[...document.querySelectorAll('[data-records-view=analysis] table button')].find(b=>b.textContent==='#'+${reportCreated.body.id});true`)
+  await click('#'+reportCreated.body.id,'[data-records-view=analysis]')
+  await enabled('Close details');await assertRecordDialog()
+  assert.equal(await evaluate("window.__consolidatedRecords===document.querySelector('[aria-labelledby=records-heading]')"),true)
+  assert.equal(await evaluate("[...document.querySelectorAll('.record-details-dialog button')].some(b=>b.textContent==='Correct record')"),true)
+  assert.equal(await evaluate("document.querySelector('.record-details-dialog').textContent.includes('saved successfully.')"),false)
+  await click('Close details')
+  assert.equal(await evaluate('document.activeElement===window.__analysisLink'),true)
+  await fill('Weight display','t')
+  await click('Records','.records-view-switch')
+  assert.equal(await evaluate("[...document.querySelectorAll('[data-records-view=records] label')].find(l=>l.textContent.startsWith('From')).querySelector('input').value"),'2019-01-01')
+  assert.equal(await evaluate("document.querySelector('[data-records-view=records] select').value"),'CRATE_PALLET')
+  await click('Summary & exports','.records-view-switch')
+  assert.equal(await evaluate("[...document.querySelectorAll('[data-records-view=analysis] label')].find(l=>l.textContent.startsWith('Weight display')).querySelector('select').value"),'t')
+  assert.equal(await evaluate("[...document.querySelectorAll('[data-records-view=analysis] label')].find(l=>l.textContent.startsWith('From date')).querySelector('input').value"),'2004-02-01')
+  for(const width of [1280,1024,768]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);await screenshot('records-summary-consolidation-'+width)
+  }
+  await fill('Weight display','kg')
+  await click('Records','.records-view-switch');await fill('From','');await fill('To','');await click('Apply dates / refresh');await enabled('Apply dates / refresh')
+  console.log('PASS: Admin Records analysis reuses one mounted Records page/modal, opens records outside operational filters, restores report-link focus, preserves separate filters/units, and has no fake save state or overflow at 1280/1024/768.')
   await click('Waste Levy Summary')
   await fill('Reporting month','2004-02')
   await hasText('20.00')
@@ -2082,7 +2128,12 @@ try {
   await click('Export Excel')
   await until(()=>evaluate('window.reportDownloads.length===4'),'monthly XLSX downloaded')
   assert.match((await evaluate('window.reportDownloads[3]')).filename,/waste-levy-summary-2004-02.xlsx/)
-  await browserApi('/api/pickup-records/'+reportCreated.body.id,'DELETE')
+  await openAnalysis();await hasText('Applied period:')
+  await until(()=>evaluate(`[...document.querySelectorAll('[data-records-view=analysis] table button')].some(b=>b.textContent==='#'+${reportCreated.body.id}&&b.checkVisibility()&&!b.disabled)`),'analysis deletion record loaded')
+  await click('#'+reportCreated.body.id,'[data-records-view=analysis]');await enabled('Delete record');await click('Delete record');await click('Confirm deletion');await hasText('deleted.')
+  await hasText('No matching records.');await enabled('Export CSV')
+  assert.equal(await evaluate("document.activeElement===document.querySelector('#records-heading')"),true)
+  await click('Waste Levy Summary');await fill('Reporting month','2004-02');await hasText('7.66');await fill('Summary units','t')
   await click('Refresh monthly figures')
   await hasText('0.00766')
   assert.equal(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'),true)
@@ -2176,7 +2227,7 @@ try {
   await hasText('Reporting Defaults')
   await enabled('Save reporting defaults')
 
-  await click('Reports')
+  await openAnalysis()
   await hasText('Applied period:')
   const fyStart=await evaluate("[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('From date')).querySelector('input').value")
   assert.equal(fyStart.slice(5),'04-01')
@@ -2265,7 +2316,7 @@ try {
   await enabled('Correct record');await click('Correct record');await until(()=>evaluate("document.querySelectorAll('.ewaste-container').length===2"),'stale E-waste correction form')
   assert.equal((await browserApi('/api/ewaste-pickups/'+ewasteId,'PUT',{...ewasteInput,organisation:'Next Band corrected',containers:correctedEwaste.containers.map(c=>({containerTypeId:c.containerTypeId,quantity:c.quantity})),version:correctedEwaste.version})).status,200)
   await click('Review record');await hasText('This record has changed.');await click('Back to Records')
-  await click('Reports');await hasText('Applied period:');await fill('Report workflow','EWASTE_PICKUP');await fill('From date','2008-03-01');await fill('To date','2008-03-31');await fill('Organisation contains','corrected');await click('Apply report filters');await fill('Weight display','kg');await hasText('28.55')
+  await openAnalysis();await hasText('Applied period:');await fill('Report workflow','EWASTE_PICKUP');await fill('From date','2008-03-01');await fill('To date','2008-03-31');await fill('Organisation contains','corrected');await click('Apply report filters');await fill('Weight display','kg');await hasText('28.55')
   assert.equal(await evaluate("[...document.querySelectorAll('label')].some(l=>l.textContent.startsWith('Material category'))"),false)
   await evaluate(`window.__ewasteExports=[];window.fetch=async(...args)=>{const r=await window.__realFetch(...args);if(String(args[0]).includes('/export?')){const copy=r.clone();window.__ewasteExports.push({status:r.status,url:String(args[0]),size:(await copy.arrayBuffer()).byteLength})}return r}`)
   await click('Export CSV');await until(()=>evaluate('window.__ewasteExports.length===1'),'E-waste CSV export');await click('Export Excel');await until(()=>evaluate('window.__ewasteExports.length===2'),'E-waste Excel export');assert.equal(await evaluate('window.__ewasteExports.every(r=>r.status===200&&r.url.includes("workflow=EWASTE_PICKUP")&&r.url.includes("location=corrected"))'),true);await evaluate('window.fetch=window.__realFetch')
@@ -2321,7 +2372,7 @@ try {
   await fill('Iron and Steel','125');await click('Review record');await enabled('Confirm correction');await hasText('1062.00 kg');assert.equal(await evaluate("document.querySelector('.scrap-review tbody tr td:nth-child(2)').textContent"),'250.00 kg')
   await click('Back to edit');await fill('Reporting month','2009-10');await click('Review record');await enabled('Confirm correction');await hasText('250.00 kg');await click('Confirm correction');await hasText('saved successfully.')
   assert.equal((await browserApi('/api/scrap-records/monthly-summary?month=2009-09')).body.totalWeight,'812.00');assert.equal((await browserApi('/api/scrap-records/monthly-summary?month=2009-10')).body.totalWeight,'250.00')
-  await click('Reports');await hasText('Applied period:');await fill('Report workflow','SCRAP');await fill('From date','2009-10-20');await fill('To date','2009-10-21');await click('Apply report filters');await fill('Weight display','kg');await hasText('250.00')
+  await openAnalysis();await hasText('Applied period:');await fill('Report workflow','SCRAP');await fill('From date','2009-10-20');await fill('To date','2009-10-21');await click('Apply report filters');await fill('Weight display','kg');await hasText('250.00')
   assert.equal(await evaluate("[...document.querySelectorAll('label')].some(l=>l.textContent.startsWith('Material category'))"),false)
   await evaluate(`window.__scrapExports=[];window.fetch=async(...args)=>{const r=await window.__realFetch(...args);if(String(args[0]).includes('/export?'))window.__scrapExports.push({status:r.status,url:String(args[0])});return r}`)
   await enabled('Export CSV');await click('Export CSV');await until(()=>evaluate('window.__scrapExports.length===1'),'Scrap CSV export');await enabled('Export Excel');await click('Export Excel');await until(()=>evaluate('window.__scrapExports.length===2'),'Scrap XLSX export');assert.equal(await evaluate('window.__scrapExports.every(r=>r.status===200&&r.url.includes("workflow=SCRAP"))'),true);await evaluate('window.fetch=window.__realFetch')
@@ -2357,14 +2408,14 @@ try {
   await fill('Workflow','WHITEGOODS');await hasText('Showing 1-10 of 94')
   await fill('From','2012-01-01');await fill('To','2012-01-31');await enabled('Apply dates / refresh');await click('Apply dates / refresh');await hasText('No records found.');await hasText('Showing 0-0 of 0')
   assert.equal(await evaluate(`[...document.querySelectorAll('${recordsPager} button')].every(b=>b.disabled)`),true)
-  await click('Reports');await hasText('Applied period:');await fill('Report workflow','WHITEGOODS');await fill('From date','2011-01-01');await fill('To date','2011-01-31');await click('Apply report filters');await fill('Report view','details');await hasText('Showing 1-10 of 94')
+  await openAnalysis();await hasText('Applied period:');await fill('Report workflow','WHITEGOODS');await fill('From date','2011-01-01');await fill('To date','2011-01-31');await click('Apply report filters');await fill('Report view','details');await hasText('Showing 1-10 of 94')
   await click('Next',reportsPager);await hasText('Showing 11-20 of 94');await fill('Rows per page','25',reportsPager);await hasText('Showing 1-25 of 94');await fill('Rows per page','50',reportsPager);await hasText('Showing 1-50 of 94')
   await fill('Rows per page','10',reportsPager);await hasText('Showing 1-10 of 94')
   for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'Report pagination overflow '+width);await screenshot('report-pagination-'+width)}
   await click('Next',reportsPager);await hasText('Showing 11-20 of 94')
   const reportPagingId=await evaluate("Number(document.querySelector('.report-section table tbody button').textContent.slice(1))")
   await click('#'+reportPagingId,'.report-section');await enabled('Correct record');await click('Correct record');await fill('Whitegoods count','3');await enabled('Review Whitegoods');await click('Review Whitegoods');await enabled('Confirm correction');await click('Confirm correction');await hasText('saved successfully.')
-  await click('Reports');await hasText('Showing 11-20 of 94');assert.equal(await evaluate(`[...document.querySelectorAll('${reportsPager} select')][0].value`),'10')
+  await openAnalysis();await hasText('Showing 11-20 of 94');assert.equal(await evaluate(`[...document.querySelectorAll('${reportsPager} select')][0].value`),'10')
   await evaluate(`window.__pageDownloads=[];window.__pageFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.__pageFetch(...args);if(String(args[0]).includes('/reports/export?'))window.__pageDownloads.push({url:String(args[0]),status:response.status,text:String(args[0]).includes('format=csv')?await response.clone().text():null});return response}`)
   await enabled('Export CSV');await click('Export CSV');await until(()=>evaluate('window.__pageDownloads.length===1'),'paged CSV export');await enabled('Export Excel');await click('Export Excel');await until(()=>evaluate('window.__pageDownloads.length===2'),'paged XLSX export')
   const pageDownloads=await evaluate('window.__pageDownloads');assert.equal(pageDownloads[0].text.trim().split('\n').length,95);assert.equal(pageDownloads.every(r=>r.status===200&&!r.url.includes('&page=')&&!r.url.includes('&size=')),true);await evaluate('window.fetch=window.__pageFetch')
@@ -2381,7 +2432,7 @@ try {
   }
   const summaryFilter='/api/admin/reports/summary?from=2013-03-01&to=2013-03-31',summaryAll=(await browserApi(summaryFilter+'&size=50')).body
   assert.ok(summaryAll.totalItems>10);assert.ok(summaryAll.totalItems<=50)
-  await click('Reports');await hasText('Applied period:');await fill('Report workflow','');await fill('From date','2013-03-01');await fill('To date','2013-03-31');await click('Apply report filters');await fill('Report view','summary')
+  await openAnalysis();await hasText('Applied period:');await fill('Report workflow','');await fill('From date','2013-03-01');await fill('To date','2013-03-31');await click('Apply report filters');await fill('Report view','summary')
   const summaryPager='nav[aria-label="Report summary pagination"]'
   await hasText('Showing 1-10 of '+summaryAll.totalItems);assert.equal(await evaluate("document.querySelector('.report-section tbody').rows.length"),10)
   const summaryFirst=await evaluate("document.querySelector('.report-section tbody').textContent")
@@ -2691,6 +2742,11 @@ try {
   const firstIncomplete=incompleteFixtures[0]
   await fill('Workflow',firstIncomplete.workflow);await fill('From','1998-04-15');await fill('To','1998-04-15');await enabled('Apply dates / refresh');await click('Apply dates / refresh');await enabled('#'+firstIncomplete.saved.id);await click('#'+firstIncomplete.saved.id)
   await enabled('Complete record');await enabled('Delete record')
+  await click('Close details');await click('Summary & exports','.records-view-switch');await hasText('Applied period:')
+  await fill('Report workflow','CRATE_PALLET');await fill('From date','1998-04-15');await fill('To date','1998-04-15');await click('Apply report filters');await enabled('Export CSV')
+  await hasText('No records for this period.')
+  await fill('Report view','details');await hasText('No matching records.')
+  await click('Records','.records-view-switch');await enabled('#'+firstIncomplete.saved.id);await click('#'+firstIncomplete.saved.id);await enabled('Complete record')
   assert.equal(await evaluate("[...document.querySelectorAll('.record-details-dialog button')].some(b=>b.textContent==='Correct record')"),false)
   await click('Complete record');await until(()=>percentageValue(firstIncomplete.cats[0].name).then(v=>v==='50.00'),'Admin incomplete breakdown')
   await click('Back to record details')
@@ -2791,7 +2847,7 @@ try {
     assert.ok(await evaluate(`document.querySelector('.record-details-dialog').textContent.includes(${JSON.stringify(record.pickupLocation)})`))
     await inertHostileDom('.record-details-dialog');await click('Close details')
   }
-  await click('Reports');await hasText('Applied period:');await fill('Report workflow','PICKUP');await fill('From date','2005-12-12');await fill('To date','2005-12-12');await enabled('Apply report filters');await click('Apply report filters');await fill('Report view','details')
+  await openAnalysis();await hasText('Applied period:');await fill('Report workflow','PICKUP');await fill('From date','2005-12-12');await fill('To date','2005-12-12');await enabled('Apply report filters');await click('Apply report filters');await fill('Report view','details')
   for(const text of hostileTexts)await until(()=>evaluate(`document.querySelector('.report-section').textContent.includes(${JSON.stringify(text)})`),'SEC-03 literal report text '+text)
   await inertHostileDom('.report-section')
   const hostileCsv=await evaluate(`fetch('/api/admin/reports/export?from=2005-12-12&to=2005-12-12&workflow=PICKUP&report=details&format=csv').then(async r=>({status:r.status,text:await r.text()}))`)

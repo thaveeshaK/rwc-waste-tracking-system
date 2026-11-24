@@ -16,7 +16,7 @@ function initial(configuration?: Configuration): Filters {
   return {from, to: today, workflow: '', materialCategoryId: '', location: '', direction: '', testingCategoryId: ''}
 }
 function iso(date: Date) { return date.toISOString().slice(0, 10) }
-export function ReportsPage({onOpen,view,onViewChange}:{onOpen:(row:Row)=>void;view:ReportView;onViewChange:Dispatch<SetStateAction<ReportView>>}) {
+export function RecordsAnalysis({onOpen,view,onViewChange,refreshToken}:{refreshToken:number;onOpen:(row:Row,trigger:HTMLButtonElement)=>void;view:ReportView;onViewChange:Dispatch<SetStateAction<ReportView>>}) {
   const [defaults, setDefaults] = useState<Configuration | null>(null)
   const draft=view.draft??initial(), applied=view.applied??initial()
   const {page,size,mode,periodName}=view
@@ -32,7 +32,7 @@ export function ReportsPage({onOpen,view,onViewChange}:{onOpen:(row:Row)=>void;v
   const [exporting, setExporting] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [tonnes, setTonnes] = useState(false)
-  const key = query(applied)+`:${mode}:${page}:${size}:${attempt}`
+  const key = query(applied)+`:${mode}:${page}:${size}:${attempt}:${refreshToken}`
   const loading = result?.key !== key
   const dirty = query(draft) !== query(applied)
   useEffect(() => {
@@ -64,9 +64,9 @@ export function ReportsPage({onOpen,view,onViewChange}:{onOpen:(row:Row)=>void;v
     try { await download('/api/admin/reports/export?'+query(applied)+`&report=${mode}&format=${format}`) }
     catch (e) { setError(errorMessage(e)) } finally { setExporting(false) }
   }
-  if (!defaults) return <section><h1>Reports</h1>{error ? <p role="alert" className="notice error">{error}</p> : <p role="status">Loading reporting defaults...</p>}</section>
+  if (!defaults) return <section><h2 id="records-analysis-heading">Summary &amp; exports</h2>{error ? <p role="alert" className="notice error">{error}</p> : <p role="status">Loading reporting defaults...</p>}</section>
   const testing = draft.workflow === 'ELECTRICAL_TESTING'
-  return <section><div className="page-heading"><div><p className="eyebrow">ADMIN</p><h1>Reports</h1><p>Active submitted records only. Operational totals are not certified diversion figures.</p></div></div>
+  return <section aria-labelledby="records-analysis-heading"><div className="page-heading"><div><h2 id="records-analysis-heading">Summary &amp; exports</h2><p>Active completed loads and other submitted activity only. Incomplete loads are excluded. Operational totals are not certified diversion figures.</p></div></div>
     <form className="panel" onSubmit={apply}><div className="report-filters">
       <label>Reporting period<select value={periodName} onChange={e => period(e.target.value)}><option value="custom">Custom date range</option><option value="daily">Daily</option><option value="weekly">Weekly (Monday-Sunday)</option><option value="monthly">Monthly</option><option value="financial">Financial year (start month {defaults.financialYearStartMonth})</option></select></label>
       <label>From date<input type="date" required min="0001-01-01" max="9998-12-31" value={draft.from} onChange={e => {setPeriodName('custom'); setDraft({...draft, from: e.target.value})}}/></label>

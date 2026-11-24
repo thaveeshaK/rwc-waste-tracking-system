@@ -1,3 +1,5 @@
+import { RecordsAnalysis } from '../features/reporting/RecordsAnalysis'
+import type { ReportView } from '../features/reporting/types'
 import { RecordStatusBadge } from '../components/RecordStatusBadge'
 import { recordStatus, isIncompleteRecord } from '../features/records/status'
 import {Pagination} from '../components/Pagination'
@@ -22,7 +24,7 @@ import { ElectricalCratePalletReview } from '../features/electrical-crate-pallet
 import * as pickup from '../features/pickup/api'
 import { PickupReview } from '../features/pickup/PickupReview'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, Dispatch, SetStateAction } from 'react'
 import { ApiError, errorMessage } from '../api/client'
 import * as crate from '../features/crate-pallet/api'
 import * as salvage from '../features/salvage/api'
@@ -31,6 +33,10 @@ import { SalvageReview } from '../features/salvage/SalvageReview'
 import type { OperationalRecord, Workflow } from '../features/records/types'
 
 interface Props {
+  tab: 'records' | 'analysis'
+  onTabChange: (tab: 'records' | 'analysis') => void
+  reportView: ReportView
+  onReportViewChange: Dispatch<SetStateAction<ReportView>>
   isAdmin: boolean
   workflow: Workflow | ''
   view: RecordsView
@@ -44,7 +50,11 @@ interface Props {
   onBusyChange: (busy: boolean) => void
 }
 
-export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, postSaveOrigin, onNew, selectedRecord, onWorkflowChange, onEdit, onBusyChange }: Props) {
+export function RecordsPage({ tab, onTabChange, reportView, onReportViewChange, isAdmin, workflow, view, onViewChange, saved, postSaveOrigin, onNew, selectedRecord, onWorkflowChange, onEdit, onBusyChange }: Props) {
+  const [analysisRefresh,setAnalysisRefresh]=useState(0)
+  const [analysisOpened,setAnalysisOpened]=useState(tab==='analysis')
+  const [selectedFromAnalysis,setSelectedFromAnalysis]=useState(false)
+  const analysis=isAdmin&&tab==='analysis'
   const [records, setRecords] = useState<OperationalRecord[]>([])
   const [selected, setSelected] = useState<OperationalRecord | null>(selectedRecord ?? saved ?? null)
   const [openedFromRecords, setOpenedFromRecords] = useState(!!selectedRecord)
@@ -83,13 +93,13 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, post
 
   const selectedDate=selected?.workflow==='SCRAP'?selected.record.reportingMonth+'-01':selected?.record.recordDate
   const selectedStart=selected?.workflow==='SCRAP'&&view.from?view.from.slice(0,7)+'-01':view.from
-  const selectedMatches=!!selectedDate&&(!workflow||workflow===selected?.workflow)&&(!selectedStart||selectedDate>=selectedStart)&&(!view.to||selectedDate<=view.to)
+  const selectedMatches=!!saveMessage || (!!selectedDate&&(!workflow||workflow===selected?.workflow)&&(!selectedStart||selectedDate>=selectedStart)&&(!view.to||selectedDate<=view.to))
   useEffect(()=>{
     if(!selected?.record.id)return
     let cancelled=false
-    getOperationalRecord(selected.workflow,selected.record.id).then(record=>{if(!cancelled)setSelected(selectedMatches?record:null)}).catch(error=>{if(!cancelled){if(error instanceof ApiError&&error.status===404)setSelected(null);else setError(errorMessage(error))}})
+    getOperationalRecord(selected.workflow,selected.record.id).then(record=>{if(!cancelled)setSelected(selectedFromAnalysis||selectedMatches?record:null)}).catch(error=>{if(!cancelled){if(error instanceof ApiError&&error.status===404)setSelected(null);else setError(errorMessage(error))}})
     return()=>{cancelled=true}
-  },[selected?.workflow,selected?.record.id,selectedMatches,view,attempt,workflow])
+  },[selected?.workflow,selected?.record.id,selectedMatches,selectedFromAnalysis,view,attempt,workflow])
 
   function changeWorkflow(value: Workflow | '') {
     if (busy || value === workflow) return
@@ -107,10 +117,10 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, post
     setSelected(null);setConfirmDelete(false)
   }
 
-  async function open(row:OperationalRecord,trigger:HTMLElement) {
+  async function open(workflow:Workflow,id:number,trigger:HTMLElement,fromAnalysis=false) {
     returnFocus.current=trigger
     setBusy(true);setError('');setMessage('');setConfirmDelete(false)
-    try {setSelected(await getOperationalRecord(row.workflow,row.record.id!));setOpenedFromRecords(true)
+    try {setSelected(await getOperationalRecord(workflow,id));setSelectedFromAnalysis(fromAnalysis);setOpenedFromRecords(true)
     } catch (error) { setError(errorMessage(error)) }
     finally { setBusy(false) }
   }
@@ -122,6 +132,8 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, post
     const selectedWorkflow = selected.workflow
     function reconcile(message: string) {
       setRecords(records => records.filter(row => row.workflow !== selectedWorkflow || row.record.id !== id))
+      returnFocus.current=null
+      setAnalysisRefresh(n=>n+1)
       setMessage(message); setSelected(null); setConfirmDelete(false)
       setLoading(true);setAttempt(n=>n+1)
     }
@@ -135,11 +147,16 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, post
   }
 
   return <section aria-labelledby="records-heading">
-    <div className="page-heading"><div><p className="eyebrow">{workflow === '' ? 'ALL WORKFLOWS' : workflow === 'SCRAP' ? 'SCRAP' : workflow === 'EWASTE_PICKUP' ? 'E-WASTE PICKUP' : workflow === 'CRATE_PALLET' ? 'CRATE / PALLET' : workflow === 'SALVAGE' ? 'SALVAGE TRIPS' : workflow === 'PICKUP' ? 'PICKUPS' : workflow === 'ELECTRICAL_CRATE_PALLET' ? 'ELECTRICAL CRATE / PALLET' : workflow === 'COLLECTABLES' ? 'COLLECTABLES' : workflow === 'WHITEGOODS' ? 'WHITEGOODS' : 'ELECTRICAL TESTING'}</p><h1 id="records-heading" ref={heading} tabIndex={-1}>Records</h1>
-      <p>View submitted loads{isAdmin ? ', correct entries, or delete an incorrect record.' : '. Completed records are read-only for Staff.'}</p></div></div>
-    {workflow === 'SCRAP' && <p className="hint">Scrap uses reporting months. Date filters include each month touched by the selected range.</p>}
+    <div className="page-heading"><div><p className="eyebrow">{analysis ? 'ADMIN' : workflow === '' ? 'ALL WORKFLOWS' : workflow === 'SCRAP' ? 'SCRAP' : workflow === 'EWASTE_PICKUP' ? 'E-WASTE PICKUP' : workflow === 'CRATE_PALLET' ? 'CRATE / PALLET' : workflow === 'SALVAGE' ? 'SALVAGE TRIPS' : workflow === 'PICKUP' ? 'PICKUPS' : workflow === 'ELECTRICAL_CRATE_PALLET' ? 'ELECTRICAL CRATE / PALLET' : workflow === 'COLLECTABLES' ? 'COLLECTABLES' : workflow === 'WHITEGOODS' ? 'WHITEGOODS' : 'ELECTRICAL TESTING'}</p><h1 id="records-heading" ref={heading} tabIndex={-1}>Records</h1>
+      <p>{analysis ? 'Summaries and exports for completed operational activity.' : <>View submitted loads{isAdmin ? ', correct entries, or delete an incorrect record.' : '. Completed records are read-only for Staff.'}</>}</p></div></div>
+    {isAdmin && <div className="records-view-switch" role="group" aria-label="Records views">
+      <button type="button" className={analysis?'secondary':''} aria-pressed={!analysis} disabled={busy} onClick={()=>onTabChange('records')}>Records</button>
+      <button type="button" className={analysis?'':'secondary'} aria-pressed={analysis} disabled={busy} onClick={()=>{setAnalysisOpened(true);onTabChange('analysis')}}>Summary &amp; exports</button>
+    </div>}
     {message && <p className="notice success" role="status">{message}</p>}
     {error && !selected && <p className="notice error" role="alert">{error}</p>}
+    <div hidden={analysis} data-records-view="records">
+      {workflow === 'SCRAP' && <p className="hint">Scrap uses reporting months. Date filters include each month touched by the selected range.</p>}
     {workflow === 'WHITEGOODS' && <WhitegoodsSummary refreshToken={attempt} busy={busy} />}
     <div className="panel"><form className="filter-bar" onSubmit={applyFilter}>
       <label>Workflow<select value={workflow} disabled={busy} onChange={event => changeWorkflow(event.target.value as Workflow | '')}>
@@ -154,15 +171,20 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, post
             : workflow === 'PICKUP' ? <><th>Pickup location</th><th className="numeric">Net weight</th></> : workflow === 'COLLECTABLES' ? <th className="numeric">Net weight</th> : workflow === 'WHITEGOODS' ? <><th className="numeric">Count</th><th className="numeric">Estimated weight</th></> : workflow === 'ELECTRICAL_TESTING' ? <><th>Category / destination</th><th>Tally type</th><th className="numeric">Quantity</th></> : <><th>Crew</th><th>Time Up / Down</th><th className="numeric">Kg Up</th><th className="numeric">Kg Down</th></>}<th>Status</th><th>Submitted by</th></tr></thead>
           <tbody>{records.map(row => <tr key={`${row.workflow}:${row.record.id}`} className={`selectable-record ${selected?.workflow === row.workflow && selected.record.id === row.record.id ? 'selected-row' : ''}`}
             tabIndex={busy ? -1 : 0} aria-selected={selected?.workflow === row.workflow && selected.record.id === row.record.id}
-            onClick={event => { if (!busy && !(event.target as HTMLElement).closest('button')) void open(row,event.currentTarget) }}
-            onKeyDown={event => { if (!busy && event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); void open(row,event.currentTarget) } }}>
-            <td><button className="text-button" disabled={busy} onClick={event => open(row,event.currentTarget)}>#{row.record.id}</button></td>
+            onClick={event => { if (!busy && !(event.target as HTMLElement).closest('button')) void open(row.workflow,row.record.id!,event.currentTarget) }}
+            onKeyDown={event => { if (!busy && event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); void open(row.workflow,row.record.id!,event.currentTarget) } }}>
+            <td><button className="text-button" disabled={busy} onClick={event => open(row.workflow,row.record.id!,event.currentTarget)}>#{row.record.id}</button></td>
             <td>{row.workflow === 'SCRAP' ? row.record.reportingMonth : row.record.recordDate}</td>{workflow === '' ? <><td>{workflowEntries.find(w=>w.id===row.workflow)?.name}</td><UnifiedCells row={row}/></> : row.workflow === 'SCRAP' ? <td>{row.record.totalWeight} kg</td> : row.workflow === 'EWASTE_PICKUP' ? <><td>{row.record.organisation}</td><td className="numeric">{row.record.netWeight} kg</td></> : row.workflow === 'CRATE_PALLET' || row.workflow === 'ELECTRICAL_CRATE_PALLET' ? <><td>{row.record.containerTypeName}</td><td className="numeric">{row.record.netWeight} kg</td></>
               : row.workflow === 'PICKUP' ? <><td>{row.record.pickupLocation}</td><td className="numeric">{row.record.netWeight} kg</td></> : row.workflow === 'COLLECTABLES' ? <td className="numeric">{row.record.netWeight} kg</td> : row.workflow === 'WHITEGOODS' ? <><td className="numeric">{row.record.count}</td><td className="numeric">{row.record.estimatedWeight} kg</td></> : row.workflow === 'ELECTRICAL_TESTING' ? <><td>{row.record.categoryName??'Overall diversion'}</td><td>{typeLabels[row.record.tallyType]}</td><td className="numeric">{row.record.count}</td></> : <><td>{row.record.crew}</td><td>{row.record.up.time.slice(0, 5)} / {row.record.down.time.slice(0, 5)}</td>
                 <td className="numeric">{row.record.up.kg} kg</td><td className="numeric">{row.record.down.kg} kg</td></>}
             <td><RecordStatusBadge status={recordStatus(row)}/></td><td>{row.record.createdBy}</td></tr>)}</tbody></table></div>}
       <Pagination page={view.page} size={view.size} totalItems={totalItems} busy={busy||loading} onPage={page=>{setLoading(true);onViewChange({...view,page})}} onSize={size=>{setLoading(true);onViewChange({...view,size,page:0})}}/>
     </div>
+    </div>
+    {isAdmin && (analysisOpened || analysis) && <div hidden={!analysis} data-records-view="analysis">
+      <RecordsAnalysis refreshToken={analysisRefresh} view={reportView} onViewChange={onReportViewChange}
+        onOpen={(row,trigger)=>{void open(row.workflow as Workflow,row.id,trigger,true)}}/>
+    </div>}
     {selected && <Dialog className="record-details-dialog" labelledBy="record-details-heading" busy={busy} onClose={closeDetails} restoreFocus={restoreFocus}><div className="detail-heading"><h2 id="record-details-heading">Record #{selected.record.id}</h2>
       <button className="text-button" autoFocus disabled={busy} onClick={closeDetails}>Close details</button></div>
       <p><RecordStatusBadge status={recordStatus(selected)}/></p>
