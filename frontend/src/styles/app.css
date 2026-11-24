@@ -38,10 +38,13 @@ button.nav-item.active { color: #245c43; border-bottom-color: #245c43; }
 .step-label { color: #42614c; background: #e4ebe1; padding: .5rem .9rem; border-radius: 20px; white-space: nowrap; font-size: .85rem; }
 .panel { background: white; border: 1px solid #dce3d9; border-radius: 10px; padding: 1.7rem; box-shadow: 0 3px 12px #1c382b04; }
 .form-grid { display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.2rem 1.5rem; }
-.material-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem 2rem; }
-.material-grid label { display: flex; align-items: center; justify-content: space-between; gap: .8rem; border-bottom: 1px solid #edf0e9; padding: .3rem 0 .7rem; font-size: .88rem; }
-.percentage-input { display: flex; align-items: center; flex-shrink: 0; width: 120px; gap: .5rem; }
-.percentage-input input { margin: 0; text-align: right; }
+.material-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; }
+.percentage-control { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem 1rem; min-width: 0; border-bottom: 1px solid #edf0e9; padding: .5rem 0; }
+.percentage-material { flex: 1 1 180px; font-size: .95rem; font-weight: 600; overflow-wrap: anywhere; }
+.percentage-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.percentage-button-group { display: flex; gap: .35rem; }
+.percentage-control button { min-width: 44px; padding: .55rem .65rem; }
+.percentage-control output { min-width: 5.5rem; text-align: center; font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .percentage-total { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem; padding: .85rem 1rem; margin: 1.3rem 0 0; background: #faf2e3; color: #72521b; border-radius: 5px; font-weight: 650; }
 .percentage-total span { font-weight: 400; font-size: .9rem; }
 .percentage-total.valid { background: #eaf3e8; color: #245c43; }
@@ -190,7 +193,6 @@ footer { color: #6b7a6c; font-size: .75rem; padding: 2rem 0; }
 .salvage-steps .current { background: #245c43; color: white; border-color: #245c43; }
 .salvage-steps button.completed { background: #e4ebe1; color: #245c43; border-color: #7d9b83; }
 .salvage-steps button.completed::after { content: ' \2713'; margin-left: .5rem; }
-.salvage-entry .material-grid input { min-height: 44px; }
 
 .testing-tabs { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 1rem; }
 .tally-date { max-width: 240px; margin-bottom: 1rem; }

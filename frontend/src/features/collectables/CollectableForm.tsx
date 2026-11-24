@@ -1,4 +1,5 @@
 import type { FormEvent } from 'react'
+import { PercentageControl } from '../../components/PercentageControl'
 import { decimalHundredths, percentageTotal } from '../../utils/decimal'
 import type { MaterialCategory, CollectableInput } from './types'
 interface Props {
@@ -24,11 +25,10 @@ export function CollectableForm({ value, materials, today, busy, onChange, onRev
         <span className="hint">Include the tub. Gross weight must be greater than 2.00 kg.</span></label></div>
     <dl className="record-facts"><div><dt>Fixed tare</dt><dd>2.00 kg</dd></div>
       <div><dt>Net material weight</dt><dd aria-live="polite">{displayNet}</dd></div></dl>
-    <h3>Material breakdown</h3><div className="material-grid">{materials.map(category => <label key={category.id}>{category.name}
-      <span className="percentage-input"><input type="number" inputMode="decimal" required min="0" max="100" step="0.01"
+    <h3>Material breakdown</h3><div className="material-grid">{materials.map(category => <PercentageControl key={category.id} material={category.name}
         value={value.materials.find(row => row.materialCategoryId === category.id)?.percentage ?? '0.00'}
-        onChange={event => onChange({ ...value, materials: value.materials.map(row => row.materialCategoryId === category.id
-          ? { ...row, percentage: event.target.value } : row) })} /><span>%</span></span></label>)}</div>
+        onChange={percentage => onChange({ ...value, materials: value.materials.map(row => row.materialCategoryId === category.id
+          ? { ...row, percentage } : row) })} />)}</div>
     <p className={`percentage-total ${total === '100.00' ? 'valid' : ''}`} aria-live="polite">Total: {total ?? 'Check entries'}{total === null ? '' : '%'} <span>Must equal 100.00%</span></p>
     <div className="actions"><button disabled={busy || !valid}>{busy ? 'Calculating...' : 'Review collectables'}</button>
       <span className="hint">Nothing is saved until you confirm submission.</span></div>

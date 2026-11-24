@@ -156,6 +156,8 @@ async function resumeStaffSubmission() {
 }
 
 async function fill(label, value, scope = '') {
+  const percentage=await evaluate(`(()=>{const root=${scope?`document.querySelector(${JSON.stringify(scope)})`:'document'};return [...root.querySelectorAll('.percentage-control')].some(row=>row.dataset.materialName===${JSON.stringify(label)})})()`)
+  if(percentage) {await setPercentage(label,value,scope);return}
   await closeDetailsBeforeBackgroundAction(`(()=>{const root=${scope?`document.querySelector(${JSON.stringify(scope)})`:'document'};return [...root.querySelectorAll('label')].find(l=>l.textContent.trim().startsWith(${JSON.stringify(label)}))?.querySelector('input,select')})()`)
   await evaluate(`(() => {
     const root = ${scope ? `document.querySelector(${JSON.stringify(scope)})` : 'document'};
@@ -166,6 +168,43 @@ async function fill(label, value, scope = '') {
     Object.getOwnPropertyDescriptor(prototype, 'value').set.call(input, ${JSON.stringify(value)});
     input.dispatchEvent(new Event(input instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }));
   })()`)
+}
+
+async function percentageValue(material,scope='') {
+  return evaluate(`(()=>{const root=${scope?`document.querySelector(${JSON.stringify(scope)})`:'document'};return [...root.querySelectorAll('.percentage-control')].find(row=>row.dataset.materialName===${JSON.stringify(material)})?.querySelector('output').dataset.percentageValue})()`)
+}
+
+async function percentageButton(material,action,scope='',keyboard) {
+  const target=`(()=>{const root=${scope?`document.querySelector(${JSON.stringify(scope)})`:'document'};return [...root.querySelectorAll('.percentage-control')].find(row=>row.dataset.materialName===${JSON.stringify(material)})})()`
+  await closeDetailsBeforeBackgroundAction(target)
+  await evaluate(`(()=>{const row=${target};const button=[...row.querySelectorAll('button')].find(b=>b.textContent===${JSON.stringify(action)});if(!button||button.matches(':disabled'))throw new Error('Percentage button unavailable');${keyboard?'button.focus()':'button.click()'}})()`)
+  if(keyboard) {
+    await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:keyboard,code:keyboard===' '?'Space':'Enter',windowsVirtualKeyCode:keyboard===' '?32:13,text:keyboard===' '?' ':'\r'})
+    await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:keyboard,code:keyboard===' '?'Space':'Enter',windowsVirtualKeyCode:keyboard===' '?32:13})
+  }
+}
+
+function percentHundredths(value) {
+  assert.match(value,/^\d+(\.\d{1,2})?$/)
+  const [whole,fraction='']=value.split('.')
+  return BigInt(whole)*100n+BigInt(fraction.padEnd(2,'0'))
+}
+
+// Drive the public buttons; never inject percentage state or reintroduce typing.
+async function setPercentage(material,value,scope='') {
+  const target=percentHundredths(value)
+  assert.ok(target>=0n&&target<=10000n)
+  let current=percentHundredths(await percentageValue(material,scope))
+  if(target%500n===0n) {
+    const anchor=target>5000n?10000n:0n
+    await percentageButton(material,anchor===0n?'Min':'Max',scope);current=anchor
+  }
+  assert.equal((target-current)%500n,0n,'Requested percentage must be reachable with the buttons')
+  while(current!==target) {
+    const delta=target-current,step=delta>=1000n?1000n:delta<=-1000n?-1000n:delta>0n?500n:-500n
+    await percentageButton(material,step===1000n?'+10':step===500n?'+5':step===-500n?'-5':'-10',scope)
+    current=percentHundredths(await percentageValue(material,scope))
+  }
 }
 
 const hasText = text => until(() => evaluate(`document.body.textContent.includes(${JSON.stringify(text)})`), text)
@@ -354,7 +393,22 @@ try {
   const apple = await evaluate("[...document.querySelector('select').options].find(o => o.textContent.startsWith('Apple Crate')).value")
   await fill('Container type', apple)
   await fill('Gross weight', '160.00')
-  await fill('Timber', '99.99')
+  assert.equal(await evaluate("document.querySelectorAll('.material-grid input').length"),0)
+  assert.equal(await evaluate("document.querySelectorAll('.percentage-control').length"),13)
+  for(const [action,expected] of [['Min','0.00'],['-10','0.00'],['-5','0.00'],['+5','5.00'],['+10','15.00'],['-5','10.00'],['-10','0.00'],['Max','100.00'],['+10','100.00'],['+5','100.00'],['Min','0.00']]) {
+    await percentageButton('Timber',action);assert.equal(await percentageValue('Timber'),expected)
+    assert.equal(await evaluate("document.querySelector('.record-review')===null"),true)
+  }
+  await percentageButton('Timber','+5','','Enter');assert.equal(await percentageValue('Timber'),'5.00')
+  await percentageButton('Timber','+10','',' ');assert.equal(await percentageValue('Timber'),'15.00')
+  assert.equal(await evaluate("[...document.querySelectorAll('.percentage-control')].every(row=>[...row.querySelectorAll('button')].every(button=>button.type==='button'&&button.getAttribute('aria-label').includes(row.dataset.materialName)))"),true)
+  for(const width of [1280,1024,768]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
+    assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true)
+    assert.equal(await evaluate("[...document.querySelectorAll('.percentage-control button')].every(button=>button.getBoundingClientRect().height>=44&&button.getBoundingClientRect().width>=44)"),true)
+    await screenshot('percentage-controls-crate-'+width)
+  }
+  await fill('Timber', '95.00')
   assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === 'Review record').disabled"), true)
   await fill('Timber', '100.00')
   await enabled('Review record')
@@ -420,7 +474,7 @@ try {
   assert.equal(await evaluate("document.querySelector('.staff-operations')===null"),true)
   assert.equal(await evaluate("document.querySelector('select').value"),'')
   assert.equal(await evaluate("[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('Gross weight')).querySelector('input').value"),'')
-  assert.equal(await evaluate("[...document.querySelectorAll('.material-grid input')].every(i=>i.value==='0.00')"),true)
+  assert.equal(await evaluate("[...document.querySelectorAll('.percentage-control output')].every(row=>row.dataset.percentageValue==='0.00')"),true)
   await fill('Container type',apple);await fill('Gross weight','161.00');await fill('Timber','100.00')
   const freshCrate=await freshPreview('/api/crate-pallet-records/preview','Review record')
   assert.notEqual(freshCrate.submissionId,ids[0]);assert.equal(freshCrate.grossWeight,'161.00')
@@ -649,7 +703,7 @@ try {
   await fill('Record date','2003-04-05')
   await fill('Crew','Salvage smoke crew')
   await fill('Kg Up','10.00',upScope)
-  await fill('E-waste','99.99',upScope)
+  await fill('E-waste','95.00',upScope)
   assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Continue to Salvage Down').disabled"),true)
   await fill('E-waste','100.00',upScope)
   // A valid breakdown cannot bypass the mandatory time or operational date.
@@ -667,7 +721,7 @@ try {
   assert.equal(await evaluate(`document.querySelector('${downScope} .material-grid').children.length`),14)
   assert.equal(await evaluate(`document.querySelector('${downScope}').textContent.includes('Mattresses')`),false)
   await fill('Kg Down','20.00',downScope)
-  await fill('E-waste','99.99',downScope)
+  await fill('E-waste','95.00',downScope)
   await fill('Time Down','09:15',downScope)
   assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Review Trip').disabled"),true)
   await fill('E-waste','100.00',downScope)
@@ -848,7 +902,7 @@ try {
   await click('Records')
   await staffWorkflow('Pickup')
   await until(() => evaluate("document.querySelector('.material-grid')?.children.length === 13"), 'Pickup categories loaded')
-  const pickupLabels = await evaluate("[...document.querySelectorAll('.material-grid label')].map(l => l.textContent.replace('%', '').trim())")
+  const pickupLabels = await evaluate("[...document.querySelectorAll('.percentage-control')].map(row => row.dataset.materialName)")
   assert.equal(pickupLabels.includes('E-waste'), false)
   assert.equal(pickupLabels.includes('Lead Acid Batteries'), false)
   assert.equal(pickupLabels.includes('Whitegoods / Large Appliances'), false)
@@ -862,7 +916,7 @@ try {
   await click('Review pickup')
   assert.equal(await evaluate("document.querySelector('form').checkValidity()"), false)
   await fill('Pickup location', 'Pickup browser location')
-  await fill('Timber', '99.99')
+  await fill('Timber', '95.00')
   assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent === 'Review pickup').disabled"), true)
   await fill('Timber', '100.00')
   await screenshot('tablet-pickup-entry')
@@ -991,7 +1045,7 @@ try {
   await click('Records')
   await staffWorkflow('Electrical Crate / Pallet')
   await until(() => evaluate("document.querySelector('.material-grid')?.children.length === 2"), 'electrical categories')
-  const electricalLabels = await evaluate("[...document.querySelectorAll('.material-grid label')].map(l => l.textContent.replace('%', '').trim())")
+  const electricalLabels = await evaluate("[...document.querySelectorAll('.percentage-control')].map(row => row.dataset.materialName)")
   assert.deepEqual(electricalLabels, ['TVs / Monitors / Projectors', 'Everything Else'])
   const electricalOptions = await evaluate("[...document.querySelector('form select').options].map(o => o.textContent)")
   assert.equal(electricalOptions.length, 5) // Placeholder plus four allowed containers.
@@ -1000,7 +1054,7 @@ try {
   const electricalRefs = (await browserApi('/api/container-types?context=ELECTRICAL_CRATE_PALLET')).body
   const electricalCage = electricalRefs.find(c => c.name === 'Stillage Cage')
   const electricalPlastic = electricalRefs.find(c => c.name === 'Plastic Pallet')
-  const electricalPercentages = () => evaluate("[...document.querySelectorAll('.material-grid input')].map(i=>i.value)")
+  const electricalPercentages = () => evaluate("[...document.querySelectorAll('.percentage-control output')].map(row=>row.dataset.percentageValue)")
   assert.deepEqual(await electricalPercentages(),['0.00','0.00'])
   await fill('Container type', String(electricalCage.id))
   await fill('TVs / Monitors / Projectors', '100.00')
@@ -1011,26 +1065,25 @@ try {
   }
   await fill('Gross weight', '150.00')
   for(const [label,entered,expected] of [
-    ['TVs / Monitors / Projectors','35',['35','65.00']],
-    ['Everything Else','22.5',['77.50','22.5']],
-    ['TVs / Monitors / Projectors','33.33',['33.33','66.67']],
-    ['Everything Else','62.5',['37.50','62.5']],
-    ['TVs / Monitors / Projectors','100',['100','0.00']],
-    ['TVs / Monitors / Projectors','0',['0','100.00']],
-    ['Everything Else','0',['100.00','0']],
-    ['Everything Else','100',['0.00','100']],
+    ['TVs / Monitors / Projectors','35',['35.00','65.00']],
+    ['Everything Else','25',['75.00','25.00']],
+    ['Everything Else','65',['35.00','65.00']],
+    ['TVs / Monitors / Projectors','100',['100.00','0.00']],
+    ['TVs / Monitors / Projectors','0',['0.00','100.00']],
+    ['Everything Else','0',['100.00','0.00']],
+    ['Everything Else','100',['0.00','100.00']],
   ]) {
     await fill(label,entered)
     assert.deepEqual(await electricalPercentages(),expected)
     assert.equal(await evaluate("document.querySelector('.percentage-total').textContent.includes('100.00%')"),true)
   }
-  // Invalid edits keep the other value unchanged and block Review; no clamping/complementing.
+  // Typing is unavailable. Invalid direct API percentages must still be rejected.
   for(const invalid of ['-1','100.01','33.333','not-a-number','']) {
-    await fill('TVs / Monitors / Projectors',invalid)
-    assert.equal((await electricalPercentages())[1],'100')
-    assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Review record').disabled"),true)
+    const categories=(await browserApi('/api/material-categories?context=ELECTRICAL_CRATE_PALLET')).body
+    assert.equal((await browserApi('/api/electrical-crate-pallet-records/preview','POST',{submissionId:crypto.randomUUID(),recordDate:(await browserApi('/api/auth/me')).body.operationalDate,containerTypeId:electricalCage.id,grossWeight:'150.00',materials:categories.map((category,index)=>({materialCategoryId:category.id,percentage:index===0?invalid:'100.00'}))})).status,400)
+    assert.deepEqual(await electricalPercentages(),['0.00','100.00'])
   }
-  await fill('TVs / Monitors / Projectors','33.33')
+  await fill('TVs / Monitors / Projectors','35.00')
   for(const width of [1280,768,1024]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
     await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'electrical complement overflow at '+width)
@@ -1038,9 +1091,9 @@ try {
   }
   await click('Review record')
   await hasText('Review the calculated weights before confirming.')
-  assert.deepEqual(await evaluate("[...document.querySelectorAll('.record-review tbody tr')].map(r=>r.cells[1].textContent)"),['33.33%','66.67%'])
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.record-review tbody tr')].map(r=>r.cells[1].textContent)"),['35.00%','65.00%'])
   await click('Back to edit')
-  assert.deepEqual(await electricalPercentages(),['33.33','66.67'])
+  assert.deepEqual(await electricalPercentages(),['35.00','65.00'])
   await fill('TVs / Monitors / Projectors','100.00')
   await click('Review record')
   await hasText('Review the calculated weights before confirming.')
@@ -1175,7 +1228,7 @@ try {
   await hasText(collectableReminder)
   assert.equal(await evaluate("document.querySelector('form select') === null"), true)
   assert.equal(await evaluate("[...document.querySelectorAll('form label')].some(l => /Source|Customer|Location|Count|Eligibility/.test(l.textContent))"), false)
-  const collectableLabels = await evaluate("[...document.querySelectorAll('.material-grid label')].map(l => l.textContent.replace('%', '').trim())")
+  const collectableLabels = await evaluate("[...document.querySelectorAll('.percentage-control')].map(row => row.dataset.materialName)")
   assert.equal(collectableLabels.length, 13)
   for (const name of ['E-waste', 'Lead Acid Batteries', 'Whitegoods / Large Appliances', 'TVs / Monitors / Projectors', 'Everything Else']) assert.equal(collectableLabels.includes(name), false)
   await fill('Timber', '100.00')
@@ -1184,7 +1237,7 @@ try {
     assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Review collectables').disabled"), true)
   }
   await fill('Gross tub weight', '12.00')
-  await fill('Timber', '99.99')
+  await fill('Timber', '95.00')
   assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Review collectables').disabled"), true)
   await fill('Timber', '100.00')
   assert.equal(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), true)
@@ -2423,6 +2476,44 @@ try {
   await click('Sign out');await enabled('Sign in');await fill('Username',process.env.INITIAL_ADMIN_USERNAME);await fill('Password',process.env.INITIAL_ADMIN_PASSWORD);await click('Sign in');await enabled('Records')
   await checkRecordRows(true)
   console.log('PASS: whole-row and keyboard selection, switching/highlight/close, inline Hobart metadata and Staff/Admin detail permissions across all nine workflows.')
+
+  // Existing decimal percentages are loaded through valid persisted records, never typed into controls.
+  for(const workflow of ['CRATE_PALLET','ELECTRICAL_CRATE_PALLET']) {
+    const electrical=workflow==='ELECTRICAL_CRATE_PALLET'
+    const path=electrical?'/api/electrical-crate-pallet-records':'/api/crate-pallet-records'
+    const container=(await browserApi('/api/container-types?context='+workflow)).body[0]
+    const categories=(await browserApi('/api/material-categories?context='+workflow)).body.slice(0,2)
+    assert.ok(container);assert.equal(categories.length,2)
+    const initial=electrical?['22.40','77.60']:['33.33','66.67']
+    const saved=await browserApi(path,'POST',{submissionId:crypto.randomUUID(),recordDate:'1997-06-01',containerTypeId:container.id,grossWeight:'1000.00',materials:categories.map((category,index)=>({materialCategoryId:category.id,percentage:initial[index]}))})
+    assert.equal(saved.status,201)
+    await click('Records');await fill('Workflow',workflow);await fill('From','1997-06-01');await fill('To','1997-06-01');await enabled('Apply dates / refresh');await click('Apply dates / refresh')
+    await enabled('#'+saved.body.id);await click('#'+saved.body.id);await enabled('Correct record');await click('Correct record')
+    await until(()=>percentageValue(categories[0].name).then(value=>value===initial[0]),'existing decimal controls '+workflow)
+    assert.equal(await percentageValue(categories[1].name),initial[1])
+    assert.equal(await evaluate("document.querySelectorAll('.material-grid input').length"),0)
+    await percentageButton(categories[0].name,'+5')
+    if(!electrical) {
+      assert.equal(await percentageValue(categories[0].name),'38.33')
+      assert.equal(await percentageValue(categories[1].name),'66.67')
+      assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Review record').disabled"),true)
+      await percentageButton(categories[1].name,'-5')
+    }
+    const expected=electrical?['27.40','72.60']:['38.33','61.67']
+    assert.equal(await percentageValue(categories[0].name),expected[0]);assert.equal(await percentageValue(categories[1].name),expected[1])
+    await percentageButton(categories[0].name,'+10');await percentageButton(categories[0].name,'-10')
+    assert.equal(await percentageValue(categories[0].name),expected[0]);assert.equal(await percentageValue(categories[1].name),expected[1])
+    for(const width of [1280,1024,768]) {
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
+      assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true)
+      await screenshot('percentage-decimal-'+workflow+'-'+width)
+    }
+    await enabled('Review record');await click('Review record');await enabled('Confirm correction');await click('Confirm correction');await hasText('saved successfully.')
+    const updated=(await browserApi(path+'/'+saved.body.id)).body
+    for(let i=0;i<2;i++)assert.equal(updated.materials.find(row=>row.materialCategoryId===categories[i].id).percentage,expected[i])
+    await reopenForAdminActions();await enabled('Delete record');await click('Delete record');await click('Confirm deletion');await hasText('Record #'+saved.body.id+' deleted.')
+  }
+  console.log('PASS: button-only percentages Min/Max, +/-5/10, clamping, keyboard/touch targets; persisted 33.33/66.67 and 22.40/77.60 survive load, exact adjustments, review and Admin correction; Electrical complement and independent total-100 validation preserved.')
 
   // ET-16: model an authoritative server rollover while the client's pending board is still open.
   // ElectricalTestingMidnightIntegrationTests separately advances the real injected backend Clock.

@@ -1,4 +1,5 @@
 import type { FormEvent } from 'react'
+import { PercentageControl } from '../../components/PercentageControl'
 import { percentageTotal } from '../../utils/decimal'
 import type { ContainerType, CratePalletInput, MaterialCategory } from './types'
 
@@ -36,11 +37,10 @@ export function CratePalletForm({ value, containers, materials, today, busy, onC
     </fieldset>
     <fieldset disabled={busy}><legend>Material percentages</legend>
       <p className="hint">Enter percentages for the materials in this load. Leave other categories at zero.</p>
-      <div className="material-grid">{materials.map(material => <label key={material.id}>
-        {material.name}<span className="percentage-input"><input type="number" inputMode="decimal" required min="0" max="100" step="0.01"
+      <div className="material-grid">{materials.map(material => <PercentageControl key={material.id} material={material.name}
           value={value.materials.find(row => row.materialCategoryId === material.id)?.percentage ?? '0'}
-          onChange={event => onChange({ ...value, materials: value.materials.map(row => row.materialCategoryId === material.id
-            ? { ...row, percentage: event.target.value } : row) })} /><span>%</span></span></label>)}</div>
+          onChange={percentage => onChange({ ...value, materials: value.materials.map(row => row.materialCategoryId === material.id
+            ? { ...row, percentage } : row) })} />)}</div>
       <p className={`percentage-total ${total === '100.00' ? 'valid' : ''}`} aria-live="polite">
         Total: {total ?? 'Check entries'}{total !== null ? '%' : ''} <span>Must equal 100.00%</span></p>
     </fieldset>

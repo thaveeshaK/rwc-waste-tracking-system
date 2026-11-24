@@ -1,4 +1,5 @@
 import type { FormEvent } from 'react'
+import { PercentageControl } from '../../components/PercentageControl'
 import { decimalHundredths, percentageTotal } from '../../utils/decimal'
 import type { DirectionInput, MaterialCategory, SalvageInput } from './types'
 
@@ -34,11 +35,10 @@ function DirectionFields({ name, value, categories, onChange }: {
     </div>
     {zero ? <p className="notice" role="status">No breakdown is required for Salvage {name}: weight is 0 kg. The time is still required.</p>
       : <><p className="hint">Estimate this direction's material percentages independently.</p>
-        <div className="material-grid">{categories.map(category => <label key={category.id}>{category.name}
-          <span className="percentage-input"><input type="number" inputMode="decimal" required min="0" max="100" step="0.01"
+        <div className="material-grid">{categories.map(category => <PercentageControl key={category.id} material={category.name}
             value={value.materials.find(row => row.materialCategoryId === category.id)?.percentage ?? '0.00'}
-            onChange={event => onChange({ ...value, materials: value.materials.map(row => row.materialCategoryId === category.id
-              ? { ...row, percentage: event.target.value } : row) })} /><span>%</span></span></label>)}</div>
+            onChange={percentage => onChange({ ...value, materials: value.materials.map(row => row.materialCategoryId === category.id
+              ? { ...row, percentage } : row) })} />)}</div>
         <p className={`percentage-total ${total === '100.00' ? 'valid' : ''}`} aria-live="polite">{name} total: {total ?? 'Check entries'}{total === null ? '' : '%'} <span>Must equal 100.00% for a positive weight</span></p></>}
   </fieldset>
 }

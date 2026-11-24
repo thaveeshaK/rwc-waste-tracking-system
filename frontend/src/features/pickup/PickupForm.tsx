@@ -1,4 +1,5 @@
 import type { FormEvent } from 'react'
+import { PercentageControl } from '../../components/PercentageControl'
 import { decimalHundredths, percentageTotal } from '../../utils/decimal'
 import type { MaterialCategory, PickupInput } from './types'
 
@@ -23,11 +24,10 @@ export function PickupForm({ value, materials, today, busy, onChange, onReview }
       <label>Final net weight (kg) (required)<input type="number" inputMode="decimal" required min="0.01" max="99999999.99" step="0.01"
         value={value.netWeight} onChange={event => onChange({ ...value, netWeight: event.target.value })} />
         <span className="hint">Enter the final material weight. It must be greater than 0 kg.</span></label></div>
-    <h3>Material breakdown</h3><div className="material-grid">{materials.map(category => <label key={category.id}>{category.name}
-      <span className="percentage-input"><input type="number" inputMode="decimal" required min="0" max="100" step="0.01"
+    <h3>Material breakdown</h3><div className="material-grid">{materials.map(category => <PercentageControl key={category.id} material={category.name}
         value={value.materials.find(row => row.materialCategoryId === category.id)?.percentage ?? '0.00'}
-        onChange={event => onChange({ ...value, materials: value.materials.map(row => row.materialCategoryId === category.id
-          ? { ...row, percentage: event.target.value } : row) })} /><span>%</span></span></label>)}</div>
+        onChange={percentage => onChange({ ...value, materials: value.materials.map(row => row.materialCategoryId === category.id
+          ? { ...row, percentage } : row) })} />)}</div>
     <p className={`percentage-total ${total === '100.00' ? 'valid' : ''}`} aria-live="polite">Total: {total ?? 'Check entries'}{total === null ? '' : '%'} <span>Must equal 100.00%</span></p>
     <div className="actions"><button disabled={busy || !valid}>{busy ? 'Calculating...' : 'Review pickup'}</button>
       <span className="hint">Nothing is saved until you confirm submission.</span></div>
