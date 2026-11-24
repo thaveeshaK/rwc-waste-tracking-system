@@ -1,5 +1,6 @@
 package au.org.resourcework.waste_tracking_api.electricalcratepallet;
 
+import au.org.resourcework.waste_tracking_api.records.RecordStatus;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
@@ -17,6 +18,10 @@ public class ElectricalCratePalletCalculator {
     public ElectricalCratePalletCalculator(Clock clock) { this.clock = clock; }
 
     public BigDecimal net(LocalDate date, BigDecimal gross, BigDecimal tare, List<BigDecimal> percentages) {
+        return net(date, gross, tare, percentages, RecordStatus.COMPLETED);
+    }
+
+    public BigDecimal net(LocalDate date, BigDecimal gross, BigDecimal tare, List<BigDecimal> percentages, RecordStatus status) {
         if (date.isAfter(LocalDate.now(clock))) invalid("Record date cannot be in the future (Australia/Hobart).");
         if (date.isBefore(LocalDate.of(1, 1, 1))) invalid("Record date must be a valid calendar date.");
         validateDecimal(gross, new BigDecimal("99999999.99"), "Gross weight");
@@ -25,7 +30,10 @@ public class ElectricalCratePalletCalculator {
             validateDecimal(percentage, HUNDRED, "Percentage");
             total = total.add(percentage);
         }
-        if (total.compareTo(HUNDRED) != 0) invalid("Material percentages must total exactly 100.00%.");
+        if (status == RecordStatus.COMPLETED && total.compareTo(HUNDRED) != 0)
+            invalid("Material percentages must total exactly 100.00%.");
+        if (status == RecordStatus.INCOMPLETE && total.compareTo(HUNDRED) >= 0)
+            invalid("Incomplete material percentages must total less than 100.00%.");
         var net = gross.subtract(tare);
         if (net.signum() <= 0) invalid("Gross weight must be strictly greater than tare; net material weight must be greater than 0 kg.");
         return net.setScale(2, RoundingMode.UNNECESSARY);

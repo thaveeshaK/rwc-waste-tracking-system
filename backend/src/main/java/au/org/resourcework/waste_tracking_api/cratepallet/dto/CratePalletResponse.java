@@ -1,5 +1,6 @@
 package au.org.resourcework.waste_tracking_api.cratepallet.dto;
 
+import au.org.resourcework.waste_tracking_api.records.RecordStatus;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -11,6 +12,6 @@ public record CratePalletResponse(
         Long containerTypeId, String containerTypeName,
         String grossWeight, String tareWeight, String netWeight,
         List<MaterialResponse> materials,
-        String createdBy, Instant createdAt, String updatedBy, Instant updatedAt) {
+        String createdBy, Instant createdAt, String updatedBy, Instant updatedAt, RecordStatus status) {
     public record MaterialResponse(Long materialCategoryId, String name, String percentage, String materialWeight) {}
 }

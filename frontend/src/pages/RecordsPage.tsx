@@ -1,3 +1,5 @@
+import { RecordStatusBadge } from '../components/RecordStatusBadge'
+import { recordStatus, isIncompleteRecord } from '../features/records/status'
 import {Pagination} from '../components/Pagination'
 import {Dialog} from '../components/Dialog'
 import {getPage,getOperationalRecord} from '../features/records/api'
@@ -66,6 +68,7 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, post
     ? `Record #${saved.record.id} saved successfully.${saved.workflow === 'COLLECTABLES' ? ' Mark the physical tub label as recorded.' : ''}` : ''
   const anotherWorkflow=postSaveOrigin==='new' && saved && saved.workflow!=='ELECTRICAL_TESTING' && !openedFromRecords && selected?.workflow===saved.workflow && selected.record.id===saved.record.id ? saved.workflow : undefined
   const anotherLabel=anotherWorkflow?newEntryLabels[anotherWorkflow]:undefined
+  const incomplete=!!selected && isIncompleteRecord(selected)
 
   useEffect(() => {
     let cancelled = false
@@ -133,7 +136,7 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, post
 
   return <section aria-labelledby="records-heading">
     <div className="page-heading"><div><p className="eyebrow">{workflow === '' ? 'ALL WORKFLOWS' : workflow === 'SCRAP' ? 'SCRAP' : workflow === 'EWASTE_PICKUP' ? 'E-WASTE PICKUP' : workflow === 'CRATE_PALLET' ? 'CRATE / PALLET' : workflow === 'SALVAGE' ? 'SALVAGE TRIPS' : workflow === 'PICKUP' ? 'PICKUPS' : workflow === 'ELECTRICAL_CRATE_PALLET' ? 'ELECTRICAL CRATE / PALLET' : workflow === 'COLLECTABLES' ? 'COLLECTABLES' : workflow === 'WHITEGOODS' ? 'WHITEGOODS' : 'ELECTRICAL TESTING'}</p><h1 id="records-heading" ref={heading} tabIndex={-1}>Records</h1>
-      <p>View submitted loads{isAdmin ? ', correct entries, or delete an incorrect record.' : '. Submitted records are read-only for Staff.'}</p></div></div>
+      <p>View submitted loads{isAdmin ? ', correct entries, or delete an incorrect record.' : '. Completed records are read-only for Staff.'}</p></div></div>
     {workflow === 'SCRAP' && <p className="hint">Scrap uses reporting months. Date filters include each month touched by the selected range.</p>}
     {message && <p className="notice success" role="status">{message}</p>}
     {error && !selected && <p className="notice error" role="alert">{error}</p>}
@@ -148,7 +151,7 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, post
       {loading ? <p role="status">Loading records...</p> : records.length === 0 ? <p>No records found.</p>
         : <div className="table-scroll"><table><caption className="sr-only">Submitted {workflow === '' ? 'operational' : workflow === 'SCRAP' ? 'Scrap' : workflow === 'EWASTE_PICKUP' ? 'E-waste Pickup' : workflow === 'SALVAGE' ? 'Salvage' : workflow === 'PICKUP' ? 'Pickup' : workflow === 'ELECTRICAL_CRATE_PALLET' ? 'Electrical Crate/Pallet' : workflow === 'COLLECTABLES' ? 'Collectables' : workflow === 'WHITEGOODS' ? 'Whitegoods' : workflow === 'ELECTRICAL_TESTING' ? 'Electrical Testing' : 'Crate/Pallet'} records</caption>
           <thead><tr><th>Record</th><th>Date / reporting month</th>{workflow === '' ? <><th>Workflow</th><th>Details</th><th>Weight / count</th></> : workflow === 'SCRAP' ? <th>Total Scrap weight</th> : workflow === 'EWASTE_PICKUP' ? <><th>Organisation</th><th className="numeric">Net E-waste weight</th></> : workflow === 'CRATE_PALLET' || workflow === 'ELECTRICAL_CRATE_PALLET' ? <><th>Container</th><th className="numeric">Net weight</th></>
-            : workflow === 'PICKUP' ? <><th>Pickup location</th><th className="numeric">Net weight</th></> : workflow === 'COLLECTABLES' ? <th className="numeric">Net weight</th> : workflow === 'WHITEGOODS' ? <><th className="numeric">Count</th><th className="numeric">Estimated weight</th></> : workflow === 'ELECTRICAL_TESTING' ? <><th>Category / destination</th><th>Tally type</th><th className="numeric">Quantity</th></> : <><th>Crew</th><th>Time Up / Down</th><th className="numeric">Kg Up</th><th className="numeric">Kg Down</th></>}<th>Submitted by</th></tr></thead>
+            : workflow === 'PICKUP' ? <><th>Pickup location</th><th className="numeric">Net weight</th></> : workflow === 'COLLECTABLES' ? <th className="numeric">Net weight</th> : workflow === 'WHITEGOODS' ? <><th className="numeric">Count</th><th className="numeric">Estimated weight</th></> : workflow === 'ELECTRICAL_TESTING' ? <><th>Category / destination</th><th>Tally type</th><th className="numeric">Quantity</th></> : <><th>Crew</th><th>Time Up / Down</th><th className="numeric">Kg Up</th><th className="numeric">Kg Down</th></>}<th>Status</th><th>Submitted by</th></tr></thead>
           <tbody>{records.map(row => <tr key={`${row.workflow}:${row.record.id}`} className={`selectable-record ${selected?.workflow === row.workflow && selected.record.id === row.record.id ? 'selected-row' : ''}`}
             tabIndex={busy ? -1 : 0} aria-selected={selected?.workflow === row.workflow && selected.record.id === row.record.id}
             onClick={event => { if (!busy && !(event.target as HTMLElement).closest('button')) void open(row,event.currentTarget) }}
@@ -157,17 +160,18 @@ export function RecordsPage({ isAdmin, workflow, view, onViewChange, saved, post
             <td>{row.workflow === 'SCRAP' ? row.record.reportingMonth : row.record.recordDate}</td>{workflow === '' ? <><td>{workflowEntries.find(w=>w.id===row.workflow)?.name}</td><UnifiedCells row={row}/></> : row.workflow === 'SCRAP' ? <td>{row.record.totalWeight} kg</td> : row.workflow === 'EWASTE_PICKUP' ? <><td>{row.record.organisation}</td><td className="numeric">{row.record.netWeight} kg</td></> : row.workflow === 'CRATE_PALLET' || row.workflow === 'ELECTRICAL_CRATE_PALLET' ? <><td>{row.record.containerTypeName}</td><td className="numeric">{row.record.netWeight} kg</td></>
               : row.workflow === 'PICKUP' ? <><td>{row.record.pickupLocation}</td><td className="numeric">{row.record.netWeight} kg</td></> : row.workflow === 'COLLECTABLES' ? <td className="numeric">{row.record.netWeight} kg</td> : row.workflow === 'WHITEGOODS' ? <><td className="numeric">{row.record.count}</td><td className="numeric">{row.record.estimatedWeight} kg</td></> : row.workflow === 'ELECTRICAL_TESTING' ? <><td>{row.record.categoryName??'Overall diversion'}</td><td>{typeLabels[row.record.tallyType]}</td><td className="numeric">{row.record.count}</td></> : <><td>{row.record.crew}</td><td>{row.record.up.time.slice(0, 5)} / {row.record.down.time.slice(0, 5)}</td>
                 <td className="numeric">{row.record.up.kg} kg</td><td className="numeric">{row.record.down.kg} kg</td></>}
-            <td>{row.record.createdBy}</td></tr>)}</tbody></table></div>}
+            <td><RecordStatusBadge status={recordStatus(row)}/></td><td>{row.record.createdBy}</td></tr>)}</tbody></table></div>}
       <Pagination page={view.page} size={view.size} totalItems={totalItems} busy={busy||loading} onPage={page=>{setLoading(true);onViewChange({...view,page})}} onSize={size=>{setLoading(true);onViewChange({...view,size,page:0})}}/>
     </div>
     {selected && <Dialog className="record-details-dialog" labelledBy="record-details-heading" busy={busy} onClose={closeDetails} restoreFocus={restoreFocus}><div className="detail-heading"><h2 id="record-details-heading">Record #{selected.record.id}</h2>
       <button className="text-button" autoFocus disabled={busy} onClick={closeDetails}>Close details</button></div>
+      <p><RecordStatusBadge status={recordStatus(selected)}/></p>
       {saveMessage && <p className="notice success" role="status">{saveMessage}</p>}
       {anotherWorkflow && anotherLabel && <div className="actions"><button disabled={busy} onClick={()=>onNew(anotherWorkflow)}>Enter another {anotherLabel}</button></div>}
       {error && <p className="notice error" role="alert">{error}</p>}
       {selected.workflow === 'SCRAP' ? <ScrapReview record={selected.record}/> : selected.workflow === 'EWASTE_PICKUP' ? <EwastePickupReview record={selected.record}/> : selected.workflow === 'CRATE_PALLET' ? <CratePalletReview record={selected.record} /> : selected.workflow === 'SALVAGE' ? <SalvageReview record={selected.record} /> : selected.workflow === 'PICKUP' ? <PickupReview record={selected.record} /> : selected.workflow === 'ELECTRICAL_CRATE_PALLET' ? <ElectricalCratePalletReview record={selected.record} /> : selected.workflow === 'COLLECTABLES' ? <CollectableReview record={selected.record} /> : selected.workflow === 'WHITEGOODS' ? <WhitegoodsReview record={selected.record} /> : <TallyReview record={selected.record} />}
-      {isAdmin && (!saved || openedFromRecords) && <div className="actions"><button className="secondary" disabled={busy} onClick={() => {closeDetails();onEdit(selected)}}>Correct record</button>
-        <button className="danger secondary" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete record</button></div>}
+      {(incomplete || (isAdmin && (!saved || openedFromRecords))) && <div className="actions"><button className="secondary" disabled={busy} onClick={() => {closeDetails();onEdit(selected)}}>{incomplete ? 'Complete record' : 'Correct record'}</button>
+        {isAdmin && (!saved || openedFromRecords || incomplete) && <button className="danger secondary" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete record</button>}</div>}
       {confirmDelete && <div className="notice" role="alert"><p>Delete {selected.workflow === 'SALVAGE' ? 'the whole Salvage trip' : 'record'} #{selected.record.id}? It will be removed from Records and retained for traceability.</p>
         <div className="actions"><button className="danger" disabled={busy} onClick={remove}>{busy ? 'Deleting...' : 'Confirm deletion'}</button>
           <button className="secondary" disabled={busy} onClick={() => setConfirmDelete(false)}>Cancel</button></div></div>}

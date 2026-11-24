@@ -14,7 +14,7 @@ public class OperationsRepository {
         return jdbc.query("""
             select * from (
               select id,record_date,'CRATE_PALLET' workflow,container_name details,net_weight weight_kg,null::bigint count,created_at
-                from crate_pallet_record where deleted_at is null
+                from crate_pallet_record where deleted_at is null and status='COMPLETED'
               union all
               select id,record_date,'SALVAGE',crew || ' / Up ' || kg_up || ' kg / Down ' || kg_down || ' kg',null,null,created_at
                 from salvage_record where deleted_at is null
@@ -23,7 +23,7 @@ public class OperationsRepository {
                 from pickup_record where deleted_at is null
               union all
               select id,record_date,'ELECTRICAL_CRATE_PALLET',container_name,net_weight,null,created_at
-                from electrical_crate_pallet_record where deleted_at is null
+                from electrical_crate_pallet_record where deleted_at is null and status='COMPLETED'
               union all
               select id,record_date,'COLLECTABLES','Collectable Tub',net_weight,null,created_at
                 from collectable_record where deleted_at is null

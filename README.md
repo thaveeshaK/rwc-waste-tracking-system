@@ -64,6 +64,14 @@ If a delete response is lost, retry deletion or refresh Records. A not-found res
 
 If the system is unavailable, use the existing paper forms. An authorized Admin can enter them later using the original operational dates.
 
+## Container-load completion status (backend Phase 5A)
+
+Crate/Pallet and Electrical Crate/Pallet responses now include `status`: `INCOMPLETE` or `COMPLETED`. V22 backfills all historical rows as completed. Existing clients may omit status; requests then use `COMPLETED` and still require exactly 100% material percentages. An explicit incomplete request requires a total below 100%, with all existing date, container, gross/net weight, category and precision rules retained. Electrical requests still include both approved categories (zero values are valid).
+
+The existing create and preview endpoints accept the optional status. The existing `PUT /api/crate-pallet-records/{id}` and `PUT /api/electrical-crate-pallet-records/{id}` support version-checked completion, with the matching `POST .../preview?recordId={id}` for review. Staff may only transition an incomplete record to completed, changing its material breakdown while retaining record date, container and gross weight. Admins retain corrections and soft deletion. Completed records cannot be downgraded to incomplete. Completion preserves identity, creation metadata and same-container snapshots, and updates modification metadata/version normally.
+
+Incomplete records remain available through workflow and unified Records APIs, but are excluded from dashboard/Today activity, recent submissions, charts, Reports, Waste Levy Summary and CSV/XLSX exports. This phase adds no frontend incomplete-entry/completion controls, status columns, incomplete-count cards or export redesign.
+
 ## Salvage trips
 
 Choose **New Salvage**. Enter one operational record date and one mandatory crew for the complete trip. Always enter Time Up, Kg Up, Time Down, and Kg Down. These are local operational times; Down may be earlier than or equal to Up. The date must be past or current in Australia/Hobart.

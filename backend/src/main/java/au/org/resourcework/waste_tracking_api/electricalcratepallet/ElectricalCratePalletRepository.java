@@ -30,12 +30,12 @@ public interface ElectricalCratePalletRepository extends JpaRepository<Electrica
     @Query(value = """
         INSERT INTO electrical_crate_pallet_record
         (submission_id, record_date, container_type_id, gross_weight, tare_weight, net_weight,
-         created_by, created_at, updated_by, updated_at)
-        VALUES (:submissionId, :date, :containerId, :gross, :tare, :net, :actor, :now, :actor, :now)
+         created_by, created_at, updated_by, updated_at, status)
+        VALUES (:submissionId, :date, :containerId, :gross, :tare, :net, :actor, :now, :actor, :now, :status)
         ON CONFLICT (submission_id) DO NOTHING
         """, nativeQuery = true)
     int insertIfAbsent(@Param("submissionId") UUID submissionId, @Param("date") LocalDate date,
             @Param("containerId") Long containerId, @Param("gross") BigDecimal gross,
             @Param("tare") BigDecimal tare, @Param("net") BigDecimal net,
-            @Param("actor") Long actor, @Param("now") Instant now);
+            @Param("actor") Long actor, @Param("now") Instant now, @Param("status") String status);
 }

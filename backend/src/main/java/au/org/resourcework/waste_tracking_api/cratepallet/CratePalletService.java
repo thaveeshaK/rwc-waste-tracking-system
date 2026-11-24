@@ -1,6 +1,8 @@
 package au.org.resourcework.waste_tracking_api.cratepallet;
 
+import au.org.resourcework.waste_tracking_api.records.RecordStatus;
 import au.org.resourcework.waste_tracking_api.auth.*;
+import org.springframework.security.core.context.SecurityContextHolder;
 import au.org.resourcework.waste_tracking_api.cratepallet.dto.*;
 import au.org.resourcework.waste_tracking_api.reference.*;
 import java.math.BigDecimal;
@@ -38,9 +40,10 @@ public class CratePalletService {
         return response(calculate(input, null));
     }
 
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public CratePalletResponse previewEdit(Long id, CratePalletRequest input) {
         var saved = active(id);
+        checkUpdateAccess(saved, input);
         checkVersion(input, saved);
         var calculated = calculate(input, saved);
         calculated.setVersion(saved.getVersion());
@@ -57,7 +60,7 @@ public class CratePalletService {
         var calculated = calculate(input, null);
         int inserted = records.insertIfAbsent(input.submissionId(), input.recordDate(),
                 calculated.getContainerType().getId(), calculated.getGrossWeight(), calculated.getTareWeight(),
-                calculated.getNetWeight(), actor.getId(), clock.instant());
+                calculated.getNetWeight(), actor.getId(), clock.instant(), calculated.getStatus().name());
         var saved = records.findBySubmissionId(input.submissionId()).orElseThrow();
         if (inserted == 0) return retry(saved, input, actor);
         saved.getMaterials().addAll(calculated.getMaterials());
@@ -75,11 +78,13 @@ public class CratePalletService {
     public CratePalletResponse get(Long id) { return response(active(id)); }
 
     @Transactional
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public CratePalletResponse update(Long id, CratePalletRequest input, String username) {
         var saved = active(id);
+        checkUpdateAccess(saved, input);
         checkVersion(input, saved);
         var calculated = calculate(input, saved);
+        saved.setStatus(calculated.getStatus());
         saved.setRecordDate(calculated.getRecordDate());
         saved.setContainerType(calculated.getContainerType());
         saved.setContainerName(calculated.getContainerName());
@@ -115,9 +120,10 @@ public class CratePalletService {
         if (!containers.isAvailable(container.getId(), ContainerContext.CRATE_PALLET.name()) && !sameContainer) badRequest("The selected container type is inactive.");
         var tare = sameContainer ? previous.getTareWeight() : container.getTareWeight();
         var net = calculator.net(input.recordDate(), input.grossWeight(), tare,
-                input.materials().stream().map(CratePalletRequest.MaterialInput::percentage).toList());
+                input.materials().stream().map(CratePalletRequest.MaterialInput::percentage).toList(), input.status());
         var seen = new HashSet<Long>();
         var result = new CratePalletRecord();
+        result.setStatus(input.status());
         result.setRecordDate(input.recordDate());
         result.setContainerType(container);
         result.setContainerName(sameContainer ? previous.getContainerName() : container.getName());
@@ -155,7 +161,7 @@ public class CratePalletService {
         boolean sameMaterials = requested.size() == saved.getMaterials().size()
                 && saved.getMaterials().stream().allMatch(m -> requested.containsKey(m.getCategory().getId())
                 && requested.get(m.getCategory().getId()).compareTo(m.getPercentage()) == 0);
-        if (duplicates || saved.getDeletedAt() != null || !saved.getCreatedBy().getId().equals(actor.getId())
+        if (saved.getStatus() != input.status() || duplicates || saved.getDeletedAt() != null || !saved.getCreatedBy().getId().equals(actor.getId())
                 || !saved.getRecordDate().equals(input.recordDate())
                 || !saved.getContainerType().getId().equals(input.containerTypeId())
                 || saved.getGrossWeight().compareTo(input.grossWeight()) != 0 || !sameMaterials) {
@@ -183,11 +189,26 @@ public class CratePalletService {
                 record.getGrossWeight().toPlainString(), record.getTareWeight().toPlainString(),
                 record.getNetWeight().toPlainString(), materials,
                 record.getCreatedBy() == null ? null : record.getCreatedBy().getUsername(), record.getCreatedAt(),
-                record.getUpdatedBy() == null ? null : record.getUpdatedBy().getUsername(), record.getUpdatedAt());
+                record.getUpdatedBy() == null ? null : record.getUpdatedBy().getUsername(), record.getUpdatedAt(), record.getStatus());
     }
 
     private static void badRequest(String message) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    }
+
+    private static void checkUpdateAccess(CratePalletRecord saved, CratePalletRequest input) {
+        boolean admin = SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
+        if (!admin) {
+            if (saved.getStatus() != RecordStatus.INCOMPLETE || input.status() != RecordStatus.COMPLETED)
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Staff may only complete incomplete records.");
+            if (!saved.getRecordDate().equals(input.recordDate())
+                    || !saved.getContainerType().getId().equals(input.containerTypeId())
+                    || saved.getGrossWeight().compareTo(input.grossWeight()) != 0)
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Completion may only change the material breakdown.");
+        }
+        if (saved.getStatus() == RecordStatus.COMPLETED && input.status() == RecordStatus.INCOMPLETE)
+            badRequest("A completed record cannot be changed to incomplete.");
     }
 
     private static void checkVersion(CratePalletRequest input, CratePalletRecord saved) {

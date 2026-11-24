@@ -1,3 +1,5 @@
+import { getRecords as getCrates } from '../crate-pallet/api'
+import { getRecords as getElectrical } from '../electrical-crate-pallet/api'
 import { useEffect, useState } from 'react'
 import { errorMessage, request } from '../../api/client'
 import type { Workflow } from '../records/types'
@@ -16,6 +18,16 @@ const descriptions: Record<Workflow, string> = {
   ELECTRICAL_TESTING: 'Record testing tallies and diversions.',
 }
 export function StaffOperationsPage({onNew, onRecords, busy, unresolved, currentWorkflow}: Props) {
+  const [incompleteCount, setIncompleteCount] = useState<number | null>(null)
+  const [incompleteError, setIncompleteError] = useState('')
+  const [incompleteAttempt, setIncompleteAttempt] = useState(0)
+  useEffect(() => {
+    let cancelled=false
+    Promise.all([getCrates(),getElectrical()]).then(groups=>{
+      if(!cancelled)setIncompleteCount(groups.flat().filter(record=>record.status==='INCOMPLETE').length)
+    }).catch(e=>{if(!cancelled)setIncompleteError(errorMessage(e))})
+    return()=>{cancelled=true}
+  },[incompleteAttempt])
   const [recent, setRecent] = useState<RecentSubmission[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -47,6 +59,11 @@ export function StaffOperationsPage({onNew, onRecords, busy, unresolved, current
       </article>
     })}</div>
     {todayLoading?<p role="status">Loading today's activity...</p>:todayResult?.error?<div><p className="notice error" role="alert">Today's activity: {todayResult.error}</p><button className="secondary" disabled={busy} onClick={()=>setTodayAttempt(n=>n+1)}>Retry today's activity</button></div>:todayResult?.data&&<TodayActivity {...todayResult.data}/>}
+    <section className="panel report-section staff-incomplete" aria-label="Incomplete records">
+      <div className="detail-heading"><h2>{incompleteCount === null ? 'Incomplete records' : `Incomplete records: ${incompleteCount}`}</h2>
+        <button className="secondary" disabled={busy} onClick={()=>{setIncompleteError('');setIncompleteCount(null);setIncompleteAttempt(n=>n+1)}}>Refresh incomplete count</button></div>
+      {incompleteError ? <p className="notice error" role="alert">{incompleteError}</p> : incompleteCount === null && <p role="status">Loading incomplete count...</p>}
+    </section>
     <section className="panel report-section staff-recent" aria-label="Recent submissions"><div className="detail-heading"><h2>Recent submissions</h2><button className="secondary" disabled={busy} onClick={onRecords}>View Records</button></div>
       {loading ? <p role="status">Loading recent submissions...</p> : error ? <div><p className="notice error" role="alert">{error}</p><button className="secondary" disabled={busy} onClick={() => {setLoading(true); setError(''); setAttempt(n => n+1)}}>Retry recent submissions</button></div> : recent.length === 0 ? <p>No recent submissions.</p> : <div className="table-scroll"><table><caption className="sr-only">Latest five active operational submissions, across all dates.</caption><thead><tr><th>Date / reporting month</th><th>Workflow</th><th>Details</th><th>Weight / count</th></tr></thead><tbody>{recent.map(r => <tr key={r.workflow+r.id}><td>{r.workflow === 'SCRAP' ? r.recordDate.slice(0,7) : r.recordDate}</td><td>{workflowEntries.find(w => w.id === r.workflow)?.name}</td><td>{r.details}</td><td>{r.count !== null && <>{r.count} {r.workflow === 'WHITEGOODS' ? 'received' : 'tallied'}{r.weightKg !== null && <br/>}</>}{r.weightKg !== null && <>{r.weightKg} kg{r.workflow === 'WHITEGOODS' ? ' estimated' : ''}</>}{r.count === null && r.weightKg === null && '-'}</td></tr>)}</tbody></table></div>}
     </section>

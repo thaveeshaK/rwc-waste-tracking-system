@@ -2,6 +2,7 @@ package au.org.resourcework.waste_tracking_api.cratepallet;
 
 import au.org.resourcework.waste_tracking_api.auth.AppUser;
 import au.org.resourcework.waste_tracking_api.reference.ContainerType;
+import au.org.resourcework.waste_tracking_api.records.RecordStatus;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -25,6 +26,9 @@ public class CratePalletRecord {
     private UUID submissionId;
     @Column(nullable = false)
     private LocalDate recordDate;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private RecordStatus status = RecordStatus.COMPLETED;
     @ManyToOne(optional = false) @JoinColumn(name = "container_type_id")
     private ContainerType containerType;
     @Column(nullable = false, length = 100)

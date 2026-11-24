@@ -53,6 +53,8 @@ public class SecurityConfig {
                         "/admin/settings/organisation", "/admin/settings/reporting", "/admin/settings/whitegoods").permitAll()
                 .requestMatchers("/api/auth/csrf", "/api/auth/login").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                // Record-level service checks limit Staff PUTs to incomplete -> completed breakdowns.
+                .requestMatchers(HttpMethod.PUT, "/api/crate-pallet-records/*", "/api/electrical-crate-pallet-records/*").hasAnyRole("STAFF", "ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/crate-pallet-records/**", "/api/salvage-records/**", "/api/pickup-records/**", "/api/electrical-crate-pallet-records/**", "/api/collectable-records/**", "/api/whitegoods-records/**", "/api/electrical-testing/**", "/api/ewaste-pickups/**", "/api/scrap-records/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/crate-pallet-records/**", "/api/salvage-records/**", "/api/pickup-records/**", "/api/electrical-crate-pallet-records/**", "/api/collectable-records/**", "/api/whitegoods-records/**", "/api/electrical-testing/**", "/api/ewaste-pickups/**", "/api/scrap-records/**").hasRole("ADMIN")
                 .anyRequest().authenticated())

@@ -1,3 +1,4 @@
+import { isIncompleteRecord } from './features/records/status'
 import {initialReportView} from './features/reporting/types'
 import {initialRecordsView} from './features/records/api'
 import type {RecordsView} from './features/records/api'
@@ -201,7 +202,7 @@ function App() {
       {user.role === 'ADMIN' && page === 'reports' && <ReportsPage view={reportView} onViewChange={setReportView} onOpen={openReportedRecord}/>}
       {user.role === 'ADMIN' && page === 'waste-levy' && <WasteLevySummaryPage/>}
       {hasEntry && <div hidden={page !== 'entry'}>
-        {entryWorkflow === 'SCRAP' ? <ScrapPage key={entryKey} editing={editing?.workflow === 'SCRAP' ? editing.record : undefined} onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged} onSaved={record => recordSaved({workflow: 'SCRAP', record})} onCancel={showRecords}/> : entryWorkflow === 'EWASTE_PICKUP' ? <EwastePickupPage key={entryKey} editing={editing?.workflow === 'EWASTE_PICKUP' ? editing.record : undefined} onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged} onSaved={record => recordSaved({workflow: 'EWASTE_PICKUP', record})} onCancel={showRecords}/> : entryWorkflow === 'CRATE_PALLET' ? <CratePalletPage key={entryKey}
+        {entryWorkflow === 'SCRAP' ? <ScrapPage key={entryKey} editing={editing?.workflow === 'SCRAP' ? editing.record : undefined} onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged} onSaved={record => recordSaved({workflow: 'SCRAP', record})} onCancel={showRecords}/> : entryWorkflow === 'EWASTE_PICKUP' ? <EwastePickupPage key={entryKey} editing={editing?.workflow === 'EWASTE_PICKUP' ? editing.record : undefined} onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged} onSaved={record => recordSaved({workflow: 'EWASTE_PICKUP', record})} onCancel={showRecords}/> : entryWorkflow === 'CRATE_PALLET' ? <CratePalletPage isAdmin={user.role === 'ADMIN'} key={entryKey}
           editing={editing?.workflow === 'CRATE_PALLET' ? editing.record : undefined}
           onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
           onSaved={record => recordSaved({ workflow: 'CRATE_PALLET', record })} onCancel={showRecords} />
@@ -211,7 +212,7 @@ function App() {
           : entryWorkflow === 'PICKUP' ? <PickupPage key={entryKey} editing={editing?.workflow === 'PICKUP' ? editing.record : undefined}
             onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
             onSaved={record => recordSaved({ workflow: 'PICKUP', record })} onCancel={showRecords} />
-          : entryWorkflow === 'ELECTRICAL_CRATE_PALLET' ? <ElectricalCratePalletPage key={entryKey} editing={editing?.workflow === 'ELECTRICAL_CRATE_PALLET' ? editing.record : undefined}
+          : entryWorkflow === 'ELECTRICAL_CRATE_PALLET' ? <ElectricalCratePalletPage isAdmin={user.role === 'ADMIN'} key={entryKey} editing={editing?.workflow === 'ELECTRICAL_CRATE_PALLET' ? editing.record : undefined}
             onBusyChange={activityChanged} onUnresolvedChange={unresolvedChanged}
             onSaved={record => recordSaved({ workflow: 'ELECTRICAL_CRATE_PALLET', record })} onCancel={showRecords} />
           : entryWorkflow === 'COLLECTABLES' ? <CollectablePage key={entryKey} editing={editing?.workflow === 'COLLECTABLES' ? editing.record : undefined}
@@ -227,7 +228,7 @@ function App() {
       {page === 'records' && <RecordsPage isAdmin={user.role === 'ADMIN'} saved={saved} postSaveOrigin={postSaveOrigin} onNew={newRecord} selectedRecord={reported}
         view={recordsView} onViewChange={setRecordsView} workflow={recordWorkflow} onWorkflowChange={workflow => { setSaved(undefined); setRecordWorkflow(workflow) }}
         onBusyChange={activityChanged} onEdit={record => {
-          if (busyRef.current) return
+          if (busyRef.current || (user.role !== 'ADMIN' && !isIncompleteRecord(record))) return
           if (unresolvedRef.current || pendingTalliesRef.current) {
             setError('Resolve the current submission before correcting another record.')
             return

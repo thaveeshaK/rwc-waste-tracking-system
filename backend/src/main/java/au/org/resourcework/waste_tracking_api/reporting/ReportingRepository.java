@@ -27,7 +27,8 @@ public class ReportingRepository {
                 + factor + "::numeric factor, " + (table.equals("salvage_record")?"r.time_up::text":"null::text") + " time_up, "
                 + (table.equals("salvage_record")?"r.time_down::text":"null::text") + " time_down, null::text container_lines, r.submission_id::text submission_id, r.version, u.username created_by, r.created_at, v.username updated_by, r.updated_at from "
                 + table + " r join app_user u on u.id=r.created_by join app_user v on v.id=r.updated_by "
-                + joins + " where r.deleted_at is null";
+                + joins + " where r.deleted_at is null"
+                + (Set.of("crate_pallet_record", "electrical_crate_pallet_record").contains(table) ? " and r.status='COMPLETED'" : "");
     }
 
     private static final String DATA = buildData();
@@ -108,7 +109,7 @@ public class ReportingRepository {
             select r.summary_group_snapshot,c.id,c.name,sum(m.material_weight) weight
             from crate_pallet_record r join crate_pallet_material m on m.crate_pallet_record_id=r.id
             join material_category c on c.id=m.material_category_id
-            where r.deleted_at is null and r.record_date between :from and :to
+            where r.deleted_at is null and r.status='COMPLETED' and r.record_date between :from and :to
             group by r.summary_group_snapshot,c.id,c.name order by r.summary_group_snapshot,c.id
             """,Map.of("from",f.from(),"to",f.to()),(r,n)->new ContainerMaterial(
                 r.getString(1),r.getLong(2),r.getString(3),r.getBigDecimal(4).toPlainString()));
@@ -145,7 +146,7 @@ public class ReportingRepository {
         var result=new ArrayList<DailyActivity>();
         for(String workflow:List.of("CRATE_PALLET","ELECTRICAL_CRATE_PALLET")) {
             String table=workflow.equals("CRATE_PALLET")?"crate_pallet_record":"electrical_crate_pallet_record";
-            result.add(daily(workflow,"select count(*) filter(where summary_group_snapshot='CRATE'), count(*) filter(where summary_group_snapshot='PALLET'),coalesce(sum(net_weight),0) from "+table+" where deleted_at is null and record_date=:today",p,
+            result.add(daily(workflow,"select count(*) filter(where summary_group_snapshot='CRATE'), count(*) filter(where summary_group_snapshot='PALLET'),coalesce(sum(net_weight),0) from "+table+" where deleted_at is null and status='COMPLETED' and record_date=:today",p,
                     List.of("Crates","Pallets","Combined weight"),List.of("","","kg")));
         }
         result.add(daily("SALVAGE","select count(*),coalesce(sum(kg_up),0),coalesce(sum(kg_down),0) from salvage_record where deleted_at is null and record_date=:today",p,

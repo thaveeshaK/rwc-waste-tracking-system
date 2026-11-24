@@ -45,6 +45,18 @@ button.nav-item.active { color: #245c43; border-bottom-color: #245c43; }
 .percentage-button-group { display: flex; gap: .35rem; }
 .percentage-control button { min-width: 44px; padding: .55rem .65rem; }
 .percentage-control output { min-width: 5.5rem; text-align: center; font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.record-entry-steps { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; margin: 0 0 1.2rem; list-style: none; }
+.record-entry-steps .current { background: #245c43; color: white; }
+.container-selection { margin-top: 1rem; }
+.container-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: .75rem; }
+.container-option { display: flex; align-items: center; gap: .75rem; padding: .85rem; border: 1px solid #bac9ba; border-radius: 6px; cursor: pointer; }
+.container-option.selected { border-color: #245c43; background: #eaf3e8; box-shadow: inset 0 0 0 1px #245c43; }
+.container-option:focus-within { outline: 3px solid #b98420; outline-offset: 3px; }
+.container-option input { width: 20px; height: 20px; min-height: 20px; padding: 0; margin: 0; flex-shrink: 0; accent-color: #245c43; }
+.container-option strong, .container-option .hint { display: block; }
+.record-status { display: inline-block; border: 1px solid; border-radius: 5px; padding: .2rem .5rem; font-size: .85rem; font-weight: 650; white-space: nowrap; }
+.record-status.incomplete { color: #72521b; background: #faf2e3; border-color: #c5a363; }
+.record-status.completed { color: #245c43; background: #eaf3e8; border-color: #aac3ac; }
 .percentage-total { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem; padding: .85rem 1rem; margin: 1.3rem 0 0; background: #faf2e3; color: #72521b; border-radius: 5px; font-weight: 650; }
 .percentage-total span { font-weight: 400; font-size: .9rem; }
 .percentage-total.valid { background: #eaf3e8; color: #245c43; }

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import type { RecordStatus } from '../records/status'
+import { RecordEntrySteps } from '../../components/RecordEntrySteps'
 import { ApiError, errorMessage } from '../../api/client'
 import { getContainers, getMaterials, previewRecord, submitRecord, updateRecord } from './api'
 import { operationalDate } from '../../utils/decimal'
@@ -7,6 +9,7 @@ import { CratePalletReview } from './CratePalletReview'
 import type { ContainerType, CratePalletInput, CratePalletRecord, MaterialCategory } from './types'
 
 interface Props {
+  isAdmin: boolean
   editing?: CratePalletRecord
   onSaved: (record: CratePalletRecord) => void
   onCancel: () => void
@@ -14,7 +17,7 @@ interface Props {
   onUnresolvedChange: (unresolved: boolean) => void
 }
 
-export function CratePalletPage({ editing, onSaved, onCancel, onBusyChange, onUnresolvedChange }: Props) {
+export function CratePalletPage({ isAdmin, editing, onSaved, onCancel, onBusyChange, onUnresolvedChange }: Props) {
   const [containers, setContainers] = useState<ContainerType[]>([])
   const [materials, setMaterials] = useState<MaterialCategory[]>([])
   const [input, setInput] = useState<CratePalletInput>(() => ({
@@ -23,6 +26,7 @@ export function CratePalletPage({ editing, onSaved, onCancel, onBusyChange, onUn
     recordDate: editing?.recordDate ?? operationalDate(), containerTypeId: editing?.containerTypeId ?? 0,
     grossWeight: editing?.grossWeight ?? '', materials: [],
   }))
+  const [step, setStep] = useState<1 | 2>(editing?.status === 'INCOMPLETE' ? 2 : 1)
   const [review, setReview] = useState<CratePalletRecord | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -60,7 +64,7 @@ export function CratePalletPage({ editing, onSaved, onCancel, onBusyChange, onUn
   async function calculate() {
     setBusy(true); setError('')
     onBusyChange(true)
-    try { setReview(await previewRecord(input, editing?.id ?? undefined)) }
+    try { setReview(await previewRecord({...input, status: 'COMPLETED'}, editing?.id ?? undefined)) }
     catch (error) {
       setError(errorMessage(error))
       if (error instanceof ApiError && error.status === 409) setConflict(true)
@@ -68,12 +72,12 @@ export function CratePalletPage({ editing, onSaved, onCancel, onBusyChange, onUn
     finally { setBusy(false); onBusyChange(false) }
   }
 
-  async function save() {
+  async function save(status: RecordStatus = 'COMPLETED') {
     if (submitting.current) return
     submitting.current = true
     setBusy(true); setError('')
     onBusyChange(true)
-    pendingInput.current ??= input
+    pendingInput.current ??= {...input, status}
     try {
       const payload = pendingInput.current
       const saved = editing?.id ? await updateRecord(editing.id, payload) : await submitRecord(payload)
@@ -99,19 +103,24 @@ export function CratePalletPage({ editing, onSaved, onCancel, onBusyChange, onUn
 
   return <section aria-labelledby="entry-heading">
     <div className="page-heading"><div><p className="eyebrow">INCOMING MATERIALS</p>
-      <h1 id="entry-heading">{editing ? `Correct record #${editing.id}` : 'Crate / Pallet'}</h1>
+      <h1 id="entry-heading">{editing ? `${editing.status === 'INCOMPLETE' ? 'Complete' : 'Correct'} record #${editing.id}` : 'Crate / Pallet'}</h1>
       <p>{review ? 'Review the calculated weights before confirming.' : 'Record one weighed container and its material breakdown.'}</p></div>
-      <span className="step-label">{review ? '2 · Review' : '1 · Enter details'}</span></div>
+      </div>
+    <RecordEntrySteps step={review ? 3 : step} />
     <div className="panel">
       {error && <p className="notice error" role="alert">{error}</p>}
       {loading ? <p role="status">Loading container types and materials…</p> : materials.length === 0 || containers.length === 0
         ? <div><p>Reference data could not be loaded.</p><button onClick={() => { setLoading(true); setError(''); setLoadAttempt(loadAttempt + 1) }}>Retry</button></div>
         : conflict ? <p>Open Records and reload the record. This request will not be retried automatically.</p>
         : review ? <><CratePalletReview record={review} />
-          <div className="actions"><button disabled={busy} onClick={save}>{busy ? 'Saving…' : uncertain ? 'Retry submission' : editing ? 'Confirm correction' : 'Confirm and submit'}</button>
-            <button className="secondary" disabled={busy || uncertain} onClick={() => { setReview(null); setError('') }}>Back to edit</button>
+          <div className="actions"><button disabled={busy} onClick={() => save('COMPLETED')}>{busy ? 'Saving…' : uncertain ? 'Retry submission' : editing ? editing.status === 'INCOMPLETE' ? 'Confirm completion' : 'Confirm correction' : 'Confirm and submit'}</button>
+            <button className="secondary" disabled={busy || uncertain} onClick={() => { setReview(null); setStep(2); setError('') }}>Back to edit</button>
           </div></>
         : <CratePalletForm value={input} containers={containers} materials={materials} today={operationalDate()}
+          detailsReadOnly={!!editing && editing.status === 'INCOMPLETE' && !isAdmin}
+          canSaveIncomplete={!editing || (isAdmin && editing.status === 'INCOMPLETE')}
+          uncertain={uncertain} onSaveIncomplete={() => save('INCOMPLETE')}
+          step={step} onContinue={() => setStep(2)} onBack={() => setStep(1)}
           busy={busy} onChange={setInput} onReview={calculate} />}
       <button className="text-button" disabled={busy} onClick={onCancel}>{uncertain ? 'Check Records' : 'Back to Records'}</button>
     </div>
