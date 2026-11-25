@@ -306,6 +306,16 @@ CSV uses UTF-8 with a BOM, quoted columns and CRLF records; metadata/filter colu
 Reporting tests cover Admin boundaries, category/direction/count separation, filtered totals/details, zero references, soft deletion/date corrections, stored rounding, financial-year/leap-day ranges, pagination validation, CSV escaping and formula protection, XLSX literal/typed cells and sheet separation, stable monthly filenames/exclusions, and Hobart DST day boundaries. Browser checks cover role navigation, periods/applied filters, CSV/XLSX buttons, detail links, monthly kg/tonnes, deletion refresh and tablet layout, alongside all existing workflow smoke tests.
 
 
+## Consolidated monthly RWC workbook
+
+Admin > Monthly Waste Levy Summary > **Download Operational Workbook** exports the selected calendar month as `RWC-Waste-Tracking-YYYY-MM.xlsx`. Filtered/ad-hoc **Export CSV** and **Export Excel** remain available in Records > Summary & exports. The monthly page exposes only the operational workbook download.
+
+The data-only sheets follow the current `docs/2026-27 WasteLevyStats (2).xlsx` list structure with the approved headers: SalvageUpList, SalvageDownList, CrateList, MiscList, PalletList, CollTubList, PickupList, ElecCrateList, ElecPalletList, Whitegoods, Scrap and Ewaste Pickups. An ElecMiscList is inserted after ElecPalletList only when completed Electrical OTHER records exist. No legacy calculation/input sheets or formulas are copied.
+
+Container routing uses saved CRATE/PALLET/OTHER snapshots, and Other lists include saved container names. Only active records are included; incomplete container loads are excluded. Weights use stored material/net values, Collectables applied tare and Whitegoods estimates, without recalculation or rounding redistribution. Scrap sums active records by reporting month; it has one aggregate row when data exists, otherwise headers only. E-waste Pickup remains a separate row-based intake sheet.
+
+`GET /api/admin/waste-levy-summary/workbook?month=YYYY-MM` is Admin-only. The export keeps the existing 100,000 reporting-row safety bound, uses numeric kg/date cells, and treats user text literally. A non-zero custom material without an approved workbook column produces a clear error rather than silently losing weight. Excel date exports require 1900–9998; application date rules are unchanged.
+
 ## Admin Settings
 
 Admin navigation has a top-right **Settings** dropdown, separate from the primary Overview/Workflows/Records/Waste Levy Summary links. Staff have neither the dropdown nor access to Settings pages. `/api/admin/**` authorization and controller/service role checks protect every Settings endpoint; CSRF is required for writes. Existing Staff operational summaries remain available. User Management is Admin-only and supports creation, role changes, activation/deactivation and password resets. Electrical Testing category configuration is not included.

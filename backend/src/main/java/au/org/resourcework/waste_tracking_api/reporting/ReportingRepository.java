@@ -136,6 +136,23 @@ public class ReportingRepository {
         var p=new MapSqlParameterSource();
         return jdbc.queryForObject(filtered(f,p)+"select count(*) from filtered",p,Long.class);
     }
+    /** Reuses reporting sources, stored weights and deletion/completion predicates; bounded before hydration. */
+    public List<Row> monthlyWorkbookRows(ReportFilter filter) {
+        var p=new MapSqlParameterSource();
+        return jdbc.query(filtered(filter,p)+"select * from filtered where workflow <> 'ELECTRICAL_TESTING' order by record_date,workflow,id,row_type,direction,category_id limit 100001",p,(r,n)->row(r));
+    }
+    public Map<String,String> monthlyWorkbookGroups(ReportFilter filter) {
+        var groups=new HashMap<String,String>();
+        jdbc.query("""
+            select 'CRATE_PALLET' workflow,id,summary_group_snapshot from crate_pallet_record
+            where deleted_at is null and status='COMPLETED' and record_date between :from and :to
+            union all
+            select 'ELECTRICAL_CRATE_PALLET',id,summary_group_snapshot from electrical_crate_pallet_record
+            where deleted_at is null and status='COMPLETED' and record_date between :from and :to
+            """,Map.of("from",filter.from(),"to",filter.to()),r->{groups.put(r.getString("workflow")+":"+r.getLong("id"),r.getString("summary_group_snapshot"));});
+        return groups;
+    }
+
     public List<Row> recent(int limit) {
         return jdbc.query("with data as ("+DATA+") select * from data where row_type='RECORD' order by created_at desc,workflow,id desc limit :limit",
                 Map.of("limit",limit),(rs,n)->row(rs));

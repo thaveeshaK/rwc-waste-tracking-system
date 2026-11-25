@@ -2089,7 +2089,7 @@ try {
     const original=window.fetch;
     window.fetch=async (...args)=>{
       const response=await original(...args);
-      if(String(args[0]).includes('/export?')) {
+      if(String(args[0]).includes('/export?')||String(args[0]).includes('/waste-levy-summary/workbook?')) {
         const clone=response.clone();
         window.reportDownloads.push({url:String(args[0]),status:response.status,filename:response.headers.get('Content-Disposition'),size:(await clone.arrayBuffer()).byteLength,text:response.headers.get('Content-Type')?.includes('csv')?await response.clone().text():null});
       }
@@ -2141,16 +2141,24 @@ try {
   await fill('Summary units','t')
   await hasText('0.02000')
   await screenshot('tablet-monthly-waste-levy')
-  await enabled('Export CSV')
-  await click('Export CSV')
-  await until(()=>evaluate('window.reportDownloads.length===3'),'monthly CSV downloaded')
-  downloadResult=await evaluate('window.reportDownloads[2]')
-  assert.match(downloadResult.filename,/waste-levy-summary-2004-02.csv/)
-  assert.match(downloadResult.text,/GENERAL_INTAKE/)
-  await enabled('Export Excel')
-  await click('Export Excel')
-  await until(()=>evaluate('window.reportDownloads.length===4'),'monthly XLSX downloaded')
-  assert.match((await evaluate('window.reportDownloads[3]')).filename,/waste-levy-summary-2004-02.xlsx/)
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>['Export CSV','Export Excel'].includes(b.textContent.trim()))"),false)
+  await enabled('Download Operational Workbook');await click('Download Operational Workbook')
+  await until(()=>evaluate('window.reportDownloads.length===3'),'consolidated workbook downloaded')
+  const monthlyWorkbook=await evaluate('window.reportDownloads[2]')
+  assert.equal(monthlyWorkbook.status,200);assert.ok(monthlyWorkbook.size>1000)
+  assert.match(monthlyWorkbook.url,/workbook\?month=2004-02$/)
+  assert.match(monthlyWorkbook.filename,/RWC-Waste-Tracking-2004-02.xlsx/)
+  await enabled('Download Operational Workbook')
+  await evaluate(`window.__workbookFetch=window.fetch;window.__workbookCalls=0;window.fetch=(...args)=>{
+    if(String(args[0]).includes('/waste-levy-summary/workbook?')){window.__workbookCalls++;return new Promise(resolve=>{window.__releaseWorkbook=()=>resolve(new Response(JSON.stringify({detail:'Simulated workbook failure'}),{status:503,headers:{'Content-Type':'application/problem+json'}}))})}
+    return window.__workbookFetch(...args);
+  }`)
+  await click('Download Operational Workbook');await until(()=>evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Downloading...'&&b.disabled)"),'workbook loading state')
+  await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Downloading...').click()")
+  assert.equal(await evaluate('window.__workbookCalls'),1)
+  await evaluate('window.__releaseWorkbook()');await hasText('Simulated workbook failure');await enabled('Download Operational Workbook')
+  await evaluate('window.fetch=window.__workbookFetch;delete window.__workbookFetch;delete window.__releaseWorkbook;delete window.__workbookCalls')
+
   await openAnalysis();await hasText('Applied period:')
   await until(()=>evaluate(`[...document.querySelectorAll('[data-records-view=analysis] table button')].some(b=>b.textContent==='#'+${reportCreated.body.id}&&b.checkVisibility()&&!b.disabled)`),'analysis deletion record loaded')
   await click('#'+reportCreated.body.id,'[data-records-view=analysis]');await enabled('Delete record');await click('Delete record');await click('Confirm deletion');await hasText('deleted.')
@@ -2497,7 +2505,7 @@ try {
   }
   const worksheetBefore=(await browserApi('/api/admin/waste-levy-summary?month=2013-03')).body
   assert.equal(worksheetBefore.totals.some(row=>row.workflow==='EWASTE_PICKUP'),false)
-  await click('Waste Levy Summary');await fill('Reporting month','2013-03');await enabled('Export CSV');await fill('Summary units','kg')
+  await click('Waste Levy Summary');await fill('Reporting month','2013-03');await enabled('Download Operational Workbook');await fill('Summary units','kg')
   const levySection=id=>'[data-levy-section="'+id+'"]'
   const levyRows=id=>evaluate(`[...document.querySelectorAll('${levySection(id)} tbody tr')].map(row=>[...row.cells].map(cell=>cell.textContent.trim()))`)
   const levyFooter=id=>evaluate(`[...document.querySelectorAll('${levySection(id)} tfoot tr')].map(row=>[...row.cells].map(cell=>cell.textContent.trim()))`)
@@ -2533,18 +2541,28 @@ try {
   assert.equal((await levyFacts('owf'))['Total weight'],'0.00001 tonnes')
   await fill('Summary units','kg')
   const fullMonthly=worksheetBefore.totals.length
-  await click('Export CSV');await until(()=>evaluate('window.__aggregateDownloads.length===3'),'monthly full CSV');await enabled('Export Excel');await click('Export Excel');await until(()=>evaluate('window.__aggregateDownloads.length===4'),'monthly full XLSX')
+  // Generic monthly endpoints remain available; only their UI entry points were retired.
+  await evaluate("fetch('/api/admin/waste-levy-summary/export?month=2013-03&format=csv').then(r=>{if(!r.ok)throw new Error('Legacy CSV export failed');return true})")
+  await until(()=>evaluate('window.__aggregateDownloads.length===3'),'monthly full CSV API')
+  await evaluate("fetch('/api/admin/waste-levy-summary/export?month=2013-03&format=xlsx').then(r=>{if(!r.ok)throw new Error('Legacy XLSX export failed');return true})")
+  await until(()=>evaluate('window.__aggregateDownloads.length===4'),'monthly full XLSX API')
   assert.equal((await evaluate('window.__aggregateDownloads[2].text')).trim().split('\n').length,fullMonthly+1)
   assert.equal(await evaluate('window.__aggregateDownloads.slice(2).every(row=>row.status===200&&!row.url.includes("page="))'),true)
-  for(const width of [1280,1024,768]){await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'Monthly worksheet overflow '+width);await screenshot('waste-levy-worksheet-'+width)}
-  await fill('Reporting month','2013-05');await enabled('Export CSV')
+  for(const width of [1280,1024,768]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
+    await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'Monthly worksheet overflow '+width)
+    assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>['Export CSV','Export Excel'].includes(b.textContent.trim()))"),false)
+    assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Download Operational Workbook')?.checkVisibility()"),true)
+    await screenshot('waste-levy-worksheet-'+width)
+  }
+  await fill('Reporting month','2013-05');await enabled('Download Operational Workbook')
   assert.deepEqual(await evaluate(`[...document.querySelectorAll('${levySection('msw')} thead th')].map(cell=>cell.textContent)`),['Category','Crates','Pallets','Collectables','Pickup','Total'])
   assert.deepEqual((await levyRows('msw')).find(row=>row[0]==='Iron and Steel'),['Iron and Steel','1.00','0.00','0.00','0.00','1.00'])
-  await fill('Reporting month','2013-04');await enabled('Export CSV')
+  await fill('Reporting month','2013-04');await enabled('Download Operational Workbook')
   assert.equal((await levyRows('msw')).every(row=>row.slice(1).every(value=>value==='0.00')),true)
   await hasText('No records for this period.')
   assert.deepEqual(await levyFacts('whitegoods'),{'Whitegoods count':'0','Estimated weight':'0.00 kg','Applied factor':'No entries'})
-  await fill('Reporting month','2007-02');await enabled('Export CSV')
+  await fill('Reporting month','2007-02');await enabled('Download Operational Workbook')
   const mixedFacts=await levyFacts('whitegoods');assert.equal(mixedFacts['Whitegoods count'],'4');assert.equal(mixedFacts['Estimated weight'],'200.50 kg');assert.equal(mixedFacts['Applied factors'],'48.00 / 52.25 kg/item')
   assert.deepEqual((await browserApi('/api/admin/waste-levy-summary?month=2013-03')).body.totals,worksheetBefore.totals)
   await evaluate('window.fetch=window.__aggregateFetch')
