@@ -10,7 +10,7 @@ import java.util.UUID;
 public record CollectableRequest(
         UUID submissionId,
         @NotNull LocalDate recordDate,
-        @NotNull @DecimalMin(value = "2.00", inclusive = false) @Digits(integer = 8, fraction = 2) BigDecimal grossWeight,
+        @NotNull @DecimalMin(value = "0", inclusive = false) @Digits(integer = 8, fraction = 2) BigDecimal grossWeight,
         @NotEmpty List<@NotNull @Valid MaterialInput> materials,
         @PositiveOrZero Long version) {
     public record MaterialInput(

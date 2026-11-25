@@ -206,7 +206,44 @@ class CollectableIntegrationTests {
         jdbc.execute("DROP TRIGGER reject_test_collectables_material ON collectable_material");
         long id = create(input("12")).path("id").asLong();
         assertThatThrownBy(() -> jdbc.update("UPDATE collectable_record SET gross_weight=2,net_weight=0 WHERE id=?", id)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
-        assertThatThrownBy(() -> jdbc.update("UPDATE collectable_record SET tare_weight=1,net_weight=11 WHERE id=?", id)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbc.update("UPDATE collectable_record SET tare_weight=0,net_weight=12 WHERE id=?", id)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test void configurableTareUsesLatestAtSaveAndPreservesCorrectionSnapshot() throws Exception {
+        try {
+            var config=(ObjectNode)json.readTree(mvc.perform(get("/api/admin/settings").session(admin)).andReturn().getResponse().getContentAsString());
+            assertThat(config.path("collectablesTubTare").asText()).isEqualTo("2.00");
+            var request=input("10.00");
+            mvc.perform(post(BASE+"/preview").session(staff).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request)))
+                .andExpect(jsonPath("$.netWeight").value("8.00"));
+            config.put("collectablesTubTare","3.00");
+            mvc.perform(put("/api/admin/settings").session(staff).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(config))).andExpect(status().isForbidden());
+            mvc.perform(put("/api/admin/settings").session(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(config))).andExpect(status().isOk());
+            var saved=create(request);long id=saved.path("id").asLong();
+            assertThat(saved.path("tareWeight").asText()).isEqualTo("3.00");
+            assertThat(saved.path("netWeight").asText()).isEqualTo("7.00");
+            assertThat(saved.path("materials").get(0).path("materialWeight").asText()).isEqualTo("7.00");
+            for(String gross:List.of("2.99","3.00"))mvc.perform(post(BASE).session(staff).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(input(gross)))).andExpect(status().isBadRequest());
+            jdbc.update("update application_settings set collectables_tub_tare=4.00 where id=1");
+            assertThat(create(input("10.00")).path("netWeight").asText()).isEqualTo("6.00");
+            var corrected=tree(request).put("version",saved.path("version").asLong()).put("grossWeight","11.00");
+            mvc.perform(post(BASE+"/preview").param("recordId",""+id).session(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(corrected)))
+                .andExpect(jsonPath("$.tareWeight").value("3.00")).andExpect(jsonPath("$.netWeight").value("8.00"));
+            mvc.perform(put(BASE+"/"+id).session(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(corrected)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.tareWeight").value("3.00")).andExpect(jsonPath("$.netWeight").value("8.00"));
+            // Reporting consumes stored net/material weights, never the current setting.
+            assertThat(jdbc.queryForObject("select sum(net_weight) from collectable_record where deleted_at is null",BigDecimal.class)).isEqualByComparingTo("14.00");
+            assertThat(jdbc.queryForObject("select sum(material_weight) from collectable_material",BigDecimal.class)).isEqualByComparingTo("14.00");
+            for(String path:List.of("/api/admin/reports/summary?workflow=COLLECTABLES&from="+request.recordDate()+"&to="+request.recordDate()+"&size=50",
+                    "/api/admin/waste-levy-summary?month="+YearMonth.from(request.recordDate()))) {
+                var result=json.readTree(mvc.perform(get(path).session(admin)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+                var totals=new ArrayList<String>();
+                for(var row:result.path("totals"))if(row.path("workflow").asText().equals("COLLECTABLES")&&row.path("metric").asText().equals("Net weight"))totals.add(row.path("value").asText());
+                assertThat(totals).hasSize(1);assertThat(new BigDecimal(totals.get(0))).isEqualByComparingTo("14.00");
+            }
+            jdbc.update("update application_settings set collectables_tub_tare=0.50 where id=1");
+            assertThat(create(input("1.50")).path("netWeight").asText()).isEqualTo("1.00");
+        } finally {jdbc.update("update application_settings set collectables_tub_tare=2.00 where id=1");}
     }
 
     private long category(String name) { return jdbc.queryForObject("SELECT id FROM material_category WHERE name=?", Long.class, name); }

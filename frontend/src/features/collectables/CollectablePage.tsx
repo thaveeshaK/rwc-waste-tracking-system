@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, errorMessage } from '../../api/client'
 import { getMaterials, previewRecord, submitRecord, updateRecord } from './api'
+import { getOperationalConfiguration } from '../settings/api'
 import { operationalDate } from '../../utils/decimal'
 import { CollectableForm } from './CollectableForm'
 import { CollectableReview } from './CollectableReview'
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function CollectablePage({ editing, onSaved, onCancel, onBusyChange, onUnresolvedChange }: Props) {
+  const [tare, setTare] = useState(editing?.tareWeight ?? '')
   const [materials, setMaterials] = useState<MaterialCategory[]>([])
   const [input, setInput] = useState<CollectableInput>(() => ({
     submissionId: editing?.submissionId ?? crypto.randomUUID(),
@@ -33,13 +35,14 @@ export function CollectablePage({ editing, onSaved, onCancel, onBusyChange, onUn
 
   useEffect(() => {
     let cancelled = false
-    getMaterials().then(materials => {
+    Promise.all([getMaterials(),getOperationalConfiguration()]).then(([materials,configuration]) => {
       if (cancelled) return
       if (editing) for (const row of editing.materials) {
         if (!materials.some(material => material.id === row.materialCategoryId)) {
           materials.push({ id: row.materialCategoryId, name: `${row.name} (inactive)` })
         }
       }
+      setTare(editing?.tareWeight ?? configuration.collectablesTubTare)
       setMaterials(materials)
       setInput(input => ({ ...input, materials: materials.map(material => ({ materialCategoryId: material.id,
         percentage: editing?.materials.find(row => row.materialCategoryId === material.id)?.percentage ?? '0.00' })) }))
@@ -91,7 +94,7 @@ export function CollectablePage({ editing, onSaved, onCancel, onBusyChange, onUn
   return <section aria-labelledby="collectable-heading">
     <div className="page-heading"><div><p className="eyebrow">COLLECTABLE TUB</p>
       <h1 id="collectable-heading">{editing ? `Correct record #${editing.id}` : 'Collectables'}</h1>
-      <p>{review ? 'Review the calculated weights before confirming.' : 'Record one weighed Collectable Tub. The fixed 2 kg tare is deducted automatically.'}</p></div>
+      <p>{review ? 'Review the calculated weights before confirming.' : 'Record one weighed Collectable Tub. The applied tub tare is deducted automatically.'}</p></div>
       <span className="step-label">{review ? '2 - Review' : '1 - Enter details'}</span></div>
     <p className="notice" role="note">Only record collectables brought directly from the driveway/outside area. Do not record tubs from the pricing bench or material already counted through another process.</p>
     <div className="panel">
@@ -103,7 +106,7 @@ export function CollectablePage({ editing, onSaved, onCancel, onBusyChange, onUn
           <div className="actions"><button disabled={busy} onClick={save}>{busy ? 'Saving...' : uncertain ? 'Retry submission' : editing ? 'Confirm correction' : 'Confirm and submit'}</button>
             <button className="secondary" disabled={busy || uncertain} onClick={() => { setReview(null); setError('') }}>Back to edit</button>
           </div></>
-        : <CollectableForm value={input} materials={materials} today={operationalDate()}
+        : <CollectableForm tare={tare} value={input} materials={materials} today={operationalDate()}
           busy={busy} onChange={setInput} onReview={calculate} />}
       <button className="text-button" disabled={busy} onClick={onCancel}>{uncertain ? 'Check Records' : 'Back to Records'}</button>
     </div>

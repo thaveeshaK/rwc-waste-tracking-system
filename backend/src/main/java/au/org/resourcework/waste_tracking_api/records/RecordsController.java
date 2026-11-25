@@ -8,9 +8,9 @@ public class RecordsController {
     private final RecordsService service;
     public RecordsController(RecordsService service) { this.service=service; }
     @GetMapping
-    public PageResult<RecordsService.Item> list(@RequestParam(required=false) String workflow,
+    public PageResult<RecordsService.Item> list(@RequestParam(required=false) String workflow,@RequestParam(required=false) String status,
             @RequestParam(required=false) LocalDate from,@RequestParam(required=false) LocalDate to,
             @RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="10") int size) {
-        return service.list(workflow,from,to,page,size);
+        return service.list(workflow,status,from,to,page,size);
     }
 }

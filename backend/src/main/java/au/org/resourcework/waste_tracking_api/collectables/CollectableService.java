@@ -3,6 +3,7 @@ package au.org.resourcework.waste_tracking_api.collectables;
 import au.org.resourcework.waste_tracking_api.auth.*;
 import au.org.resourcework.waste_tracking_api.collectables.dto.*;
 import au.org.resourcework.waste_tracking_api.reference.*;
+import au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -21,15 +22,17 @@ public class CollectableService {
     private final AppUserRepository users;
     private final CollectableCalculator calculator;
     private final Clock clock;
+    private final OperationalConfiguration configuration;
 
     public CollectableService(CollectableRepository records,
             MaterialCategoryRepository categories, AppUserRepository users,
-            CollectableCalculator calculator, Clock clock) {
+            CollectableCalculator calculator, Clock clock, OperationalConfiguration configuration) {
         this.records = records;
         this.categories = categories;
         this.users = users;
         this.calculator = calculator;
         this.clock = clock;
+        this.configuration = configuration;
     }
 
     public CollectableResponse preview(CollectableRequest input) {
@@ -102,13 +105,14 @@ public class CollectableService {
     }
 
     private CollectableRecord calculate(CollectableRequest input, CollectableRecord previous) {
-        var net = calculator.net(input.recordDate(), input.grossWeight(),
+        var tare = previous == null ? configuration.current().collectablesTubTare() : previous.getTareWeight();
+        var net = calculator.net(input.recordDate(), input.grossWeight(), tare,
                 input.materials().stream().map(CollectableRequest.MaterialInput::percentage).toList());
         var seen = new HashSet<Long>();
         var result = new CollectableRecord();
         result.setRecordDate(input.recordDate());
         result.setGrossWeight(input.grossWeight().setScale(2));
-        result.setTareWeight(CollectableCalculator.TARE);
+        result.setTareWeight(tare);
         result.setNetWeight(net);
         for (var material : input.materials()) {
             if (!seen.add(material.materialCategoryId())) badRequest("Each material category may appear only once.");

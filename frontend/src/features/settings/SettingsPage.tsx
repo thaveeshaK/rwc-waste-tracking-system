@@ -1,5 +1,5 @@
 import {UserManagementPage} from '../users/UserManagementPage'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getSettings, getReferences, saveSettings } from './api'
 import type { Configuration, Reference } from './types'
 import { errorMessage } from '../../api/client'
@@ -14,21 +14,21 @@ export function SettingsPage({section,onChanged}: {section: SettingsSection;onCh
   const [message, setMessage] = useState('')
   const [attempt, setAttempt] = useState(0)
   const title=settingsSections.find(s=>s.id===section)!.label
-  async function fetchSection(): Promise<Data> {
-    return section==='container-types'||section==='material-categories' ? {rows:await getReferences(section==='container-types')} : {configuration:await getSettings()}
-  }
+  const fetchSection=useCallback(async (): Promise<Data> => {
+    return section==='container-types'||section==='material-categories' ? {rows:await getReferences(section==='container-types'),...(section==='container-types'?{configuration:await getSettings()}:{})} : {configuration:await getSettings()}
+  },[section])
   async function load() {setData(await fetchSection());setError('')}
   useEffect(() => {
     if(section==='users')return
     let cancelled=false
-    const request=section==='container-types'||section==='material-categories' ? getReferences(section==='container-types').then(rows=>({rows})) : getSettings().then(configuration=>({configuration}))
+    const request=fetchSection()
     request.then(value=>{if(!cancelled){setData(value);setError('')}}).catch(e=>{if(!cancelled)setError(errorMessage(e))})
     return()=>{cancelled=true}
-  }, [section,attempt])
+  }, [section,attempt,fetchSection])
   async function save(patch: Partial<Configuration>) {
     if(!data?.configuration)return
     const configuration=await saveSettings({...data.configuration,...patch})
-    setData({configuration});setMessage('Settings saved successfully.');onChanged()
+    setData({...data,configuration});setMessage('Settings saved successfully.');onChanged()
   }
   return <section className="settings-page" data-settings-section={section}><div className="page-heading"><div><p className="eyebrow">Settings</p><h1>{title}</h1></div>{section!=='users'&&<button className="secondary" onClick={()=>{setData(null);setError('');setMessage('');setAttempt(n=>n+1)}}>Reload settings</button>}</div>
     {section==='users'?<UserManagementPage/>:<>
@@ -36,6 +36,7 @@ export function SettingsPage({section,onChanged}: {section: SettingsSection;onCh
       {message&&<p role="status" className="notice success">{message}</p>}{error&&<p role="alert" className="notice error">{error}</p>}
       {!data&&!error&&<p role="status">Loading settings...</p>}
       {data?.rows&&<ReferenceSettings container={section==='container-types'} rows={data.rows} onSaved={load}/>}
+      {data?.configuration&&section==='container-types'&&<ConfigurationForm key={data.configuration.version} kind="collectables" configuration={data.configuration} onSave={save}/>}
       {data?.configuration&&(section==='organisation'||section==='reporting'||section==='whitegoods')&&<><ConfigurationForm key={data.configuration.version} kind={section} configuration={data.configuration} onSave={save}/>
         {data.configuration.updatedBy&&<p className="hint">Last updated by {data.configuration.updatedBy} at {data.configuration.updatedAt}.</p>}</>}
     </>}

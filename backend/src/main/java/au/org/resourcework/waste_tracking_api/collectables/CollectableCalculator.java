@@ -11,13 +11,13 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Component
 public class CollectableCalculator {
-    public static final BigDecimal TARE = new BigDecimal("2.00");
+
     private static final BigDecimal HUNDRED = new BigDecimal("100.00");
     private final Clock clock;
 
     public CollectableCalculator(Clock clock) { this.clock = clock; }
 
-    public BigDecimal net(LocalDate date, BigDecimal gross, List<BigDecimal> percentages) {
+    public BigDecimal net(LocalDate date, BigDecimal gross, BigDecimal tare, List<BigDecimal> percentages) {
         if (date.isAfter(LocalDate.now(clock))) invalid("Record date cannot be in the future (Australia/Hobart).");
         if (date.isBefore(LocalDate.of(1, 1, 1))) invalid("Record date must be a valid calendar date.");
         validateDecimal(gross, new BigDecimal("99999999.99"), "Gross weight");
@@ -27,8 +27,8 @@ public class CollectableCalculator {
             total = total.add(percentage);
         }
         if (total.compareTo(HUNDRED) != 0) invalid("Material percentages must total exactly 100.00%.");
-        var net = gross.subtract(TARE);
-        if (net.signum() <= 0) invalid("Gross tub weight must be greater than 2.00 kg; net material weight must be greater than 0.");
+        var net = gross.subtract(tare);
+        if (net.signum() <= 0) invalid("Gross tub weight must be greater than " + tare.toPlainString() + " kg; net material weight must be greater than 0.");
         return net.setScale(2, RoundingMode.UNNECESSARY);
     }
 

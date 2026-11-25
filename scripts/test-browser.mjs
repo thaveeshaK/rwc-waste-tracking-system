@@ -125,9 +125,9 @@ async function staffWorkflow(name) {
   await click('Operations')
   await until(()=>evaluate("document.querySelectorAll('.staff-operations .workflow-card').length===9"),'Staff workflow cards')
   const ids={'Crate / Pallet':'CRATE_PALLET',Salvage:'SALVAGE',Pickup:'PICKUP','Electrical Crate / Pallet':'ELECTRICAL_CRATE_PALLET',Collectables:'COLLECTABLES',Whitegoods:'WHITEGOODS','Electrical Testing':'ELECTRICAL_TESTING','E-waste Pickup':'EWASTE_PICKUP',Scrap:'SCRAP'}
-  await activateStaffCard(`.staff-operations [data-workflow="${ids[name]}"]`)
+  await activateWorkflowCard(`.staff-operations [data-workflow="${ids[name]}"]`)
 }
-async function activateStaffCard(selector,key) {
+async function activateWorkflowCard(selector,key) {
   assert.equal(await evaluate(`document.querySelector(${JSON.stringify(selector)}).getAttribute('aria-disabled')`),'false')
   if(key) {
     await cdp('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9})
@@ -140,10 +140,23 @@ async function activateStaffCard(selector,key) {
     await cdp('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode:value})
   } else await evaluate(`document.querySelector(${JSON.stringify(selector)}).querySelector('p').click()`)
 }
+async function checkIncompleteIndicator(expected) {
+  await until(()=>evaluate(`document.querySelector('.incomplete-indicator')?.textContent.trim()==='Incomplete records: '+${expected}`),'global incomplete indicator '+expected)
+  assert.equal(await evaluate("document.querySelector('.incomplete-indicator').closest('.workflows-heading').querySelector('h1').textContent"),"Workflows")
+  assert.equal(await evaluate("document.querySelector('.incomplete-indicator').tagName"),expected>0?'BUTTON':'SPAN')
+  assert.equal(await evaluate(`document.querySelector('.incomplete-indicator').classList.contains(${expected>0?"'warning'":"'clear'"})`),true)
+  assert.equal(await evaluate("document.querySelector('.staff-incomplete')===null && ![...document.querySelectorAll('button')].some(b=>b.textContent==='Refresh incomplete count')"),true)
+}
+async function activeIncompleteCount() {
+  const records=await Promise.all(['/api/crate-pallet-records','/api/electrical-crate-pallet-records'].map(path=>browserApi(path+'?from=0001-01-01&to=9998-12-31')))
+  return records.flatMap(result=>result.body).filter(record=>record.status==='INCOMPLETE').length
+}
+
 async function adminWorkflow(name) {
   await click('Workflows')
   const ids={'Crate / Pallet':'CRATE_PALLET',Salvage:'SALVAGE',Pickup:'PICKUP','Electrical Crate / Pallet':'ELECTRICAL_CRATE_PALLET',Collectables:'COLLECTABLES',Whitegoods:'WHITEGOODS','Electrical Testing':'ELECTRICAL_TESTING','E-waste Pickup':'EWASTE_PICKUP',Scrap:'SCRAP'}
-  await click(name==='Electrical Testing'?'Open':'New Entry',`.workflow-card[data-workflow="${ids[name]}"]`)
+  await until(()=>evaluate("document.querySelectorAll('.workflow-card').length===9"),'Admin workflow cards')
+  await activateWorkflowCard(`.workflow-card[data-workflow="${ids[name]}"]`)
 }
 async function openSettings(label) {
   await click('Settings')
@@ -158,7 +171,7 @@ async function resumeStaffSubmission() {
   await evaluate("(()=>{const card=document.querySelector('.staff-operations .workflow-card[aria-disabled=true]');card.click();for(const key of ['Enter',' '])card.dispatchEvent(new KeyboardEvent('keydown',{key,bubbles:true,cancelable:true}))})()")
   assert.equal(await evaluate("document.querySelector('.staff-operations')!==null"),true)
   assert.ok(await evaluate("document.querySelector('.staff-operations .workflow-card[aria-disabled=false]').textContent.includes('Resume submission')"))
-  await activateStaffCard('.staff-operations .workflow-card[aria-disabled=false]','Enter')
+  await activateWorkflowCard('.staff-operations .workflow-card[aria-disabled=false]','Enter')
 }
 
 async function fill(label, value, scope = '') {
@@ -259,10 +272,8 @@ async function checkBranding(view) {
     assert.equal(await evaluate("document.querySelector('.brand span').textContent"),'Waste Tracking Management System')
     assert.equal(await evaluate("document.querySelector('main h1').textContent"),'Workflows')
     assert.deepEqual(await evaluate("[...document.querySelectorAll('.workflow-card')].map(card=>card.dataset.workflow)"),orderedWorkflows)
-    if(view==='staff') {
-      assert.equal(await evaluate("document.querySelector('[data-workflow=ELECTRICAL_TESTING]').getAttribute('aria-label')"),'Open: Electrical Testing')
-      assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card button').length"),0)
-    } else assert.equal(await evaluate("document.querySelector('[data-workflow=ELECTRICAL_TESTING] button').textContent"),'Open')
+    assert.equal(await evaluate("document.querySelector('[data-workflow=ELECTRICAL_TESTING]').getAttribute('aria-label')"),'Open: Electrical Testing')
+    assert.equal(await evaluate("[...document.querySelectorAll('.workflow-card')].every(card=>card.getAttribute('role')==='button'&&!card.querySelector('button,a,input,select,textarea,[role=button]'))"),true)
   }
   const assets=await evaluate(`(async()=>{const paths=[document.querySelector('.brand-logo').src,document.querySelector('link[rel=icon]').href];return Promise.all(paths.map(async path=>{const response=await fetch(path);const bytes=new Uint8Array(await response.arrayBuffer());return {path:new URL(path).pathname,status:response.status,type:response.headers.get('content-type'),signature:[...bytes.slice(0,2)]}}))})()`)
   assert.deepEqual(assets.map(asset=>asset.path),['/assets/branding/rwc_logo.png','/assets/branding/rwc_favicon.jpg'])
@@ -350,6 +361,7 @@ try {
   const expectedStaffToday=staffToday.todayActivity.map(card=>({workflow:card.workflow,metrics:card.metrics.map(metric=>({label:card.workflow==='COLLECTABLES'&&metric.label==='Trips'?'Tubs':metric.label,value:metric.value+(metric.unit?' '+metric.unit:'')}))}))
   await until(()=>evaluate("document.querySelectorAll('[data-today-workflow]').length===9"),'Staff Today cards loaded')
   assert.deepEqual(await readTodayCards(),expectedStaffToday)
+  await checkIncompleteIndicator(await activeIncompleteCount())
   assert.equal(await evaluate("document.querySelector('.staff-operations').firstElementChild===document.querySelector('.staff-operations .page-heading')"),true)
   assert.equal(await evaluate("document.querySelector('.staff-operations .workflow-card-grid').compareDocumentPosition(document.querySelector('.dashboard-today')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)
   assert.equal(await evaluate("document.querySelector('.dashboard-today').compareDocumentPosition(document.querySelector('.staff-recent')) & Node.DOCUMENT_POSITION_FOLLOWING"),4)
@@ -364,6 +376,7 @@ try {
     await screenshot('staff-today-activity-'+width)
   }
   await evaluate(`window.__staffTodayFetch=window.fetch;window.__staffTodayMode='hold';window.fetch=(...args)=>{
+    if(window.__staffTodayMode==='hold'&&(String(args[0]).startsWith('/api/crate-pallet-records?')||String(args[0]).startsWith('/api/electrical-crate-pallet-records?')))return Promise.resolve(new Response('[]',{status:200,headers:{'Content-Type':'application/json'}}));
     if(args[0]==='/api/operations/today-activity') {
       if(window.__staffTodayMode==='hold')return new Promise(resolve=>{window.__releaseStaffToday=()=>resolve(new Response(JSON.stringify(${JSON.stringify({...staffToday,todayActivity:staffToday.todayActivity.map(card=>({...card,metrics:card.metrics.map(metric=>({...metric,value:metric.unit==='kg'?'0.00':'0'}))}))})}),{status:200,headers:{'Content-Type':'application/json'}}))});
       if(window.__staffTodayMode==='error')return Promise.resolve(new Response(JSON.stringify({detail:'Simulated today activity failure'}),{status:503,headers:{'Content-Type':'application/problem+json'}}));
@@ -374,6 +387,7 @@ try {
   assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card[aria-disabled=false]').length"),9)
   await evaluate('window.__releaseStaffToday()')
   await until(()=>evaluate("document.querySelectorAll('[data-today-workflow]').length===9"),'Staff Today zero cards')
+  await checkIncompleteIndicator(0)
   assert.equal(await evaluate("[...document.querySelectorAll('.dashboard-today dd')].every(cell=>['0','0.00 kg'].includes(cell.textContent))"),true)
   await evaluate("window.__staffTodayMode='error'");await click('Records');await click('Operations');await hasText('Simulated today activity failure')
   assert.equal(await evaluate("document.querySelectorAll('.staff-operations .workflow-card[aria-disabled=false]').length"),9)
@@ -402,11 +416,11 @@ try {
     await click('Operations')
   }
   for(const [workflow,name,key] of [['CRATE_PALLET','Crate / Pallet','Enter'],['PICKUP','Pickup',' '],['ELECTRICAL_TESTING','Electrical Testing','Enter'],['ELECTRICAL_TESTING','Electrical Testing',' ']]) {
-    await activateStaffCard(`.staff-operations [data-workflow="${workflow}"]`,key)
+    await activateWorkflowCard(`.staff-operations [data-workflow="${workflow}"]`,key)
     await until(()=>evaluate(`document.querySelector('main h1')?.textContent===${JSON.stringify(name)}`),'keyboard '+JSON.stringify(key)+' opens '+name)
     await click('Operations')
   }
-  console.log('PASS: Staff whole-card pointer/Enter/Space activation, visible keyboard focus, no nested controls, nine existing workflow destinations; Admin retains its own buttons.')
+  console.log('PASS: Staff whole-card pointer/Enter/Space activation, visible keyboard focus, no nested controls, nine existing workflow destinations; Staff and Admin share the same card interaction.')
   for(const width of [768,1024,1280]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
     await until(()=>evaluate("document.documentElement.scrollWidth<=window.innerWidth"),'Staff Operations overflow at '+width)
@@ -635,6 +649,14 @@ try {
   await until(()=>evaluate("document.querySelector('[role=menu]')===null"),'menu closes outside')
   assert.equal(await evaluate("document.querySelectorAll('.workflow-card').length"),9)
   await checkBranding('admin')
+  const adminDestinations={'CRATE_PALLET':'Crate / Pallet','SALVAGE':'Salvage','ELECTRICAL_CRATE_PALLET':'Electrical Crate / Pallet','PICKUP':'Pickup','EWASTE_PICKUP':'E-waste Pickup','COLLECTABLES':'Collectables','WHITEGOODS':'Whitegoods','ELECTRICAL_TESTING':'Electrical Testing','SCRAP':'Scrap'}
+  for(const [index,workflow] of orderedWorkflows.entries()) {
+    await click('Workflows');await until(()=>evaluate("document.querySelectorAll('.workflow-card').length===9"),'Admin grid')
+    await activateWorkflowCard(`.workflow-card[data-workflow="${workflow}"]`,index%3===0?'Enter':index%3===1?' ':undefined)
+    await until(()=>evaluate(`document.querySelector('main h1')?.textContent===${JSON.stringify(adminDestinations[workflow])}`),'Admin card destination '+workflow)
+  }
+  await click('Workflows')
+  console.log('PASS: shared Staff/Admin cards, no nested buttons/links, all nine destinations, pointer/Enter/Space activation and visible focus.')
   await evaluate("document.querySelector('.settings-menu-trigger').focus();document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}))")
   await until(()=>evaluate("document.activeElement?.getAttribute('role')==='menuitem'"),'Settings keyboard focus')
   await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}))")
@@ -654,8 +676,9 @@ try {
       await hasText('Manage sign-in access.');await enabled('Add User')
       assert.equal(await evaluate("document.querySelectorAll('.settings-page .user-editor').length"),0)
     } else {
-      await until(()=>evaluate("document.querySelectorAll('.settings-page section[aria-label]').length===1"),'one Settings section only')
-      assert.deepEqual(await evaluate("[...document.querySelectorAll('.settings-page section[aria-label]')].map(e=>e.getAttribute('aria-label'))"),[settingsLabels[i]])
+      const expectedSections=i===0?[settingsLabels[i],'Collectables tub tare']:[settingsLabels[i]]
+      await until(()=>evaluate(`document.querySelectorAll('.settings-page section[aria-label]').length===${expectedSections.length}`),'focused Settings sections')
+      assert.deepEqual(await evaluate("[...document.querySelectorAll('.settings-page section[aria-label]')].map(e=>e.getAttribute('aria-label'))"),expectedSections)
     }
   }
   for(const workflow of ['Salvage','Pickup','Electrical Crate / Pallet','Collectables','Whitegoods','Electrical Testing','E-waste Pickup','Scrap','Crate / Pallet']) {
@@ -672,7 +695,7 @@ try {
   await click('Correct record');await hasText('Resolve the current submission before correcting another record.')
   assert.equal(await evaluate("document.querySelector('.record-details-dialog')===null"),true)
   await click('Workflows')
-  await click('Resume submission','.workflow-card[data-workflow="ELECTRICAL_TESTING"]')
+  await activateWorkflowCard('.workflow-card[data-workflow="ELECTRICAL_TESTING"]','Enter')
   assert.equal(await evaluate("document.querySelector('.testing-category .quick-tally input').value"),'1')
   await evaluate("document.querySelector('.testing-category .quick-tally button').click()")
   await enabled('Sign out')
@@ -2005,7 +2028,7 @@ try {
   assert.equal(await evaluate("document.querySelectorAll('.workflow-card').length"),9)
   await screenshot('tablet-admin-workflows')
   // Exercise the card action as well as the global dropdown.
-  await evaluate("document.querySelector('[data-workflow=CRATE_PALLET] button').click()")
+  await evaluate("document.querySelector('[data-workflow=CRATE_PALLET] p').click()")
   await until(()=>evaluate("!!document.querySelector('.container-options')?.checkVisibility()"),'record details loaded')
   await click('Records')
   console.log('PASS: Dashboard V2 KPI/chart values, six-month buckets, safe intake exclusions, separate testing counts, five recent submissions, delete refresh, clean empty states, responsive charts, keyboard/outside-close menu and workflow cards.')
@@ -2212,7 +2235,7 @@ try {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false})
     for(const label of ['Container Types','Material Categories','Organisation Details','Reporting Defaults','Whitegoods Weight Factor','User Management']) {
       await openSettings(label)
-      if(label!=='User Management') await until(()=>evaluate("document.querySelectorAll('.settings-page section[aria-label]').length===1"),'Settings loaded at '+width)
+      if(label!=='User Management') await until(()=>evaluate(`document.querySelectorAll('.settings-page section[aria-label]').length===${label==='Container Types'?2:1}`),'Settings loaded at '+width)
       await until(()=>evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'Settings overflow at '+width)
     }
     await click('Settings')
@@ -2592,6 +2615,8 @@ try {
         }
         console.log(`Checking record details: ${context}, status=${expectedStatus}`)
         await until(()=>evaluate(`document.querySelector('.selectable-record button')?.textContent==='#'+${items[0].record.id}`),'loaded '+workflow+' rows')
+        assert.equal(await evaluate("[...document.querySelectorAll('[data-records-view=records] th')].some(th=>th.textContent==='Submitted by')"),admin)
+        assert.equal(await evaluate("(()=>{const t=document.querySelector('[data-records-view=records] table');return [...t.tBodies[0].rows].every(row=>row.cells.length===t.tHead.rows[0].cells.length)})()"),true)
         await evaluate(`(()=>{const row=[...document.querySelectorAll('.selectable-record')].find(r=>r.querySelector('button').textContent==='#'+${record.id});row.querySelector('td:nth-child(2)').click()})()`)
         await until(()=>evaluate(`document.querySelector('.detail-heading h2')?.textContent==='Record #'+${record.id} && document.querySelector('.selected-row button')?.textContent==='#'+${record.id}`),'selected '+workflow)
         await enabled('Close details')
@@ -2683,7 +2708,20 @@ try {
   }
   async function incompleteCount(expected) {
     await click('Operations')
-    await until(()=>evaluate(`document.querySelector('.staff-incomplete h2')?.textContent==='Incomplete records: '+${expected}`),'incomplete count '+expected)
+    await checkIncompleteIndicator(expected)
+    if(expected>0) {
+      await evaluate("document.querySelector('.incomplete-indicator').click()")
+      await enabled('Clear incomplete filter')
+      await until(()=>evaluate("document.querySelectorAll('.selectable-record').length>0"),'incomplete Records loaded')
+      assert.equal(await evaluate("[...document.querySelectorAll('.selectable-record .record-status')].every(b=>b.textContent==='Incomplete')"),true)
+      const filtered=await browserApi('/api/records?status=INCOMPLETE&size=50')
+      assert.equal(filtered.body.totalItems,expected)
+      assert.ok(filtered.body.items.every(item=>['CRATE_PALLET','ELECTRICAL_CRATE_PALLET'].includes(item.workflow)&&item.record.status==='INCOMPLETE'))
+      await click('Clear incomplete filter');await until(()=>evaluate("!document.querySelector('button') || ![...document.querySelectorAll('button')].some(b=>b.textContent==='Clear incomplete filter')"),'filter cleared')
+      await click('Operations');await checkIncompleteIndicator(expected)
+      await click('Records');assert.equal(await evaluate("document.body.textContent.includes('Status: Incomplete')"),false)
+      await click('Operations');await checkIncompleteIndicator(expected)
+    }
   }
   const baselineIncomplete=(await browserApi('/api/crate-pallet-records')).body.filter(r=>r.status==='INCOMPLETE').length+(await browserApi('/api/electrical-crate-pallet-records')).body.filter(r=>r.status==='INCOMPLETE').length
   const incompleteFixtures=[]
@@ -2738,7 +2776,15 @@ try {
     await click('#'+saved.id);await assertRecordDialog();await assertNoEntryShortcut();await click('Close details')
   }
   await incompleteCount(baselineIncomplete+2)
-  await loginAs('ADMIN');await click('Records')
+  await loginAs('ADMIN');await enabled('Refresh');assert.equal(await evaluate("document.querySelector('.incomplete-indicator')===null"),true)
+  await click('Workflows');await checkIncompleteIndicator(baselineIncomplete+2)
+  for(const width of [1280,1024,768]) {await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);await screenshot('admin-global-incomplete-'+width)}
+  await evaluate("document.querySelector('.incomplete-indicator').focus()")
+  await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',text:'\r',unmodifiedText:'\r',windowsVirtualKeyCode:13})
+  await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13})
+  await enabled('Clear incomplete filter');await until(()=>evaluate("document.querySelectorAll('.selectable-record').length>0"),'Admin incomplete Records')
+  assert.equal(await evaluate("[...document.querySelectorAll('.selectable-record .record-status')].every(b=>b.textContent==='Incomplete')"),true)
+  await click('Clear incomplete filter')
   const firstIncomplete=incompleteFixtures[0]
   await fill('Workflow',firstIncomplete.workflow);await fill('From','1998-04-15');await fill('To','1998-04-15');await enabled('Apply dates / refresh');await click('Apply dates / refresh');await enabled('#'+firstIncomplete.saved.id);await click('#'+firstIncomplete.saved.id)
   await enabled('Complete record');await enabled('Delete record')
@@ -2797,9 +2843,37 @@ try {
   for(const width of [1280,1024,768]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);await screenshot('staff-incomplete-count-'+width)
   }
-  await loginAs('ADMIN')
+  await loginAs('ADMIN');await enabled('Refresh');assert.equal(await evaluate("document.querySelector('.incomplete-indicator')===null"),true);await click('Workflows');await checkIncompleteIndicator(baselineIncomplete)
   for(const fixture of incompleteFixtures)assert.equal((await browserApi(fixture.path+'/'+fixture.saved.id,'DELETE')).status,204)
   console.log('PASS Phase 5B: incomplete creates/status badges, >100 disabled, partial-save lost-response retry/UUID, Staff/Admin permissions, another Staff completion, preserved details/snapshots/version/id, Admin partial edits, same-record completion, active-only Operations count, modal/new-entry context and 1280/1024/768 overflow.')
+
+  // Configurable Collectables tare: current Save configuration, persisted correction snapshot.
+  async function waitForCollectablesForm() {
+    await until(()=>evaluate("document.querySelectorAll('[aria-labelledby=collectable-heading] .percentage-control').length===13"),'Collectables form ready')
+  }
+  await openSettings('Container Types');await hasText('Collectables tub tare')
+  const tubSettings='section[aria-label="Collectables tub tare"]'
+  await fill('Collectables tub tare','0',tubSettings)
+  assert.equal(await evaluate(`document.querySelector(${JSON.stringify(tubSettings)}+' input').checkValidity()`),false)
+  await fill('Collectables tub tare','3.00',tubSettings);await click('Save collectables tub tare',tubSettings);await hasText('Settings saved successfully.')
+  for(const width of [1280,1024,768]) {await cdp('Emulation.setDeviceMetricsOverride',{width,height:1024,deviceScaleFactor:1,mobile:false});assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);await screenshot('collectables-tare-settings-'+width)}
+  await adminWorkflow('Collectables');await waitForCollectablesForm();await fill('Gross tub weight','3.00');await fill('Timber','100')
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Review collectables').disabled"),true)
+  await fill('Gross tub weight','10.00');await click('Review collectables');await enabled('Confirm and submit');await hasText('7.00 kg')
+  const beforeSaveConfig=(await browserApi('/api/admin/settings')).body
+  assert.equal((await browserApi('/api/admin/settings','PUT',{...beforeSaveConfig,collectablesTubTare:'4.00'})).status,200)
+  await click('Confirm and submit');await assertRecordDialog(true);await hasText('6.00 kg')
+  const tubSaved=(await browserApi('/api/collectable-records')).body.find(r=>r.grossWeight==='10.00'&&r.tareWeight==='4.00')
+  assert.ok(tubSaved)
+  const afterSaveConfig=(await browserApi('/api/admin/settings')).body
+  assert.equal((await browserApi('/api/admin/settings','PUT',{...afterSaveConfig,collectablesTubTare:'5.00'})).status,200)
+  await click('Close details');await enabled('#'+tubSaved.id);await click('#'+tubSaved.id);await assertRecordDialog(false);await enabled('Correct record');await click('Correct record');await waitForCollectablesForm();await hasText('4.00 kg')
+  await fill('Gross tub weight','11.00');await click('Review collectables');await enabled('Confirm correction');await hasText('7.00 kg');await click('Confirm correction');await assertRecordDialog(true)
+  const tubCorrected=(await browserApi('/api/collectable-records/'+tubSaved.id)).body
+  assert.equal(tubCorrected.tareWeight,'4.00');assert.equal(tubCorrected.netWeight,'7.00')
+  await click('Close details');await adminWorkflow('Collectables');await waitForCollectablesForm();await fill('Gross tub weight','10.00');await fill('Timber','100');await click('Review collectables');await enabled('Confirm and submit');await hasText('5.00 kg')
+  await click('Back to Records');await openSettings('Container Types');await hasText('Collectables tub tare');await fill('Collectables tub tare','2.00',tubSettings);await click('Save collectables tub tare',tubSettings);await hasText('Settings saved successfully.')
+  console.log('PASS configurable Collectables tare: Settings validation, latest configuration at Save, saved snapshot correction and fresh-entry configuration.')
 
   // ET-16: model an authoritative server rollover while the client's pending board is still open.
   // ElectricalTestingMidnightIntegrationTests separately advances the real injected backend Clock.

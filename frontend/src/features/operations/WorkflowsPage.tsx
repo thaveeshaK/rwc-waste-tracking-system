@@ -1,8 +1,9 @@
+import { IncompleteIndicator } from '../../components/IncompleteIndicator'
 import type { Workflow } from '../records/types'
-import { workflowEntries } from './workflows'
-interface Props { onNew: (workflow: Workflow) => void; busy: boolean; unresolved: boolean; currentWorkflow: Workflow }
-export function WorkflowsPage({onNew, busy, unresolved, currentWorkflow}: Props) {
-  return <section><div className="page-heading"><div><p className="eyebrow">OPERATIONS</p><h1>Workflows</h1><p>Choose a workflow to enter and review a record.</p></div></div>
-    <div className="workflow-card-grid">{workflowEntries.map(w => <article className="panel workflow-card" key={w.id} data-workflow={w.id}><h2>{w.name}</h2><p>{w.description}</p><button disabled={busy || (unresolved && currentWorkflow !== w.id)} aria-label={`${w.id === 'ELECTRICAL_TESTING' ? 'Open' : 'New entry'}: ${w.name}`} onClick={() => onNew(w.id)}>{unresolved && currentWorkflow === w.id ? 'Resume submission' : w.id === 'ELECTRICAL_TESTING' ? 'Open' : 'New Entry'}</button></article>)}</div>
+import { WorkflowCards } from './WorkflowCards'
+interface Props { onIncomplete: () => void; onNew: (workflow: Workflow) => void; busy: boolean; unresolved: boolean; currentWorkflow: Workflow }
+export function WorkflowsPage({onIncomplete, onNew, busy, unresolved, currentWorkflow}: Props) {
+  return <section><div className="page-heading"><div><p className="eyebrow">OPERATIONS</p><div className="workflows-heading"><h1>Workflows</h1><IncompleteIndicator refreshKey="workflows" onOpen={onIncomplete}/></div><p>Choose a workflow to enter and review a record.</p></div></div>
+    <WorkflowCards onNew={onNew} busy={busy} unresolved={unresolved} currentWorkflow={currentWorkflow}/>
   </section>
 }

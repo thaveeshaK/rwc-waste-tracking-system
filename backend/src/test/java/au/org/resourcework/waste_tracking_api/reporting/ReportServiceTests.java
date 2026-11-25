@@ -66,7 +66,7 @@ class ReportServiceTests {
 
     private au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration configuration() {
         var config=mock(au.org.resourcework.waste_tracking_api.settings.OperationalConfiguration.class);
-        when(config.current()).thenReturn(new au.org.resourcework.waste_tracking_api.settings.SettingsData.Configuration(0L,"RWC","","RWC","kg","CURRENT_MONTH",7,new java.math.BigDecimal("48.00"),null,null));
+        when(config.current()).thenReturn(new au.org.resourcework.waste_tracking_api.settings.SettingsData.Configuration(0L,"RWC","","RWC","kg","CURRENT_MONTH",7,new java.math.BigDecimal("48.00"),new java.math.BigDecimal("2.00"),null,null));
         return config;
     }
 

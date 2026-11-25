@@ -7,7 +7,7 @@ import static org.assertj.core.api.Assertions.*;
 class CollectableCalculatorTests {
     private final CollectableCalculator calculator = new CollectableCalculator(Clock.fixed(Instant.parse("2026-10-21T14:00:00Z"), ZoneId.of("Australia/Hobart")));
     private BigDecimal net(String date, String gross, String... percentages) {
-        return calculator.net(LocalDate.parse(date), new BigDecimal(gross), java.util.Arrays.stream(percentages).map(BigDecimal::new).toList());
+        return calculator.net(LocalDate.parse(date), new BigDecimal(gross), new BigDecimal("2.00"), java.util.Arrays.stream(percentages).map(BigDecimal::new).toList());
     }
     @Test void rejectsEqualAndBelowTareButAcceptsPositiveNet() {
         for (String gross : List.of("2", "1.99", "0", "-1")) assertThatThrownBy(() -> net("2026-10-22", gross, "100", "0")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);

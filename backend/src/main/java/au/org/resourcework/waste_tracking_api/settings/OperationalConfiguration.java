@@ -13,6 +13,6 @@ public class OperationalConfiguration {
     public Configuration current() { return repository.configuration(); }
     public Operational operational() {
         var c=current();
-        return new Operational(c.organisationName(),c.siteName(),c.reportDisplayName(),c.whitegoodsKgPerItem().toPlainString(),"Australia/Hobart");
+        return new Operational(c.organisationName(),c.siteName(),c.reportDisplayName(),c.whitegoodsKgPerItem().toPlainString(),c.collectablesTubTare().toPlainString(),"Australia/Hobart");
     }
 }

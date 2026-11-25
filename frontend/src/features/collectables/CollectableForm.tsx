@@ -3,6 +3,7 @@ import { PercentageControl } from '../../components/PercentageControl'
 import { decimalHundredths, percentageTotal } from '../../utils/decimal'
 import type { MaterialCategory, CollectableInput } from './types'
 interface Props {
+  tare: string
   value: CollectableInput
   materials: MaterialCategory[]
   today: string
@@ -10,20 +11,21 @@ interface Props {
   onChange: (value: CollectableInput) => void
   onReview: () => void
 }
-export function CollectableForm({ value, materials, today, busy, onChange, onReview }: Props) {
+export function CollectableForm({ tare, value, materials, today, busy, onChange, onReview }: Props) {
   const total = percentageTotal(value.materials.map(row => row.percentage))
   const gross = decimalHundredths(value.grossWeight)
-  const net = gross === null ? null : gross - 200n
+  const appliedTare=decimalHundredths(tare)
+  const net = gross === null || appliedTare===null ? null : gross - appliedTare
   const valid = net !== null && net > 0n && total === '100.00'
   const displayNet = net === null ? 'Enter gross tub weight' : net < 0n ? 'Gross weight is below tare' : `${net / 100n}.${(net % 100n).toString().padStart(2, '0')} kg`
   function review(event: FormEvent) { event.preventDefault(); if (!busy && valid) onReview() }
   return <form onSubmit={review}><fieldset disabled={busy}><legend>Collectable Tub details</legend>
     <div className="form-grid"><label>Record date (required)<input type="date" required min="0001-01-01" max={today}
       value={value.recordDate} onChange={event => onChange({ ...value, recordDate: event.target.value })} /></label>
-      <label>Gross tub weight (kg) (required)<input type="number" inputMode="decimal" required min="2.01" max="99999999.99" step="0.01"
+      <label>Gross tub weight (kg) (required)<input type="number" inputMode="decimal" required min="0.01" max="99999999.99" step="0.01"
         value={value.grossWeight} onChange={event => onChange({ ...value, grossWeight: event.target.value })} />
-        <span className="hint">Include the tub. Gross weight must be greater than 2.00 kg.</span></label></div>
-    <dl className="record-facts"><div><dt>Fixed tare</dt><dd>2.00 kg</dd></div>
+        <span className="hint">Include the tub. Gross weight must be greater than {tare} kg.</span></label></div>
+    <dl className="record-facts"><div><dt>Applied tub tare</dt><dd>{tare} kg</dd></div>
       <div><dt>Net material weight</dt><dd aria-live="polite">{displayNet}</dd></div></dl>
     <h3>Material breakdown</h3><div className="material-grid">{materials.map(category => <PercentageControl key={category.id} material={category.name}
         value={value.materials.find(row => row.materialCategoryId === category.id)?.percentage ?? '0.00'}

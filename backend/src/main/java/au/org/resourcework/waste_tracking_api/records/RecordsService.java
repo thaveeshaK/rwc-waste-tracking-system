@@ -43,17 +43,18 @@ public class RecordsService {
         this.ewastepickup=ewastepickup;
         this.scrap=scrap;
     }
-    public PageResult<Item> list(String workflow,LocalDate from,LocalDate to,int page,int size) {
+    public PageResult<Item> list(String workflow,String status,LocalDate from,LocalDate to,int page,int size) {
         PageResult.validate(page,size);
         if(workflow!=null && workflow.isBlank()) workflow=null;
         if(workflow!=null && !Set.of("CRATE_PALLET","SALVAGE","PICKUP","ELECTRICAL_CRATE_PALLET","COLLECTABLES","WHITEGOODS","ELECTRICAL_TESTING","EWASTE_PICKUP","SCRAP").contains(workflow)) bad("Unknown workflow.");
         LocalDate start=from==null?LocalDate.of(1,1,1):from;
         LocalDate end=to==null?LocalDate.of(9998,12,31):to;
         if(start.getYear()<1 || end.getYear()>9998 || start.isAfter(end)) bad("Invalid record date range.");
-        long total=repository.count(workflow,start,end);
+        if(status!=null && !Set.of("INCOMPLETE","COMPLETED").contains(status)) bad("Unknown record status.");
+        long total=repository.count(workflow,status,start,end);
         int actual=Math.min(page,PageResult.lastPage(total,size));
         // Hydrate only the bounded database page through existing DTO services, not whole workflow lists.
-        var items=repository.page(workflow,start,end,actual,size).stream().map(key->new Item(key.workflow(),switch(key.workflow()) {
+        var items=repository.page(workflow,status,start,end,actual,size).stream().map(key->new Item(key.workflow(),switch(key.workflow()) {
             case "CRATE_PALLET" -> cratepallet.get(key.id());
             case "SALVAGE" -> salvage.get(key.id());
             case "PICKUP" -> pickup.get(key.id());

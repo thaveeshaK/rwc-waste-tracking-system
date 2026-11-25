@@ -77,6 +77,10 @@ class SettingsIntegrationTests {
         write(BASE,"PUT",changed,409);
         assertThat(read("/api/operational-configuration").path("organisationName").asText()).isEqualTo("New Organisation");
     }
+    @Test void collectablesTareValidationRejectsMissingZeroNegativeAndExcessPrecision() throws Exception {
+        for(String tare:List.of("0","-1","3.001","100000000","invalid"))write(BASE,"PUT",configuration().put("collectablesTubTare",tare),400);
+        write(BASE,"PUT",configuration().putNull("collectablesTubTare"),400);
+    }
     @Test void invalidSettingsAreRejectedBeforeStorage() throws Exception {
         for(String factor:List.of("0","-1","0.001","1000","invalid")) write(BASE,"PUT",configuration().put("whitegoodsKgPerItem",factor),400);
         write(BASE,"PUT",configuration().put("organisationName"," "),400);

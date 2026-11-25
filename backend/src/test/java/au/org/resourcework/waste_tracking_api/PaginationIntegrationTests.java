@@ -59,6 +59,23 @@ class PaginationIntegrationTests {
     private MockHttpServletRequestBuilder records() {return get("/api/records").with(user("staff").roles("STAFF")).param("from","2001-02-01").param("to","2001-02-28");}
     private MockHttpServletRequestBuilder report() {return get("/api/admin/reports/records").with(user("admin").roles("ADMIN")).param("from","2001-02-01").param("to","2001-02-28");}
     private tools.jackson.databind.JsonNode body(MockHttpServletRequestBuilder r)throws Exception{return json.readTree(mvc.perform(r).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());}
+    @Test void incompleteFilterRunsBeforePaginationAcrossBothWorkflowsAndAllDates() throws Exception {
+        for(String table:List.of("crate_pallet_record","electrical_crate_pallet_record")) {
+            for(int n=0;n<13;n++)jdbc.update("insert into "+table+"(submission_id,record_date,container_type_id,gross_weight,tare_weight,net_weight,status,created_by,updated_by,created_at,updated_at) values (?,date '1998-01-01',(select id from container_type where name='Plastic Pallet'),16,6,10,'INCOMPLETE',?,?,now(),now())",UUID.randomUUID(),actor,actor);
+            jdbc.update("update "+table+" set deleted_at=now(),deleted_by=? where id=(select max(id) from "+table+")",actor);
+        }
+        var ids=new HashSet<String>();
+        for(int page=0;page<3;page++) {
+            var result=body(get("/api/records").with(user("staff").roles("STAFF")).param("status","INCOMPLETE").param("from","1998-01-01").param("to","2001-12-31").param("page",""+page));
+            assertThat(result.path("totalItems").asInt()).isEqualTo(24);assertThat(result.path("totalPages").asInt()).isEqualTo(3);
+            for(var item:result.path("items")) {assertThat(item.path("record").path("status").asText()).isEqualTo("INCOMPLETE");assertThat(item.path("workflow").asText()).isIn("CRATE_PALLET","ELECTRICAL_CRATE_PALLET");ids.add(item.path("workflow").asText()+item.path("record").path("id").asLong());}
+        }
+        assertThat(ids).hasSize(24);
+        assertThat(body(records().param("status","INCOMPLETE")).path("totalItems").asInt()).isZero();
+        assertThat(body(records()).path("totalItems").asInt()).isEqualTo(71);
+        mvc.perform(records().param("status","UNKNOWN")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/records").with(user("admin").roles("ADMIN")).param("status","INCOMPLETE")).andExpect(status().isOk());
+    }
     @Test void recordsDefaultsAndApprovedSizesHaveFilteredCounts()throws Exception {
         var page=body(records());assertThat(page.get("size").asInt()).isEqualTo(10);assertThat(page.get("items").size()).isEqualTo(10);assertThat(page.get("totalItems").asLong()).isEqualTo(71);assertThat(page.get("totalPages").asInt()).isEqualTo(8);
         for(int size:List.of(10,25,50)){var r=body(records().param("workflow","WHITEGOODS").param("size",""+size));assertThat(r.get("items").size()).isEqualTo(size);assertThat(r.get("totalItems").asLong()).isEqualTo(63);assertThat(r.get("totalPages").asLong()).isEqualTo((63+size-1)/size);}

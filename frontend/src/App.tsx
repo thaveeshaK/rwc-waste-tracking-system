@@ -104,11 +104,19 @@ function App() {
   function showRecords() {
     if (busyRef.current) return
     setRecordsTab('records')
+    setRecordsView(view=>view.status?{...view,status:undefined,page:0}:view)
     if (hasEntry && !editing) {setRecordWorkflow(entryWorkflow);setRecordsView(initialRecordsView)}
     setPage('records')
     setReported(undefined)
     setSaved(undefined)
     setPostSaveOrigin(undefined)
+  }
+
+  function showIncompleteRecords() {
+    if(busyRef.current || signingOut)return
+    showRecords()
+    setRecordWorkflow('')
+    setRecordsView({...initialRecordsView,status:'INCOMPLETE'})
   }
 
   function newRecord(workflow: Workflow) {
@@ -200,7 +208,7 @@ function App() {
       {error && <p className="notice error" role="alert">{error}</p>}
       {pendingTallies && !unresolved && page !== 'entry' && <p className="notice" role="status">Electrical Testing tallies are pending. Save them before signing out or starting another workflow. They remain in memory while you check Records.</p>}
       {unresolved && <p className="notice" role="status">A submission is unresolved. Retry it or check Records. Its details stay in memory while you check.</p>}
-      {page === 'operations' && (user.role === 'ADMIN' ? <WorkflowsPage onNew={newRecord} busy={busy || signingOut} unresolved={unresolved || pendingTallies} currentWorkflow={entryWorkflow}/> : <StaffOperationsPage onNew={newRecord} onRecords={showRecords} busy={busy || signingOut} unresolved={unresolved || pendingTallies} currentWorkflow={entryWorkflow}/>)}
+      {page === 'operations' && (user.role === 'ADMIN' ? <WorkflowsPage onIncomplete={showIncompleteRecords} onNew={newRecord} busy={busy || signingOut} unresolved={unresolved || pendingTallies} currentWorkflow={entryWorkflow}/> : <StaffOperationsPage onIncomplete={showIncompleteRecords} onNew={newRecord} onRecords={showRecords} busy={busy || signingOut} unresolved={unresolved || pendingTallies} currentWorkflow={entryWorkflow}/>)}
       {user.role === 'ADMIN' && page === 'settings' && <SettingsPage key={settingsSection} section={settingsSection} onChanged={() => {setReportView(initialReportView);setConfigurationRevision(n => n+1)}}/>}
       {user.role === 'ADMIN' && page === 'overview' && <OverviewPage onOpen={openReportedRecord} onRecords={showRecords}/>}
       {user.role === 'ADMIN' && page === 'waste-levy' && <WasteLevySummaryPage/>}

@@ -11,17 +11,17 @@ public class SettingsRepository {
     public SettingsRepository(NamedParameterJdbcTemplate jdbc) { this.jdbc=jdbc; }
     public Configuration configuration() {
         return jdbc.queryForObject("select s.*,u.username from application_settings s left join app_user u on u.id=s.updated_by where s.id=1",Map.of(),(r,n)->
-            new Configuration(r.getLong("version"),r.getString("organisation_name"),r.getString("site_name"),r.getString("report_display_name"),r.getString("display_unit"),r.getString("report_period"),r.getInt("financial_year_start_month"),r.getBigDecimal("whitegoods_kg_per_item"),r.getString("username"),r.getTimestamp("updated_at")==null?null:r.getTimestamp("updated_at").toInstant()));
+            new Configuration(r.getLong("version"),r.getString("organisation_name"),r.getString("site_name"),r.getString("report_display_name"),r.getString("display_unit"),r.getString("report_period"),r.getInt("financial_year_start_month"),r.getBigDecimal("whitegoods_kg_per_item"),r.getBigDecimal("collectables_tub_tare"),r.getString("username"),r.getTimestamp("updated_at")==null?null:r.getTimestamp("updated_at").toInstant()));
     }
     public int update(Configuration c,String username) {
         return jdbc.update("""
             update application_settings set organisation_name=:name,site_name=:site,report_display_name=:report,
-            display_unit=:unit,report_period=:period,financial_year_start_month=:month,whitegoods_kg_per_item=:factor,
+            display_unit=:unit,report_period=:period,financial_year_start_month=:month,whitegoods_kg_per_item=:factor,collectables_tub_tare=:tubTare,
             updated_by=(select id from app_user where username=:actor),updated_at=now(),version=version+1
             where id=1 and version=:version
             """,new MapSqlParameterSource().addValue("name",c.organisationName().trim()).addValue("site",c.siteName().trim())
                 .addValue("report",c.reportDisplayName().trim()).addValue("unit",c.displayUnit()).addValue("period",c.reportPeriod())
-                .addValue("month",c.financialYearStartMonth()).addValue("factor",c.whitegoodsKgPerItem()).addValue("actor",username).addValue("version",c.version()));
+                .addValue("month",c.financialYearStartMonth()).addValue("factor",c.whitegoodsKgPerItem()).addValue("tubTare",c.collectablesTubTare()).addValue("actor",username).addValue("version",c.version()));
     }
     // The table choice is internal and restricted to these two existing reference tables.
     private String table(boolean container) { return container?"container_type":"material_category"; }
